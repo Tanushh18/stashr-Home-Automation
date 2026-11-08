@@ -112,7 +112,8 @@ instance.interceptors.request.use((config) =>
     const bearer = getBearer();
     if (bearer && !/\/(login|register|mpin-login)$/.test(String(config.url || "").split("?")[0])) config.headers.Authorization = "Bearer " + bearer;
     config.headers["X-Client-Id"] = CLIENT_ID;
-    if (config._server === undefined) config._server = active;
+    // A stale index (the list changed under a request) must never send the call to the website itself, which answers with HTML.
+    if (config._server === undefined || !SERVERS[config._server]) config._server = SERVERS[active] ? active : 0;
     config.baseURL = SERVERS[config._server];
     return config;
 });
