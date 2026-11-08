@@ -108,7 +108,9 @@ export function VaultProvider({ children }) {
   const finishLogin = useCallback(
     async (loginResponse) => {
       console.info("[stashr] login accepted by", api.API_URL());
-      api.setBearer("");
+      // Keep the sign-in token in the browser too, so every server (not only the one that signed us in) knows who we are.
+      const loginToken = loginResponse?.data?.token;
+      api.setBearer(loginToken || "");
       try {
         try {
           await loadProfile();
