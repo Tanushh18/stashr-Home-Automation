@@ -19,7 +19,9 @@ const SERVERS = (import.meta.env.VITE_API_URLS || import.meta.env.REACT_APP_API_
     .split(",")
     .map((u) => u.trim().replace(/\/+$/, ""))
     .filter(Boolean);
-if (SERVERS.length === 0) SERVERS.push(...DEFAULT_SERVERS, WEB_STANDBY);
+// The build-time list (VITE_API_URLS) goes first, and every known server is always added after it, so a short env list
+// can never leave the web with only servers that are suspended.
+for (const u of [...DEFAULT_SERVERS, WEB_STANDBY]) if (!SERVERS.includes(u)) SERVERS.push(u);
 // The public status page is served by the API, so its link points at the first server.
 export const publicApiBase = SERVERS[0];
 export const webStandbyServer = WEB_STANDBY;
