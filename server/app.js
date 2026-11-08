@@ -136,6 +136,13 @@ app.get("/livez", (req, res) => {
   res.set("Cache-Control", "no-store");
   return res.status(200).json({ status: "ok", service: "password-manager-api", uptime: Number(process.uptime().toFixed(2)), timestamp: new Date().toISOString() });
 });
+// A short, one-way fingerprint of SECRET_KEY: servers that show the same value accept each other's sign-in tokens.
+// (It reveals nothing usable about the key itself.)
+const sessionKeyFingerprint = () => {
+  const key = process.env.SECRET_KEY;
+  if (!key) return "missing";
+  return require("crypto").createHmac("sha256", "stashr-session-key-check").update(String(key)).digest("hex").slice(0, 12);
+};
 app.get("/readyz", (req, res) => {
   const ready = mongoose.connection?.readyState === 1;
   res.set("Cache-Control", "no-store");
@@ -143,6 +150,7 @@ app.get("/readyz", (req, res) => {
     status: ready ? "ready" : "not_ready",
     service: "password-manager-api",
     dependencies: { database: ready ? "connected" : "unavailable" },
+    sessionKey: sessionKeyFingerprint(),
     timestamp: new Date().toISOString()
   });
 });
