@@ -195,9 +195,11 @@ export const refreshServers = async () =>
 // Drop the dead ones so a cold start never fails over to a server that does not exist.
 const pruneDeadServers = async () =>
 {
-    if (SERVERS.length < 2) return;
+    // The web standby (eore) is never pinged on page load: it stays asleep while any main server works.
+    const main = SERVERS.filter((u) => u !== WEB_STANDBY);
+    if (main.length < 2) return;
     const dead = [];
-    await Promise.all(SERVERS.map(async (base) =>
+    await Promise.all(main.map(async (base) =>
     {
         const started = Date.now();
         try
