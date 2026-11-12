@@ -98,6 +98,13 @@ router.put("/wa/settings", authenticate, writeLimiter, async (req, res) => {
         if (typeof b.enabled === "boolean") set.enabled = b.enabled;
         if (typeof b.testMode === "boolean") set.testMode = b.testMode;
         if (b.dailyLimit !== undefined) set.dailyLimit = clamp(b.dailyLimit, 0, 60, 13);
+        if (typeof b.reportEnabled === "boolean") set.reportEnabled = b.reportEnabled;
+        if (b.reportNumbers !== undefined) {
+            const raw = Array.isArray(b.reportNumbers) ? b.reportNumbers : String(b.reportNumbers || "").split(/[,\n;]+/);
+            const nums = [...new Set(raw.map((n) => sender.normalizePhone(n)).filter(Boolean))].slice(0, 5);
+            if (raw.some((n) => String(n).trim()) && !nums.length) return res.status(400).json({ error: "Enter valid mobile numbers for the report." });
+            set.reportNumbers = nums;
+        }
         if (b.gapMin !== undefined) set.gapMin = clamp(b.gapMin, 1, 120, 6);
         if (b.gapMax !== undefined) set.gapMax = clamp(b.gapMax, 1, 240, 12);
         for (const k of ["from", "to"]) if (b[k] !== undefined) { if (!automation.okTime(b[k])) return res.status(400).json({ error: `"${k}" must be a time like 10:00.` }); set[k] = b[k]; }

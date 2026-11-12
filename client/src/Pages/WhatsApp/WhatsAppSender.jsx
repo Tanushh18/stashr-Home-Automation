@@ -227,6 +227,7 @@ export default function WhatsAppSender() {
   const [newName, setNewName] = useState("");
   const [testPhone, setTestPhone] = useState("");
   const [testSheet, setTestSheet] = useState("");
+  const [reportNums, setReportNums] = useState(null);
   const [testNote, setTestNote] = useState("");
   const editing = useRef(false);
 
@@ -263,6 +264,8 @@ export default function WhatsAppSender() {
   if (!data || !settings) return <div className="rd-page"><Skeleton /></div>;
   const s = data.settings;
   const dirty = ["dailyLimit", "from", "to", "gapMin", "gapMax"].some((k) => String(settings[k]) !== String(s[k]));
+  const savedNums = (s.reportNumbers || ["918130483894", "919310994032"]).map((n) => "+" + n).join(", ");
+  const nums = reportNums === null ? savedNums : reportNums;
 
   return (
     <div className="rd-page wa-page">
@@ -292,6 +295,14 @@ export default function WhatsAppSender() {
         <div className="wa-row">
           <button className="rd-btn is-primary" disabled={!dirty} onClick={async () => { await set({ dailyLimit: Number(settings.dailyLimit), from: settings.from, to: settings.to, gapMin: Number(settings.gapMin), gapMax: Number(settings.gapMax) }, "Limits saved."); editing.current = false; }}>Save limits</button>
           <label className="wa-switch"><input type="checkbox" checked={s.testMode} onChange={(e) => set({ testMode: e.target.checked })} /><span>Test mode (ignores the limits)</span></label>
+        </div>
+      </Section>
+
+      <Section title="Nightly report" subtitle="When the day's sending is done (the daily limit is reached, nobody is left, or the window has ended), these numbers get a WhatsApp report: how many were sent, how many were not, and why.">
+        <div className="wa-row">
+          <label className="wa-switch"><input type="checkbox" checked={s.reportEnabled !== false} onChange={(e) => set({ reportEnabled: e.target.checked }, e.target.checked ? "Nightly report is on." : "Nightly report is off.")} /><span>{s.reportEnabled !== false ? "On" : "Off"}</span></label>
+          <input className="wa-input" aria-label="Numbers for the report" value={nums} onChange={(e) => setReportNums(e.target.value)} placeholder="Numbers, separated by commas" />
+          <button className="rd-btn is-primary" disabled={reportNums === null || reportNums === savedNums} onClick={async () => { await set({ reportNumbers: reportNums }, "Report numbers saved."); setReportNums(null); }}>Save numbers</button>
         </div>
       </Section>
 

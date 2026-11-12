@@ -42,7 +42,7 @@ const NOON = Date.parse("2026-11-12T06:30:00Z");
 // The tablet counts as online when it spoke recently relative to the time a test pretends it is.
 const seenAt = (t) => HomeDevice.updateMany({}, { $set: { lastSeen: new Date(t), online: true } });
 
-async function setup({ people = 3 } = {}) {
+async function setup({ people = 3, report = false } = {}) {
     const auth = await signUp();
     const hub = await pairHub(auth);
     await hubReport(hub.token);
@@ -50,7 +50,7 @@ async function setup({ people = 3 } = {}) {
     const recipients = Array.from({ length: people }, (_, i) => ({ name: `Person ${i + 1}`, phone: `98100000${String(i + 1).padStart(2, "0")}` }));
     await request(app).post(`/wa/sheets/${sheet.id}/recipients`).set(auth).send({ recipients });
     await request(app).patch(`/wa/sheets/${sheet.id}`).set(auth).send({ enabled: true });
-    await request(app).put("/wa/settings").set(auth).send({ enabled: true, dailyLimit: 2 });
+    await request(app).put("/wa/settings").set(auth).send({ enabled: true, dailyLimit: 2, reportEnabled: report });
     return { auth, hub, sheet, o: await owner() };
 }
 
@@ -251,6 +251,103 @@ describe("the sender", () => {
         await hubReport(hub.token, [{ id: cmd.id, ok: true, message: "Sent" }]);
         await seenAt(night + 31000);
         expect((await sender.tickOwner(o, night + 31000, () => 0)).did).toBe("queued");
+    });
+});
+
+describe("the nightly report", () => {
+    const cmdOf = async (hub) => (await hubReport(hub.token)).body.commands.find((c) => c.type === "send_wa");
+    const answer = (hub, cmd, ok = true, message = "Sent") => hubReport(hub.token, [{ id: cmd.id, ok, message }]);
+
+    // Two people: one is sent, one fails for a reason that is not retried. The limit of 2 is then used up.
+    async function finishedDay() {
+        const ctx = await setup({ people: 2, report: true });
+        const { hub, o } = ctx;
+        await sender.tickOwner(o, NOON, () => 0);
+        await answer(hub, await cmdOf(hub));
+        await sender.tickOwner(o, NOON + 13 * 60000, () => 0);
+        await answer(hub, await cmdOf(hub), false, "Pressed Send but WhatsApp did not confirm");
+        return ctx;
+    }
+
+    test("when the daily limit is reached, both numbers get the report one after the other, with the counts", async () => {
+        const { hub, o } = await finishedDay();
+        let t = NOON + 30 * 60000;
+        const first = await sender.tickOwner(o, t, () => 0);
+        expect(first.did).toBe("report");
+        let cmd = await cmdOf(hub);
+        expect(cmd.args.phone).toBe("918130483894");
+        expect(cmd.args.image).toBe(false);
+        expect(cmd.args.text).toMatch(/Sent: 1/);
+        expect(cmd.args.text).toMatch(/Not sent: 1/);
+        expect(cmd.args.text).toMatch(/Test: 1 sent, 1 not sent/);
+        expect(cmd.args.text).toMatch(/Pressed Send but WhatsApp did not confirm/);
+        // One at a time: nothing else goes until the first report is answered.
+        expect((await sender.tickOwner(o, t + 31000, () => 0)).did).toBe("wait");
+        await answer(hub, cmd);
+        t += 62000;
+        expect((await sender.tickOwner(o, t, () => 0)).did).toBe("report");
+        cmd = await cmdOf(hub);
+        expect(cmd.args.phone).toBe("919310994032");
+        await answer(hub, cmd);
+        // Once a day: no third report.
+        t += 62000;
+        expect((await sender.tickOwner(o, t, () => 0)).did).toBe("wait");
+        expect(await WaSend.countDocuments({ kind: "report", status: "sent" })).toBe(2);
+        // The report does not count against the daily limit.
+        expect(await WaSend.countDocuments({ kind: "scheduled" })).toBe(2);
+    });
+
+    test("no report while the day's sending is still going", async () => {
+        const { hub, o } = await setup({ people: 3, report: true });
+        await sender.tickOwner(o, NOON, () => 0);
+        await answer(hub, await cmdOf(hub));
+        const r = await sender.tickOwner(o, NOON + 30 * 60000, () => 0);       // the limit is 2: the second message goes, not a report
+        expect(r.did).toBe("queued");
+        expect(await WaSend.countDocuments({ kind: "report" })).toBe(0);
+    });
+
+    test("after the window closes the report goes even if sending was switched off, and a day with nothing sent has no report", async () => {
+        const { auth, hub, o } = await setup({ people: 3, report: true });
+        await sender.tickOwner(o, NOON, () => 0);
+        await answer(hub, await cmdOf(hub));
+        await request(app).put("/wa/settings").set(auth).send({ enabled: false });
+        const evening = Date.parse("2026-11-12T14:00:00Z");                    // 19:30 India time
+        await seenAt(evening);
+        expect((await sender.tickOwner(o, evening, () => 0)).did).toBe("report");
+        // A different day with no sends: nothing to report.
+        await WaSend.deleteMany({});
+        await WaSettings.updateOne({}, { $set: { enabled: true } });
+        await seenAt(evening + 86400000);
+        expect((await sender.tickOwner(o, evening + 86400000, () => 0)).did).toBe("wait");
+    });
+
+    test("a failed report is tried again, three times at most, and test mode never reports", async () => {
+        const { auth, hub, o } = await finishedDay();
+        let t = NOON + 30 * 60000;
+        for (let i = 0; i < 3; i++) {
+            expect((await sender.tickOwner(o, t, () => 0)).did).toBe("report");
+            const cmd = await cmdOf(hub);
+            expect(cmd.args.phone).toBe("918130483894");
+            await answer(hub, cmd, false, "Timed out before pressing Send (step 0)");
+            t += 62000;
+        }
+        // The first number is given up on; the second one gets its report.
+        expect((await sender.tickOwner(o, t, () => 0)).did).toBe("report");
+        expect((await cmdOf(hub)).args.phone).toBe("919310994032");
+        await request(app).put("/wa/settings").set(auth).send({ testMode: true });
+        await WaSend.deleteMany({ kind: "report" });
+        expect(await WaSend.countDocuments({ kind: "report" })).toBe(0);
+        const r = await sender.tickOwner(o, t + 120000, () => 0);
+        expect(r.did === "report").toBe(false);
+    });
+
+    test("the report numbers and the report switch can be changed, and bad numbers are refused", async () => {
+        const { auth } = await setup();
+        const ok = await request(app).put("/wa/settings").set(auth).send({ reportNumbers: "98100 12345, +91 98100-54321", reportEnabled: true });
+        expect(ok.body.reportNumbers).toEqual(["919810012345", "919810054321"]);
+        expect((await request(app).put("/wa/settings").set(auth).send({ reportNumbers: "12, 34" })).status).toBe(400);
+        const off = await request(app).put("/wa/settings").set(auth).send({ reportEnabled: false });
+        expect(off.body.reportEnabled).toBe(false);
     });
 });
 

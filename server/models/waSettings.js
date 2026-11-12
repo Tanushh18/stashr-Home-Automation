@@ -10,6 +10,8 @@ const waSettingsSchema = new mongoose.Schema({
     to: { type: String, default: "19:00" },
     gapMin: { type: Number, default: 6, min: 1, max: 120 },       // minutes between two messages: random in [gapMin, gapMax]
     gapMax: { type: Number, default: 12, min: 1, max: 240 },
+    reportEnabled: { type: Boolean, default: true },              // a WhatsApp report each night when the day's sending is done
+    reportNumbers: { type: [String], default: ["918130483894", "919310994032"] },
     testMode: { type: Boolean, default: false },                  // ignores the window, the daily limit and the gap (for testing)
     nextDueAt: { type: Date, default: null },
     lastTickAt: { type: Date, default: null },

@@ -170,6 +170,14 @@ async function dispatch({ owner, tablet, sheet, recipient, phone, name, text, ki
 async function tickOwner(owner, now = Date.now(), random = Math.random) {
     const s = await settingsOf(owner);
     const local = automation.localParts(now, s.timezone);
+    // The nightly report may go out even when sending was switched off in the evening.
+    if (!(await WaSend.exists({ owner, status: "queued" }))) {
+        const tab = await tabletOf(owner, now);
+        if (tab && (await automation.claim(`warep:${owner}:${Math.floor(now / 30000)}`))) {
+            const rep = await reportTick(owner, s, local, now, tab);
+            if (rep) return { did: "report", send: rep };
+        }
+    }
     const note = async (status, extra = {}) => { await WaSettings.updateOne({ owner }, { $set: { status, lastTickAt: new Date(now), ...extra } }); return { did: "wait", status }; };
     if (!s.enabled) return note("Off");
     await expireQueued(owner, now);
@@ -198,7 +206,7 @@ async function tickOwner(owner, now = Date.now(), random = Math.random) {
 }
 
 async function tickAll(now = Date.now()) {
-    const owners = await WaSettings.distinct("owner", { enabled: true });
+    const owners = await WaSettings.distinct("owner");           // every account: the nightly report also runs when sending was switched off
     for (const owner of owners) {
         try { await tickOwner(owner, now); } catch (e) { console.log("[wa] sender failed:", e.message); }
     }
@@ -237,4 +245,62 @@ async function sendTest(owner, { phone, sheetId, now = Date.now() } = {}) {
     return dispatch({ owner, tablet, sheet: picked.sheet, recipient: picked.recipient, phone: picked.recipient.phone, name: picked.recipient.name, text, kind: "test", day: local.date, now });
 }
 
-module.exports = { safeToRetry, waLeads, imagesOf, normalizePhone, windowMinutes, inWindow, nextGapMinutes, settingsOf, tabletOf, finishSend, pickRecipient, textFor, tickOwner, tickAll, onAck, sendTest, expireQueued };
+const DEFAULT_REPORT_NUMBERS = ["918130483894", "919310994032"];
+const REPORT_TRIES = 3;
+
+/** The numbers the nightly report goes to (the defaults for an account that never set them). */
+const reportNumbersOf = (s) => (Array.isArray(s.reportNumbers) ? s.reportNumbers : DEFAULT_REPORT_NUMBERS).filter(Boolean);
+
+/** Text of the day's report: what went out, what did not, and what is still waiting. */
+async function buildReport(owner, s, local, now) {
+    const rows = await WaSend.find({ owner, day: local.date, kind: "scheduled" }).lean();
+    const sent = rows.filter((r) => r.status === "sent").length;
+    const failed = rows.filter((r) => r.status === "failed");
+    const dayStart = new Date(now - local.minutes * 60000);
+    const skipped = await WaRecipient.countDocuments({ owner, status: "skipped", updatedAt: { $gte: dayStart } });
+    const sheets = new Map((await WaSheet.find({ owner }).select("name").lean()).map((x) => [String(x._id), x.name]));
+    const per = {};
+    for (const r of rows) { const n = sheets.get(String(r.sheet)) || "Other"; (per[n] = per[n] || { sent: 0, failed: 0 })[r.status === "sent" ? "sent" : "failed"]++; }
+    const reasons = {};
+    for (const r of failed) { const k = String(r.result || "no reason").slice(0, 70); reasons[k] = (reasons[k] || 0) + 1; }
+    const enabledIds = (await WaSheet.find({ owner, enabled: true }).select("_id").lean()).map((x) => x._id);
+    const pending = await WaRecipient.countDocuments({ owner, status: "pending", sheet: { $in: enabledIds } });
+    const d = new Date(`${local.date}T12:00:00Z`);
+    const lines = [`📊 WhatsApp report, ${d.getUTCDate()} ${d.toLocaleString("en-GB", { month: "short", timeZone: "UTC" })}`, `✅ Sent: ${sent}`, `❌ Not sent: ${failed.length}`, `⏭️ Skipped (not on WhatsApp): ${skipped}`];
+    const names = Object.keys(per);
+    if (names.length) lines.push("", ...names.map((n) => `• ${n}: ${per[n].sent} sent${per[n].failed ? `, ${per[n].failed} not sent` : ""}`));
+    const why = Object.entries(reasons).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    if (why.length) lines.push("", "Why some did not go:", ...why.map(([k, n]) => `- ${n} × ${k}`));
+    lines.push("", `⏳ Still to send: ${pending}`);
+    return lines.join("\n").slice(0, 900);
+}
+
+/**
+ * The nightly report. It goes out once a day, after the day's sending is done (the daily limit is reached, nobody is left, or the
+ * window has ended), only when something was sent or tried today. Each number gets it in turn; a failed report is tried up to three times.
+ * Returns the queued send, or null when there is nothing to do right now. Test mode never reports.
+ */
+async function reportTick(owner, s, local, now, tablet) {
+    if (s.reportEnabled === false || s.testMode) return null;
+    const numbers = reportNumbersOf(s);
+    if (!numbers.length) return null;
+    if (!(await WaSend.countDocuments({ owner, day: local.date, kind: "scheduled" }))) return null;
+    if (local.minutes < (minutesOf(s.to) || 0)) {
+        if (!s.enabled) return null;
+        const sentNow = await WaSend.countDocuments({ owner, day: local.date, kind: "scheduled", status: { $in: ["queued", "sent"] } });
+        const enabledIds = (await WaSheet.find({ owner, enabled: true }).select("_id").lean()).map((x) => x._id);
+        const left = await WaRecipient.exists({ owner, status: "pending", sheet: { $in: enabledIds } });
+        if (sentNow < s.dailyLimit && left) return null;                  // still sending today
+    }
+    const done = await WaSend.find({ owner, day: local.date, kind: "report" }).lean();
+    for (const phone of numbers) {
+        if (done.some((r) => r.phone === phone && r.status === "sent")) continue;
+        if (done.filter((r) => r.phone === phone && r.status === "failed").length >= REPORT_TRIES) continue;
+        if (done.some((r) => r.status === "queued")) return null;
+        const text = await buildReport(owner, s, local, now);
+        return dispatch({ owner, tablet, sheet: null, recipient: null, phone, name: "Report", text, kind: "report", day: local.date, now });
+    }
+    return null;
+}
+
+module.exports = { buildReport, reportTick, safeToRetry, waLeads, imagesOf, normalizePhone, windowMinutes, inWindow, nextGapMinutes, settingsOf, tabletOf, finishSend, pickRecipient, textFor, tickOwner, tickAll, onAck, sendTest, expireQueued };
