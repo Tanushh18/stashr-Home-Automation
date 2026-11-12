@@ -49,6 +49,8 @@ class HubService : LifecycleService() {
     private var lastSpeedAt = 0L
     private var lastUpdateCheck = 0L
     private val acks = JSONArray()
+    /** How many answers went out in the report that is in flight; only those are dropped when the server confirms, so an answer that arrives meanwhile is kept for the next report. */
+    @Volatile private var acksInFlight = 0
     private var wakeLock: PowerManager.WakeLock? = null
     private var firstFailAt = 0L
     private var lastDashboardAt = 0L
@@ -146,7 +148,7 @@ class HubService : LifecycleService() {
                     withTimeoutOrNull(120_000) { wake.receive() }
                     continue
                 }
-                synchronized(acks) { while (acks.length() > 0) acks.remove(0) }
+                synchronized(acks) { var n = acksInFlight; while (n-- > 0 && acks.length() > 0) acks.remove(0); acksInFlight = 0 }
                 // The server answered: local mode ends, what happened meanwhile is handed over.
                 firstFailAt = 0L
                 if (sentEvents > 0) LocalMode.eventsSent(this@HubService, sentEvents)
@@ -204,7 +206,7 @@ class HubService : LifecycleService() {
         val body = JSONObject().put("status", status)
         val ev = LocalMode.pendingEvents(this)
         if (ev.length() > 0) body.put("localEvents", ev)
-        synchronized(acks) { if (acks.length() > 0) body.put("acks", JSONArray(acks.toString())) }
+        synchronized(acks) { acksInFlight = acks.length(); if (acks.length() > 0) body.put("acks", JSONArray(acks.toString())) }
         return body
     }
 
