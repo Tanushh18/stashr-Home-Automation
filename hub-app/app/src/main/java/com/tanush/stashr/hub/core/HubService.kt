@@ -236,6 +236,7 @@ class HubService : LifecycleService() {
                         "Slideshow ${args.optString("action")}"
                     }
                     "screen_off" -> ScreenGuard.lockNow()
+                    "send_wa" -> com.tanush.stashr.hub.whatsapp.WaLeadSender.send(this@HubService, args)
                     "send_whatsapp" -> com.tanush.stashr.hub.whatsapp.WhatsAppSender.send(this@HubService, args.optString("group"), args.optString("text"))
                     "announce" -> {
                         val text = args.optString("text").trim().take(200)

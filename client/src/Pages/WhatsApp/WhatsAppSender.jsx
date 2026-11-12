@@ -1,0 +1,266 @@
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "react-toastify";
+import {
+  getWaOverview, saveWaSettings, createWaSheet, saveWaSheet, deleteWaSheet, addWaPeople, retryWaSheet, sendWaTest, getWaSend
+} from "../../api/client";
+import { Section, Skeleton } from "../Render/RenderUi";
+import { errorMessage } from "../Render/renderUtils";
+import { ago } from "../../lib/smartHome";
+import { contactsFromCsv, peopleFromLines } from "../../lib/waContacts";
+import "../Render/RenderDashboard.css";
+import "./WhatsAppSender.css";
+
+const MAX_IMAGE = 2 * 1024 * 1024;
+
+function readFile(file, as) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(new Error("Could not read that file."));
+    as === "text" ? r.readAsText(file) : r.readAsDataURL(file);
+  });
+}
+
+function Count({ label, n, tone }) {
+  return <div className={"wa-count" + (tone ? " is-" + tone : "")}><b>{n}</b><span>{label}</span></div>;
+}
+
+/** One sheet: its on/off, limit, messages, picture, people and counts. */
+function SheetCard({ sheet, onChanged }) {
+  const [texts, setTexts] = useState((sheet.texts || []).join("\n"));
+  const [limit, setLimit] = useState(String(sheet.dailyLimit || 0));
+  const [people, setPeople] = useState("");
+  const [busy, setBusy] = useState(false);
+  const fileRef = useRef(null);
+  const c = sheet.counts || {};
+  const total = (c.pending || 0) + (c.queued || 0) + (c.sent || 0) + (c.failed || 0) + (c.skipped || 0);
+
+  const run = async (fn, ok) => {
+    setBusy(true);
+    try { const r = await fn(); if (ok) toast.success(typeof ok === "function" ? ok(r) : ok); await onChanged(); }
+    catch (e) { toast.error(errorMessage(e)); }
+    finally { setBusy(false); }
+  };
+
+  const saveTexts = () => run(() => saveWaSheet(sheet._id, { texts: texts.split("\n").map((t) => t.trim()).filter(Boolean) }), "Messages saved.");
+  const saveLimit = () => run(() => saveWaSheet(sheet._id, { dailyLimit: Number(limit) || 0 }), "Limit saved.");
+  const pickImage = async (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!f) return;
+    if (!/^image\/(png|jpeg|webp)$/.test(f.type)) return toast.error("Choose a PNG, JPEG or WebP picture.");
+    if (f.size > MAX_IMAGE) return toast.error("That picture is over 2 MB.");
+    run(async () => saveWaSheet(sheet._id, { image: await readFile(f, "url") }), "Picture saved.");
+  };
+  const addPeople = () => {
+    const list = peopleFromLines(people);
+    if (!list.length) return toast.error("Add lines like: Ravi, 98100 12345");
+    run(() => addWaPeople(sheet._id, list), (r) => `Added ${r.added}. ${r.duplicates} already there, ${r.invalid} not valid.`).then(() => setPeople(""));
+  };
+
+  return (
+    <Section
+      title={sheet.name}
+      subtitle={`${sheet.source === "contacts" ? "Group from Google contacts" : sheet.source === "leads" ? "Lead sheet" : "Sheet"} · ${total} people · ${sheet.sentToday || 0} sent today`}
+      actions={<label className="wa-switch"><input type="checkbox" checked={sheet.enabled} disabled={busy} onChange={(e) => run(() => saveWaSheet(sheet._id, { enabled: e.target.checked }))} /><span>{sheet.enabled ? "On" : "Off"}</span></label>}
+    >
+      <div className="wa-counts">
+        <Count label="to send" n={c.pending || 0} /><Count label="on the tablet" n={c.queued || 0} />
+        <Count label="sent" n={c.sent || 0} tone="ok" /><Count label="failed" n={c.failed || 0} tone="bad" /><Count label="skipped" n={c.skipped || 0} />
+      </div>
+      <div className="wa-grid">
+        <div>
+          <label className="wa-label" htmlFor={"t" + sheet._id}>Messages, one per line. One is picked at random for each person. Use {"{name}"} for the first name.</label>
+          <textarea id={"t" + sheet._id} className="wa-input" rows={5} value={texts} onChange={(e) => setTexts(e.target.value)} placeholder={"Happy Diwali {name}! ...\nWishing you and your family a bright Diwali ..."} />
+          <button className="rd-btn" disabled={busy} onClick={saveTexts}>Save messages</button>
+        </div>
+        <div>
+          <span className="wa-label">Picture (PNG, JPEG or WebP, up to 2 MB)</span>
+          <div className="wa-picture">
+            {sheet.hasImage ? <span className="wa-pill">Picture saved</span> : <span className="wa-pill is-warn">No picture yet</span>}
+            <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={pickImage} />
+            <button className="rd-btn" disabled={busy} onClick={() => fileRef.current && fileRef.current.click()}>{sheet.hasImage ? "Change picture" : "Upload picture"}</button>
+            {sheet.hasImage && <button className="rd-btn is-quiet" disabled={busy} onClick={() => run(() => saveWaSheet(sheet._id, { image: "" }), "Picture removed.")}>Remove</button>}
+          </div>
+          <label className="wa-label" htmlFor={"l" + sheet._id}>Limit for this sheet per day (0 = only the main limit)</label>
+          <div className="wa-row"><input id={"l" + sheet._id} className="wa-input is-short" type="number" min="0" max="60" value={limit} onChange={(e) => setLimit(e.target.value)} /><button className="rd-btn" disabled={busy} onClick={saveLimit}>Save limit</button></div>
+        </div>
+      </div>
+      <label className="wa-label" htmlFor={"p" + sheet._id}>Add people, one per line: Name, 98100 12345</label>
+      <textarea id={"p" + sheet._id} className="wa-input" rows={3} value={people} onChange={(e) => setPeople(e.target.value)} />
+      <div className="wa-row">
+        <button className="rd-btn" disabled={busy || !people.trim()} onClick={addPeople}>Add people</button>
+        {c.failed > 0 && <button className="rd-btn" disabled={busy} onClick={() => run(() => retryWaSheet(sheet._id), (r) => `${r.requeued} back in line.`)}>Retry the {c.failed} failed</button>}
+        <button className="rd-btn is-danger" disabled={busy} onClick={() => { if (window.confirm(`Delete "${sheet.name}" and its ${total} people? Messages already sent stay in the log.`)) run(() => deleteWaSheet(sheet._id), "Sheet deleted."); }}>Delete sheet</button>
+      </div>
+    </Section>
+  );
+}
+
+/** Google Contacts export (CSV) in, the people to keep ticked, a new group out. */
+function ContactsGroup({ onChanged }) {
+  const [name, setName] = useState("");
+  const [rows, setRows] = useState([]);
+  const [picked, setPicked] = useState({});
+  const [busy, setBusy] = useState(false);
+  const fileRef = useRef(null);
+
+  const load = async (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!f) return;
+    try {
+      const list = contactsFromCsv(await readFile(f, "text"));
+      if (!list.length) return toast.error("No phone numbers found. Export from Google Contacts as Google CSV.");
+      setRows(list);
+      setPicked(Object.fromEntries(list.map((r) => [r.phone, true])));
+      if (!name) setName(f.name.replace(/\.csv$/i, "").slice(0, 60));
+    } catch (err) { toast.error(errorMessage(err)); }
+  };
+  const chosen = rows.filter((r) => picked[r.phone]);
+  const create = async () => {
+    if (!name.trim()) return toast.error("Give the group a name.");
+    if (!chosen.length) return toast.error("Tick at least one person.");
+    setBusy(true);
+    try {
+      const made = await createWaSheet({ name: name.trim(), source: "contacts" });
+      const r = await addWaPeople(made.id, chosen);
+      toast.success(`Group created with ${r.added} people. Now add its messages and picture.`);
+      setRows([]); setPicked({}); setName("");
+      await onChanged();
+    } catch (err) { toast.error(errorMessage(err)); } finally { setBusy(false); }
+  };
+
+  return (
+    <Section title="Group from Google contacts" subtitle="Export your contacts from Google Contacts as CSV, pick the people, and they become their own sheet.">
+      <div className="wa-row">
+        <input ref={fileRef} type="file" accept=".csv,text/csv" hidden onChange={load} />
+        <button className="rd-btn" onClick={() => fileRef.current && fileRef.current.click()}>Choose the contacts file</button>
+        {rows.length > 0 && <>
+          <button className="rd-btn is-quiet" onClick={() => setPicked(Object.fromEntries(rows.map((r) => [r.phone, true])))}>Tick all</button>
+          <button className="rd-btn is-quiet" onClick={() => setPicked({})}>Untick all</button>
+          <span className="wa-muted">{chosen.length} of {rows.length} ticked</span>
+        </>}
+      </div>
+      {rows.length > 0 && <>
+        <div className="wa-contacts" role="group" aria-label="Contacts">
+          {rows.map((r) => (
+            <label key={r.phone} className="wa-contact"><input type="checkbox" checked={Boolean(picked[r.phone])} onChange={(e) => setPicked({ ...picked, [r.phone]: e.target.checked })} /><span>{r.name || "No name"}</span><em>+{r.phone}</em></label>
+          ))}
+        </div>
+        <div className="wa-row">
+          <input className="wa-input is-short" placeholder="Group name" value={name} maxLength={80} onChange={(e) => setName(e.target.value)} />
+          <button className="rd-btn is-primary" disabled={busy} onClick={create}>Create group with {chosen.length} people</button>
+        </div>
+      </>}
+    </Section>
+  );
+}
+
+export default function WhatsAppSender() {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+  const [settings, setSettings] = useState(null);
+  const [newName, setNewName] = useState("");
+  const [testPhone, setTestPhone] = useState("");
+  const [testNote, setTestNote] = useState("");
+  const editing = useRef(false);
+
+  const load = useCallback(async () => {
+    try {
+      const d = await getWaOverview();
+      setData(d); setError("");
+      if (!editing.current) setSettings((cur) => cur || { dailyLimit: d.settings.dailyLimit, from: d.settings.from, to: d.settings.to, gapMin: d.settings.gapMin, gapMax: d.settings.gapMax });
+    } catch (e) { setError(errorMessage(e)); }
+  }, []);
+  useEffect(() => { load(); const t = setInterval(load, 5000); return () => clearInterval(t); }, [load]);
+
+  const set = async (body, ok) => {
+    try { await saveWaSettings(body); if (ok) toast.success(ok); await load(); } catch (e) { toast.error(errorMessage(e)); }
+  };
+
+  const watchTest = async (id) => {
+    setTestNote("Sent to the tablet. Waiting for WhatsApp...");
+    for (let i = 0; i < 40; i++) {
+      await new Promise((r) => setTimeout(r, 3000));
+      try {
+        const s = await getWaSend(id);
+        if (s.status === "sent") { setTestNote(`Sent to +${s.phone}.`); load(); return; }
+        if (s.status === "failed") { setTestNote(`Failed: ${s.result || "no reason given"}`); load(); return; }
+      } catch (e) { /* keep waiting */ }
+    }
+    setTestNote("Still waiting for the tablet. Check the log below.");
+  };
+  const test = async (body) => {
+    try { const r = await sendWaTest(body); watchTest(r.id); load(); } catch (e) { toast.error(errorMessage(e)); setTestNote(""); }
+  };
+
+  if (error && !data) return <div className="rd-page"><Section title="WhatsApp sender"><p className="wa-error">{error}</p></Section></div>;
+  if (!data || !settings) return <div className="rd-page"><Skeleton /></div>;
+  const s = data.settings;
+  const dirty = ["dailyLimit", "from", "to", "gapMin", "gapMax"].some((k) => String(settings[k]) !== String(s[k]));
+
+  return (
+    <div className="rd-page wa-page">
+      <header className="rd-pagehead"><h1>WhatsApp sender</h1><p>Messages go out from the tablet through WhatsApp Business, one at a time, spread over the day.</p></header>
+
+      <Section
+        title={s.enabled ? "Sending is on" : "Sending is off"}
+        subtitle={s.status || (s.enabled ? "Waiting for the next turn" : "Nothing will be sent")}
+        actions={<label className="wa-switch is-big"><input type="checkbox" checked={s.enabled} onChange={(e) => set({ enabled: e.target.checked }, e.target.checked ? "Sending is on." : "Sending is off.")} /><span>{s.enabled ? "On" : "Off"}</span></label>}
+      >
+        <div className="wa-counts">
+          <Count label={`sent today of ${s.dailyLimit}`} n={data.sentToday} tone="ok" />
+          <Count label="tablet" n={data.tablet ? "online" : "offline"} tone={data.tablet ? "ok" : "bad"} />
+        </div>
+        {!data.tablet && <p className="wa-error">The tablet is offline, so nothing can be sent. Check that Stashr Hub is open, on charge and on Wi-Fi.</p>}
+        {s.testMode && <p className="wa-warn">Test mode is on: the time window, the gap and the daily limit are ignored. Turn it off before real sending.</p>}
+      </Section>
+
+      <Section title="Limits" subtitle="The daily limit is spread over the sending window with a random gap each time.">
+        <div className="wa-form">
+          <label>Messages a day<input className="wa-input" type="number" min="0" max="60" value={settings.dailyLimit} onFocus={() => { editing.current = true; }} onChange={(e) => setSettings({ ...settings, dailyLimit: e.target.value })} /></label>
+          <label>From<input className="wa-input" type="time" value={settings.from} onChange={(e) => setSettings({ ...settings, from: e.target.value })} /></label>
+          <label>To<input className="wa-input" type="time" value={settings.to} onChange={(e) => setSettings({ ...settings, to: e.target.value })} /></label>
+          <label>Shortest gap (min)<input className="wa-input" type="number" min="1" max="120" value={settings.gapMin} onChange={(e) => setSettings({ ...settings, gapMin: e.target.value })} /></label>
+          <label>Longest gap (min)<input className="wa-input" type="number" min="1" max="240" value={settings.gapMax} onChange={(e) => setSettings({ ...settings, gapMax: e.target.value })} /></label>
+        </div>
+        <div className="wa-row">
+          <button className="rd-btn is-primary" disabled={!dirty} onClick={async () => { await set({ dailyLimit: Number(settings.dailyLimit), from: settings.from, to: settings.to, gapMin: Number(settings.gapMin), gapMax: Number(settings.gapMax) }, "Limits saved."); editing.current = false; }}>Save limits</button>
+          <label className="wa-switch"><input type="checkbox" checked={s.testMode} onChange={(e) => set({ testMode: e.target.checked })} /><span>Test mode (ignores the limits)</span></label>
+        </div>
+      </Section>
+
+      <Section title="Test the full flow" subtitle="Sends through the same path as a real message: the server queues it, the tablet sends it, the answer comes back here.">
+        <div className="wa-row">
+          <input className="wa-input" placeholder="Number, e.g. 98100 12345" value={testPhone} onChange={(e) => setTestPhone(e.target.value)} />
+          <button className="rd-btn is-primary" disabled={!testPhone.trim() || !data.tablet} onClick={() => test({ phone: testPhone })}>Send a test to this number</button>
+          <button className="rd-btn" disabled={!data.tablet} onClick={() => { if (window.confirm("This sends one real message to the next person on your sheets, now. Continue?")) test({}); }}>Send to the next person now</button>
+        </div>
+        {testNote && <p className="wa-note" role="status">{testNote}</p>}
+      </Section>
+
+      {data.sheets.length === 0 && <Section title="No sheets yet"><p className="wa-muted">Make a sheet below, add its messages, a picture and the people to message.</p></Section>}
+      {data.sheets.map((sh) => <SheetCard key={sh._id} sheet={sh} onChanged={load} />)}
+
+      <Section title="New sheet">
+        <div className="wa-row">
+          <input className="wa-input" placeholder="Sheet name" value={newName} maxLength={80} onChange={(e) => setNewName(e.target.value)} />
+          <button className="rd-btn is-primary" disabled={!newName.trim()} onClick={async () => { try { await createWaSheet({ name: newName.trim() }); setNewName(""); toast.success("Sheet created."); await load(); } catch (e) { toast.error(errorMessage(e)); } }}>Create sheet</button>
+        </div>
+      </Section>
+
+      <ContactsGroup onChanged={load} />
+
+      <Section title="Latest messages" subtitle="Every message the server handed to the tablet, and what the tablet answered.">
+        {data.recent.length === 0 ? <p className="wa-muted">Nothing yet.</p> : (
+          <table className="wa-table"><thead><tr><th>When</th><th>To</th><th>Result</th></tr></thead><tbody>
+            {data.recent.map((r) => (
+              <tr key={r.id}><td>{ago(r.at)}</td><td>{r.name || "+" + r.phone}{r.kind === "test" ? " (test)" : ""}</td><td className={"wa-status is-" + r.status}>{r.status === "sent" ? "Sent" : r.status === "failed" ? "Failed: " + (r.result || "") : "On the tablet..."}</td></tr>
+            ))}
+          </tbody></table>
+        )}
+      </Section>
+    </div>
+  );
+}

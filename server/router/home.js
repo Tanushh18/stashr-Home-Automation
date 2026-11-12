@@ -27,6 +27,7 @@ const MovieSettings = require("../models/homeMovieSettings");
 const { record } = require("../utils/homeEvents");
 const automation = require("../utils/homeAutomation");
 const HomeSpeed = require("../models/homeSpeed");
+const waSender = require("../utils/waSender");
 
 const MAX_DEVICES = 20;
 // A family phone reports every 15 minutes (Android does not allow more often in the background).
@@ -375,6 +376,8 @@ async function ingest(d, body, seenAt = new Date()) {
         await HomeDevice.updateOne({ _id: d._id }, {
             $set: { "commands.$[c].status": a.ok ? "done" : "failed", "commands.$[c].result": String(a.message || "").slice(0, 200), "commands.$[c].doneAt": new Date() }
         }, { arrayFilters: [{ "c.id": a.id, "c.status": { $in: ["pending", "sent"] } }] });
+        // A WhatsApp send: the tablet's answer decides whether the message counts as sent.
+        if (d.kind === "hub") await waSender.onAck(d, a).catch((e) => console.log("[wa] ack failed:", e.message));
     }
 
     // New commands go out once: pending becomes sent.

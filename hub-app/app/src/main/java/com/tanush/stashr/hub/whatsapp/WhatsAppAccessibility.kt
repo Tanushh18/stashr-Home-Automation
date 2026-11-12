@@ -24,12 +24,13 @@ class WhatsAppAccessibility : AccessibilityService() {
     override fun onInterrupt() {}
     override fun onDestroy() { if (instance === this) instance = null; super.onDestroy() }
 
-    override fun onAccessibilityEvent(e: AccessibilityEvent?) { if (WhatsAppSender.job != null) poke() }
+    override fun onAccessibilityEvent(e: AccessibilityEvent?) { if (WhatsAppSender.job != null || WaLeadSender.job != null) poke() }
 
     /** Called by events and by the sender's 500 ms loop; one attempt at a time, at most every 250 ms. */
     fun poke() { main.post { attempt() } }
 
     private fun attempt() {
+        WaLeadSender.job?.let { wj -> if (!wj.done && wj.error == null) { waStep(wj); return } }
         val job = WhatsAppSender.job ?: return
         if (job.done || job.error != null) return
         val now = System.currentTimeMillis()
@@ -41,6 +42,69 @@ class WhatsAppAccessibility : AccessibilityService() {
             if (pkg != "com.whatsapp" && pkg != "com.whatsapp.w4b") return
             if (!job.picked) pickGroup(root, job) else pressSend(root, job)
         } finally { try { root.recycle() } catch (e: Exception) { } }
+    }
+
+    /** Hides the on-screen keyboard while a number send runs, so it cannot cover or change WhatsApp's screens. */
+    fun hideKeyboard(hidden: Boolean) {
+        try { softKeyboardController.showMode = if (hidden) AccessibilityService.SHOW_MODE_HIDDEN else AccessibilityService.SHOW_MODE_AUTO }
+        catch (e: Throwable) { Log.w(TAG, "keyboard mode failed: ${e.message}") }
+    }
+
+    /** The root of the first on-screen window of this package (WhatsApp can show the chat list and the chat as two windows). */
+    private fun windowRoot(pkg: String): AccessibilityNodeInfo? {
+        for (w in windows) { val r = w.root ?: continue; if (r.packageName?.toString() == pkg) return r }
+        return null
+    }
+
+    /** The first node with this id in any WhatsApp Business window. */
+    private fun findAcross(id: String): AccessibilityNodeInfo? {
+        for (w in windows) {
+            val r = w.root ?: continue
+            if (r.packageName?.toString() != WaLeadSender.PACKAGE) continue
+            r.findAccessibilityNodeInfosByViewId("${WaLeadSender.PACKAGE}:id/$id").orEmpty().firstOrNull()?.let { return it }
+        }
+        return null
+    }
+
+    /**
+     * One step of a number send. With a picture: attach button, Gallery, the newest photo, the preview's Send, then wait for
+     * the chat to come back. Without: the composer's Send. A number WhatsApp says is invalid ends the job at once.
+     */
+    private fun waStep(j: WaLeadSender.Job) {
+        val now = System.currentTimeMillis()
+        windowRoot("com.google.android.permissioncontroller")?.let { perm ->
+            perm.findAccessibilityNodeInfosByText("Allow").orEmpty().firstOrNull()?.let { if (clickUp(it)) j.stageAt = now }
+            return
+        }
+        val root = windowRoot(WaLeadSender.PACKAGE) ?: return
+        if (j.clicks == 0 && j.stage == 0) {
+            val bad = root.findAccessibilityNodeInfosByText("isn't on WhatsApp").orEmpty() + root.findAccessibilityNodeInfosByText("not on WhatsApp").orEmpty() +
+                root.findAccessibilityNodeInfosByText("invalid").orEmpty()
+            if (bad.isNotEmpty()) {
+                root.findAccessibilityNodeInfosByText("OK").orEmpty().firstOrNull()?.let { clickUp(it) }
+                j.error = "That number is not on WhatsApp"
+                return
+            }
+        }
+        if (now - j.stageAt < 900) return
+        Log.d(TAG, "wa stage=${j.stage} image=${j.withImage}")
+        when (j.stage) {
+            0 -> if (j.withImage) {
+                val att = findAcross("input_attach_button") ?: return
+                if (clickUp(att)) { j.stage = 1; j.stageAt = now }
+            } else {
+                val send = findAcross("send") ?: return
+                if (clickUp(send)) { j.clicks++; j.lastClick = now; j.stage = 4; j.stageAt = now }
+            }
+            1 -> { val g = findAcross("pickfiletype_gallery_holder") ?: return; if (clickUp(g)) { j.stage = 2; j.stageAt = now } }
+            2 -> { val t = findAcross("media_item_view") ?: return; if (clickUp(t)) { j.stage = 3; j.stageAt = now } }
+            3 -> { val b = findAcross("send_media_btn") ?: return; if (clickUp(b)) { j.clicks++; j.lastClick = now; j.stage = 4; j.stageAt = now } }
+            4 -> {
+                val chat = findAcross("input_attach_button") != null
+                val busy = findAcross("send_media_btn") != null || findAcross("send") != null
+                if (chat && !busy && now - j.stageAt > 2_000) j.done = true
+            }
+        }
     }
 
     private fun pickGroup(root: AccessibilityNodeInfo, job: WhatsAppSender.Job) {

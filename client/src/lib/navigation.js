@@ -25,6 +25,7 @@ export function navGroups(profile) {
         ...(f.photos !== false ? [{ to: "/photos", label: "Photos", icon: "image" }] : []),
         ...(on(f, "projects") ? [{ to: "/projects", label: "Projects", icon: "folder" }] : []),
         ...(on(f, "smartHome") ? [{ to: "/smart-home", label: "Smart home", icon: "tv" }] : []),
+        ...(on(f, "smartHome") ? [{ to: "/whatsapp", label: "WhatsApp sender", icon: "send" }] : []),
         ...(on(f, "money") ? [{ to: "/money", label: "Money", icon: "rupee" }] : []),
       ],
     },

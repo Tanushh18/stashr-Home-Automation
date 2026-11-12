@@ -1,0 +1,32 @@
+.wa-page { max-width: 980px; }
+.wa-counts { display: flex; flex-wrap: wrap; gap: 12px; margin: 8px 0 14px; }
+.wa-count { min-width: 92px; padding: 10px 14px; border-radius: 12px; background: var(--rd-surface-2, rgba(127,127,127,.12)); display: flex; flex-direction: column; }
+.wa-count b { font-size: 1.4rem; line-height: 1.1; }
+.wa-count span { font-size: .78rem; opacity: .75; }
+.wa-count.is-ok b { color: #1f9d55; }
+.wa-count.is-bad b { color: #d64545; }
+.wa-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 12px; }
+@media (max-width: 760px) { .wa-grid { grid-template-columns: 1fr; } }
+.wa-label { display: block; font-size: .82rem; margin: 10px 0 4px; opacity: .85; }
+.wa-input { width: 100%; box-sizing: border-box; padding: 9px 11px; border-radius: 10px; border: 1px solid rgba(127,127,127,.4); background: transparent; color: inherit; font: inherit; }
+.wa-input.is-short { width: 120px; }
+.wa-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 10px 0; }
+.wa-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.wa-form label { display: flex; flex-direction: column; gap: 4px; font-size: .82rem; }
+.wa-picture { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+.wa-pill { padding: 3px 10px; border-radius: 999px; background: rgba(31,157,85,.16); font-size: .8rem; }
+.wa-pill.is-warn { background: rgba(214,150,45,.2); }
+.wa-switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+.wa-switch.is-big { font-size: 1.05rem; }
+.wa-switch input { width: 20px; height: 20px; }
+.wa-muted { opacity: .7; font-size: .88rem; }
+.wa-error { color: #d64545; }
+.wa-warn { color: #b7791f; }
+.wa-note { margin: 6px 0 0; }
+.wa-contacts { max-height: 280px; overflow: auto; border: 1px solid rgba(127,127,127,.3); border-radius: 10px; margin: 10px 0; }
+.wa-contact { display: grid; grid-template-columns: 24px 1fr auto; gap: 8px; padding: 7px 10px; align-items: center; border-bottom: 1px solid rgba(127,127,127,.15); }
+.wa-contact em { font-style: normal; opacity: .7; font-size: .85rem; }
+.wa-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+.wa-table th, .wa-table td { text-align: left; padding: 7px 8px; border-bottom: 1px solid rgba(127,127,127,.18); }
+.wa-status.is-sent { color: #1f9d55; }
+.wa-status.is-failed { color: #d64545; }

@@ -574,3 +574,14 @@ export const uploadStatement = (file) => instance.post("/expenses/statement", fi
 export const getHouseModel = () => instance.get("/home/map/model", { responseType: "arraybuffer" }).then((r) => r.data);
 export const saveHouseModel = (buffer, name) => instance.put("/home/map/model", buffer, { params: { name }, headers: { "Content-Type": "application/octet-stream" }, transformRequest: [(d) => d] }).then((r) => r.data);
 export const deleteHouseModel = () => instance.delete("/home/map/model").then((r) => r.data);
+
+/* WhatsApp sender: sheets, limits, on/off and test messages sent from the tablet. */
+export const getWaOverview = () => instance.get("/wa/overview").then((r) => r.data);
+export const saveWaSettings = (body) => instance.put("/wa/settings", body).then((r) => r.data);
+export const createWaSheet = (body) => instance.post("/wa/sheets", body).then((r) => r.data);
+export const saveWaSheet = (id, body) => instance.patch(`/wa/sheets/${id}`, body).then((r) => r.data);
+export const deleteWaSheet = (id) => instance.delete(`/wa/sheets/${id}`).then((r) => r.data);
+export const addWaPeople = (id, recipients) => instance.post(`/wa/sheets/${id}/recipients`, { recipients }, { timeout: 60000 }).then((r) => r.data);
+export const retryWaSheet = (id) => instance.post(`/wa/sheets/${id}/retry`).then((r) => r.data);
+export const sendWaTest = (body) => instance.post("/wa/test", body).then((r) => r.data);
+export const getWaSend = (id) => instance.get(`/wa/sends/${id}`).then((r) => r.data);

@@ -49,7 +49,16 @@ const COMMANDS = {
         show_map: () => ({}),
         show_room: () => ({}),
         announce: (a) => (okText(a.text, 200) ? { text: a.text.trim(), speak: a.speak !== false, urgent: a.urgent === true } : null),
-        send_whatsapp: (a) => (okText(a.group, 80) && okText(a.text, 500) ? { group: a.group.trim(), text: a.text.trim() } : null)
+        send_whatsapp: (a) => (okText(a.group, 80) && okText(a.text, 500) ? { group: a.group.trim(), text: a.text.trim() } : null),
+        // One message to one number (WhatsApp Business only): the text, and the sheet's picture when `image` is true.
+        send_wa: (a) => {
+            const phone = String(a.phone || "").replace(/\D/g, "");
+            const sendId = String(a.sendId || "");
+            if (phone.length < 10 || phone.length > 14 || !/^[a-f0-9]{24}$/.test(sendId)) return null;
+            const text = typeof a.text === "string" ? a.text.trim().slice(0, 900) : "";
+            if (!text && a.image !== true) return null;
+            return { phone, text, sendId, image: a.image === true };
+        }
     },
     phone: {
         report_now: () => ({}),

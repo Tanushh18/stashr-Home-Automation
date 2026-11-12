@@ -87,6 +87,15 @@ class Api(ctx: Context) {
     fun roomModel(on: Boolean): JSONObject = post("/home/agent/room/model", JSONObject().put("on", on))
     fun slideshow(): JSONObject = get("/home/agent/slideshow")
 
+    /** The picture for one queued WhatsApp message (GET /wa/agent/image/:sendId), as bytes. */
+    fun waImage(sendId: String): ByteArray = failover {
+        val c = open("/wa/agent/image/" + URLEncoder.encode(sendId, "UTF-8"), "GET", timeoutMs = 60000)
+        try {
+            if (c.responseCode !in 200..299) throw ApiError(c.responseCode, "The picture is not available")
+            c.inputStream.use { it.readBytes() }
+        } finally { c.disconnect() }
+    }
+
     /** A slideshow photo's bytes. */
     fun slideshowFile(id: String): ByteArray = failover {
         val c = open("/home/agent/slideshow/file?id=" + URLEncoder.encode(id, "UTF-8"), "GET", timeoutMs = 60000)
