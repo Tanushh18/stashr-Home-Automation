@@ -21,6 +21,7 @@ const WaSheet = require("../models/waSheet");
 const WaRecipient = require("../models/waRecipient");
 const WaSend = require("../models/waSend");
 const sender = require("../utils/waSender");
+const waLeads = require("../utils/waLeads");
 const automation = require("../utils/homeAutomation");
 
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, message: "Too many changes. Slow down." });
@@ -53,6 +54,18 @@ async function countsFor(owner, day) {
     for (const r of todayRows) today[String(r._id)] = r.n;
     return { bySheet, today };
 }
+
+const linkLimiter = rateLimit({ windowMs: 60 * 1000, max: 6, message: "Too many tries. Wait a minute." });
+
+router.get("/wa/threads", authenticate, async (req, res) => { try { res.json(await waLeads.statusOf(req.rootUser._id)); } catch (e) { fail(res, e, "Could not load the We Three link."); } });
+router.post("/wa/threads/connect", authenticate, linkLimiter, async (req, res) => {
+    try { const b = req.body || {}; res.json(await waLeads.connect(req.rootUser._id, b.mobile, b.mpin)); } catch (e) { fail(res, e, "Could not connect to We Three."); }
+});
+router.delete("/wa/threads", authenticate, writeLimiter, async (req, res) => { try { await waLeads.disconnect(req.rootUser._id); res.json({ ok: true }); } catch (e) { fail(res, e, "Could not disconnect."); } });
+router.get("/wa/threads/origins", authenticate, async (req, res) => { try { res.json({ origins: await waLeads.origins(req.rootUser._id) }); } catch (e) { fail(res, e, "Could not read the We Three sheets."); } });
+router.post("/wa/threads/import", authenticate, writeLimiter, async (req, res) => {
+    try { res.json(await waLeads.importSheet(req.rootUser._id, (req.body || {}).origin, sender.normalizePhone)); } catch (e) { fail(res, e, "Could not import that sheet."); }
+});
 
 router.get("/wa/overview", authenticate, async (req, res) => {
     try {

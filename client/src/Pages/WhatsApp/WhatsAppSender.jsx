@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import {
+  getWaLink, connectWaLink, disconnectWaLink, getWaOrigins, importWaOrigin,
   getWaOverview, saveWaSettings, createWaSheet, saveWaSheet, deleteWaSheet, addWaPeople, retryWaSheet, sendWaTest, getWaSend
 } from "../../api/client";
 import { Section, Skeleton } from "../Render/RenderUi";
@@ -98,6 +99,62 @@ function SheetCard({ sheet, onChanged }) {
         {c.failed > 0 && <button className="rd-btn" disabled={busy} onClick={() => run(() => retryWaSheet(sheet._id), (r) => `${r.requeued} back in line.`)}>Retry the {c.failed} failed</button>}
         <button className="rd-btn is-danger" disabled={busy} onClick={() => { if (window.confirm(`Delete "${sheet.name}" and its ${total} people? Messages already sent stay in the log.`)) run(() => deleteWaSheet(sheet._id), "Sheet deleted."); }}>Delete sheet</button>
       </div>
+    </Section>
+  );
+}
+
+/** The We Three account: type the mobile number and MPIN once, then bring any We Three sheet in as a Stashr sheet. */
+function ThreeLink({ onChanged }) {
+  const [link, setLink] = useState(null);
+  const [mobile, setMobile] = useState("");
+  const [mpin, setMpin] = useState("");
+  const [origins, setOrigins] = useState(null);
+  const [busy, setBusy] = useState("");
+
+  const loadLink = useCallback(async () => { try { setLink(await getWaLink()); } catch (e) { setLink({ connected: false }); } }, []);
+  useEffect(() => { loadLink(); }, [loadLink]);
+  const loadOrigins = useCallback(async () => {
+    setBusy("origins");
+    try { setOrigins((await getWaOrigins()).origins); } catch (e) { toast.error(errorMessage(e)); } finally { setBusy(""); }
+  }, []);
+  useEffect(() => { if (link && link.connected) loadOrigins(); }, [link, loadOrigins]);
+
+  const connect = async () => {
+    setBusy("connect");
+    try { const r = await connectWaLink(mobile, mpin); setMpin(""); toast.success(`Connected as ${r.name || r.mobile}.`); await loadLink(); }
+    catch (e) { toast.error(errorMessage(e)); } finally { setBusy(""); }
+  };
+  const importOne = async (name) => {
+    setBusy("import:" + name);
+    try {
+      const r = await importWaOrigin(name);
+      toast.success(`"${name}": ${r.added} people added. ${r.alreadySent} already messaged, ${r.invalid} without a valid number.`);
+      await onChanged(); await loadOrigins();
+    } catch (e) { toast.error(errorMessage(e)); } finally { setBusy(""); }
+  };
+
+  if (!link) return <Section title="We Three sheets"><Skeleton /></Section>;
+  return (
+    <Section title="We Three sheets" subtitle="Bring the lead sheets from the We Three app (Calling data, OLF Data and so on) in as sheets here. Each message that goes out is marked on the lead in We Three too.">
+      {!link.connected ? (
+        <div className="wa-row">
+          <input className="wa-input is-short" inputMode="numeric" placeholder="We Three mobile" value={mobile} maxLength={14} onChange={(e) => setMobile(e.target.value)} aria-label="We Three mobile number" />
+          <input className="wa-input is-short" type="password" inputMode="numeric" autoComplete="off" placeholder="MPIN" value={mpin} maxLength={6} onChange={(e) => setMpin(e.target.value)} aria-label="We Three MPIN" />
+          <button className="rd-btn is-primary" disabled={busy === "connect" || mobile.replace(/\D/g, "").length < 10 || mpin.length < 4} onClick={connect}>Connect We Three</button>
+          <span className="wa-muted">Stashr keeps only a sealed sign-in, never the MPIN.</span>
+        </div>
+      ) : (
+        <>
+          <div className="wa-row"><span className="wa-pill">Connected as {link.name || link.mobile}</span><button className="rd-btn is-quiet" disabled={busy !== ""} onClick={loadOrigins}>Refresh</button><button className="rd-btn is-quiet" onClick={async () => { if (window.confirm("Disconnect We Three? Sheets already imported stay.")) { await disconnectWaLink(); setOrigins(null); await loadLink(); } }}>Disconnect</button></div>
+          {!origins ? <Skeleton /> : (
+            <table className="wa-table"><thead><tr><th>Sheet</th><th>Leads</th><th>Messaged</th><th /></tr></thead><tbody>
+              {origins.map((o) => (
+                <tr key={o.name}><td>{o.name}</td><td>{o.count}</td><td>{o.sent}</td><td><button className="rd-btn" disabled={busy !== ""} onClick={() => importOne(o.name)}>{busy === "import:" + o.name ? "Importing..." : "Import unsent leads"}</button></td></tr>
+              ))}
+            </tbody></table>
+          )}
+        </>
+      )}
     </Section>
   );
 }
@@ -255,6 +312,7 @@ export default function WhatsAppSender() {
         </div>
       </Section>
 
+      <ThreeLink onChanged={load} />
       <ContactsGroup onChanged={load} />
 
       <Section title="Latest messages" subtitle="Every message the server handed to the tablet, and what the tablet answered.">

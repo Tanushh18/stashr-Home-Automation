@@ -11,7 +11,9 @@ const waRecipientSchema = new mongoose.Schema({
     error: { type: String, default: "" },
     queuedAt: Date,
     sentAt: Date,
-    externalId: { type: String, default: "" },                     // the lead's id in We Three, so the "sent" mark can go back
+    externalId: { type: String, default: "" },
+    markedAt: Date,                                                // when the "sent" mark reached We Three
+    markError: { type: String, default: "" },                     // the lead's id in We Three, so the "sent" mark can go back
     order: { type: Number, default: 0 }
 }, { timestamps: true });
 waRecipientSchema.index({ owner: 1, sheet: 1, phone: 1 }, { unique: true });

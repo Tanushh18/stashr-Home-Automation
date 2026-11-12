@@ -585,3 +585,8 @@ export const addWaPeople = (id, recipients) => instance.post(`/wa/sheets/${id}/r
 export const retryWaSheet = (id) => instance.post(`/wa/sheets/${id}/retry`).then((r) => r.data);
 export const sendWaTest = (body) => instance.post("/wa/test", body).then((r) => r.data);
 export const getWaSend = (id) => instance.get(`/wa/sends/${id}`).then((r) => r.data);
+export const getWaLink = () => instance.get("/wa/threads").then((r) => r.data);
+export const connectWaLink = (mobile, mpin) => instance.post("/wa/threads/connect", { mobile, mpin }, { timeout: 45000 }).then((r) => r.data);
+export const disconnectWaLink = () => instance.delete("/wa/threads").then((r) => r.data);
+export const getWaOrigins = () => instance.get("/wa/threads/origins", { timeout: 45000 }).then((r) => r.data);
+export const importWaOrigin = (origin) => instance.post("/wa/threads/import", { origin }, { timeout: 180000 }).then((r) => r.data);

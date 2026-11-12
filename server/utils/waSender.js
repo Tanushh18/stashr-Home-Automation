@@ -10,6 +10,8 @@ const WaSheet = require("../models/waSheet");
 const WaRecipient = require("../models/waRecipient");
 const WaSend = require("../models/waSend");
 const automation = require("./homeAutomation");
+const waLeads = require("./waLeads");
+const WaLink = require("../models/waLink");
 const home = require("./home");
 
 const QUEUED_GIVE_UP_MS = 6 * 60 * 1000;     // a message the tablet never answered is marked failed after this
@@ -82,6 +84,7 @@ async function finishSend(sendId, ok, message, now = Date.now()) {
     if (!send.recipient) return send;                               // a test to a number: no list entry to update
     if (ok) {
         await WaRecipient.updateOne({ _id: send.recipient }, { $set: { status: "sent", sentAt: new Date(now), error: "" } });
+        waLeads.writeBack(send.owner, 3).catch(() => {});             // the mark goes to We Three right away; a failure is retried by the sweep
         return send;
     }
     const notOnWhatsApp = /not on whatsapp|isn't on whatsapp|invalid/i.test(String(message || ""));
@@ -89,6 +92,7 @@ async function finishSend(sendId, ok, message, now = Date.now()) {
     if (!r) return send;
     const again = !notOnWhatsApp && (r.attempts || 0) < MAX_ATTEMPTS;
     await WaRecipient.updateOne({ _id: r._id }, { $set: { status: notOnWhatsApp ? "skipped" : again ? "pending" : "failed", error: String(message || "").slice(0, 200) } });
+    if (notOnWhatsApp) waLeads.writeBack(send.owner, 3).catch(() => {});
     return send;
 }
 
@@ -183,6 +187,10 @@ async function tickAll(now = Date.now()) {
     for (const owner of owners) {
         try { await tickOwner(owner, now); } catch (e) { console.log("[wa] sender failed:", e.message); }
     }
+    // Marks that did not reach We Three yet are tried again, whether or not the sender is on.
+    for (const owner of await WaLink.distinct("owner")) {
+        try { await waLeads.writeBack(owner); } catch (e) { console.log("[wa] write-back failed:", e.message); }
+    }
 }
 
 /** The tablet's answer for a command it ran. Called for every ack of a hub; ignores everything that is not a WhatsApp send. */
@@ -214,4 +222,4 @@ async function sendTest(owner, { phone, sheetId, now = Date.now() } = {}) {
     return dispatch({ owner, tablet, sheet: picked.sheet, recipient: picked.recipient, phone: picked.recipient.phone, name: picked.recipient.name, text, kind: "test", day: local.date, now });
 }
 
-module.exports = { imagesOf, normalizePhone, windowMinutes, inWindow, nextGapMinutes, settingsOf, tabletOf, finishSend, pickRecipient, textFor, tickOwner, tickAll, onAck, sendTest, expireQueued };
+module.exports = { waLeads, imagesOf, normalizePhone, windowMinutes, inWindow, nextGapMinutes, settingsOf, tabletOf, finishSend, pickRecipient, textFor, tickOwner, tickAll, onAck, sendTest, expireQueued };
