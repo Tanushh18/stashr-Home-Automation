@@ -281,11 +281,12 @@ async function buildReport(owner, s, local, now) {
  * Returns the queued send, or null when there is nothing to do right now. Test mode never reports.
  */
 async function reportTick(owner, s, local, now, tablet) {
-    if (s.reportEnabled === false || s.testMode) return null;
+    const forced = s.reportNowDay === local.date;                     // "Send the report now" was pressed today
+    if (!forced && (s.reportEnabled === false || s.testMode)) return null;
     const numbers = reportNumbersOf(s);
     if (!numbers.length) return null;
-    if (!(await WaSend.countDocuments({ owner, day: local.date, kind: "scheduled" }))) return null;
-    if (local.minutes < (minutesOf(s.to) || 0)) {
+    if (!forced && !(await WaSend.countDocuments({ owner, day: local.date, kind: "scheduled" }))) return null;
+    if (!forced && local.minutes < (minutesOf(s.to) || 0)) {
         if (!s.enabled) return null;
         const sentNow = await WaSend.countDocuments({ owner, day: local.date, kind: "scheduled", status: { $in: ["queued", "sent"] } });
         const enabledIds = (await WaSheet.find({ owner, enabled: true }).select("_id").lean()).map((x) => x._id);

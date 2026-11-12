@@ -591,3 +591,4 @@ export const disconnectWaLink = () => instance.delete("/wa/threads").then((r) =>
 export const getWaOrigins = () => instance.get("/wa/threads/origins", { timeout: 45000 }).then((r) => r.data);
 export const importWaOrigin = (origin) => instance.post("/wa/threads/import", { origin }, { timeout: 180000 }).then((r) => r.data);
 export const resetWaSheet = (id) => instance.post(`/wa/sheets/${id}/reset`).then((r) => r.data);
+export const sendWaReportNow = () => instance.post("/wa/report/now").then((r) => r.data);

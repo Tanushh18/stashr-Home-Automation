@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import {
   getWaLink, connectWaLink, disconnectWaLink, getWaOrigins, importWaOrigin,
-  getWaOverview, saveWaSettings, resetWaSheet, createWaSheet, saveWaSheet, deleteWaSheet, addWaPeople, retryWaSheet, sendWaTest, getWaSend
+  getWaOverview, saveWaSettings, resetWaSheet, sendWaReportNow, createWaSheet, saveWaSheet, deleteWaSheet, addWaPeople, retryWaSheet, sendWaTest, getWaSend
 } from "../../api/client";
 import { Section, Skeleton } from "../Render/RenderUi";
 import { errorMessage } from "../Render/renderUtils";
@@ -303,6 +303,7 @@ export default function WhatsAppSender() {
           <label className="wa-switch"><input type="checkbox" checked={s.reportEnabled !== false} onChange={(e) => set({ reportEnabled: e.target.checked }, e.target.checked ? "Nightly report is on." : "Nightly report is off.")} /><span>{s.reportEnabled !== false ? "On" : "Off"}</span></label>
           <input className="wa-input" aria-label="Numbers for the report" value={nums} onChange={(e) => setReportNums(e.target.value)} placeholder="Numbers, separated by commas" />
           <button className="rd-btn is-primary" disabled={reportNums === null || reportNums === savedNums} onClick={async () => { await set({ reportNumbers: reportNums }, "Report numbers saved."); setReportNums(null); }}>Save numbers</button>
+          <button className="rd-btn" disabled={!data.tablet} title="Sends today's report to every number now" onClick={async () => { try { await sendWaReportNow(); toast.success("The report goes out within a minute."); } catch (e) { toast.error(errorMessage(e)); } }}>Send the report now</button>
         </div>
       </Section>
 

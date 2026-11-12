@@ -220,6 +220,19 @@ router.post("/wa/sheets/:id/retry", authenticate, writeLimiter, async (req, res)
     } catch (e) { fail(res, e, "Could not requeue."); }
 });
 
+// Sends today's report again, to every report number, right away (the next sweep queues it).
+router.post("/wa/report/now", authenticate, writeLimiter, async (req, res) => {
+    try {
+        const owner = req.rootUser._id;
+        const s = await sender.settingsOf(owner);
+        const day = automation.localParts(Date.now(), s.timezone).date;
+        if (await WaSend.exists({ owner, status: "queued" })) return res.status(409).json({ error: "A message is being sent. Try again in a minute." });
+        await WaSend.deleteMany({ owner, day, kind: "report", status: { $ne: "queued" } });
+        await WaSettings.updateOne({ owner }, { $set: { reportNowDay: day } }, { upsert: true });
+        res.status(202).json({ ok: true });
+    } catch (e) { fail(res, e, "Could not start the report."); }
+});
+
 router.post("/wa/test", authenticate, writeLimiter, async (req, res) => {
     try {
         const b = req.body || {};

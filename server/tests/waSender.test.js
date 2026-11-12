@@ -341,6 +341,27 @@ describe("the nightly report", () => {
         expect(r.did === "report").toBe(false);
     });
 
+    test("'Send the report now' sends it again to every number, even when the report is off", async () => {
+        const { auth, hub, o } = await setup({ people: 2, report: false });
+        await sender.tickOwner(o, NOON, () => 0);
+        await answer(hub, await cmdOf(hub));
+        expect((await sender.tickOwner(o, NOON + 62000, () => 0)).did === "report").toBe(false);        // the report is off
+        expect((await request(app).post("/wa/report/now").set(auth)).status).toBe(202);
+        const r = await sender.tickOwner(o, NOON + 124000, () => 0);
+        expect(r.did).toBe("report");
+        let cmd = await cmdOf(hub);
+        expect(cmd.args.phone).toBe("918130483894");
+        await answer(hub, cmd, false, "That number is not on WhatsApp");
+        // Pressing it again clears the failed try and starts over.
+        await request(app).post("/wa/report/now").set(auth);
+        expect((await sender.tickOwner(o, NOON + 190000, () => 0)).did).toBe("report");
+        cmd = await cmdOf(hub);
+        expect(cmd.args.phone).toBe("918130483894");
+        await answer(hub, cmd);
+        expect((await sender.tickOwner(o, NOON + 250000, () => 0)).did).toBe("report");
+        expect((await cmdOf(hub)).args.phone).toBe("919310994032");
+    });
+
     test("the report numbers and the report switch can be changed, and bad numbers are refused", async () => {
         const { auth } = await setup();
         const ok = await request(app).put("/wa/settings").set(auth).send({ reportNumbers: "98100 12345, +91 98100-54321", reportEnabled: true });

@@ -53,6 +53,7 @@ class WhatsAppAccessibility : AccessibilityService() {
     /** True when any text or description on the screen matches the pattern. */
     private fun hasText(n: AccessibilityNodeInfo?, re: Regex, depth: Int = 0): Boolean {
         if (n == null || depth > 30) return false
+        if (n.isEditable) return false                                   // never look inside what is being typed
         if (re.containsMatchIn((n.text?.toString() ?: "") + " " + (n.contentDescription?.toString() ?: ""))) return true
         for (i in 0 until n.childCount) if (hasText(n.getChild(i), re, depth + 1)) return true
         return false
@@ -87,7 +88,8 @@ class WhatsAppAccessibility : AccessibilityService() {
         val root = windowRoot(WaLeadSender.PACKAGE) ?: return
         if (j.clicks == 0 && j.stage == 0) {
             // "The phone number +91 ... isn't on WhatsApp." (WhatsApp may use a curly apostrophe, so match any character there).
-            if (hasText(root, NOT_ON_WA)) {
+            // Only when no chat is open: the typed message itself (the composer) can contain those words, e.g. a report.
+            if (findAcross("input_attach_button") == null && hasText(root, NOT_ON_WA)) {
                 var closed = false
                 for (w in listOf("Cancel", "OK")) {
                     if (closed) break
