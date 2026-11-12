@@ -50,6 +50,14 @@ class WhatsAppAccessibility : AccessibilityService() {
         catch (e: Throwable) { Log.w(TAG, "keyboard mode failed: ${e.message}") }
     }
 
+    /** True when any text or description on the screen matches the pattern. */
+    private fun hasText(n: AccessibilityNodeInfo?, re: Regex, depth: Int = 0): Boolean {
+        if (n == null || depth > 30) return false
+        if (re.containsMatchIn((n.text?.toString() ?: "") + " " + (n.contentDescription?.toString() ?: ""))) return true
+        for (i in 0 until n.childCount) if (hasText(n.getChild(i), re, depth + 1)) return true
+        return false
+    }
+
     /** The root of the first on-screen window of this package (WhatsApp can show the chat list and the chat as two windows). */
     private fun windowRoot(pkg: String): AccessibilityNodeInfo? {
         for (w in windows) { val r = w.root ?: continue; if (r.packageName?.toString() == pkg) return r }
@@ -78,10 +86,14 @@ class WhatsAppAccessibility : AccessibilityService() {
         }
         val root = windowRoot(WaLeadSender.PACKAGE) ?: return
         if (j.clicks == 0 && j.stage == 0) {
-            val bad = root.findAccessibilityNodeInfosByText("isn't on WhatsApp").orEmpty() + root.findAccessibilityNodeInfosByText("not on WhatsApp").orEmpty() +
-                root.findAccessibilityNodeInfosByText("invalid").orEmpty()
-            if (bad.isNotEmpty()) {
-                root.findAccessibilityNodeInfosByText("OK").orEmpty().firstOrNull()?.let { clickUp(it) }
+            // "The phone number +91 ... isn't on WhatsApp." (WhatsApp may use a curly apostrophe, so match any character there).
+            if (hasText(root, NOT_ON_WA)) {
+                var closed = false
+                for (w in listOf("Cancel", "OK")) {
+                    if (closed) break
+                    val b = root.findAccessibilityNodeInfosByText(w).orEmpty().firstOrNull { it.isClickable || it.parent?.isClickable == true }
+                    if (b != null) { clickUp(b); closed = true }
+                }
                 j.error = "That number is not on WhatsApp"
                 return
             }
@@ -197,6 +209,7 @@ class WhatsAppAccessibility : AccessibilityService() {
     companion object {
         @Volatile var instance: WhatsAppAccessibility? = null
         private const val TAG = "StashrWA"
+        private val NOT_ON_WA = Regex("isn.t on WhatsApp|is not on WhatsApp|not on WhatsApp|phone number .*invalid|url is invalid", RegexOption.IGNORE_CASE)
         private val SEND = listOf("Send", "भेजें", "Enviar", "Envoyer")
         private val SEND_IDS = listOf("com.whatsapp:id/send", "com.whatsapp.w4b:id/send")
     }
