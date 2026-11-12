@@ -116,6 +116,13 @@ async function pickRecipient(owner, day) {
     return null;
 }
 
+/** Every picture of a sheet, the older single `image` included. */
+function imagesOf(sheet) {
+    const list = (sheet && Array.isArray(sheet.images) ? sheet.images : []).filter((i) => i && i.data);
+    if (!list.length && sheet && sheet.image) return [{ data: sheet.image, mime: sheet.imageType || "image/jpeg" }];
+    return list;
+}
+
 /** The text for one person: one of the sheet's messages at random, {name} filled in. */
 function textFor(sheet, recipient, random = Math.random) {
     const list = (sheet.texts || []).filter((t) => String(t || "").trim());
@@ -126,9 +133,11 @@ function textFor(sheet, recipient, random = Math.random) {
 }
 
 /** Queues one message on the tablet and records it. Returns the send, or null when the tablet queue refused it. */
-async function dispatch({ owner, tablet, sheet, recipient, phone, name, text, kind, day, now }) {
-    const send = await WaSend.create({ owner, sheet: sheet && sheet._id, recipient: recipient && recipient._id, phone, name: name || "", text, kind, day, device: tablet._id, queuedAt: new Date(now) });
-    const entry = await automation.queue(tablet, "send_wa", { phone, text, sendId: String(send._id), image: Boolean(sheet && sheet.image) });
+async function dispatch({ owner, tablet, sheet, recipient, phone, name, text, kind, day, now, random = Math.random }) {
+    const pictures = imagesOf(sheet);
+    const imageIndex = pictures.length ? Math.min(pictures.length - 1, Math.floor(random() * pictures.length)) : 0;
+    const send = await WaSend.create({ owner, sheet: sheet && sheet._id, recipient: recipient && recipient._id, phone, name: name || "", text, kind, day, device: tablet._id, queuedAt: new Date(now), imageIndex });
+    const entry = await automation.queue(tablet, "send_wa", { phone, text, sendId: String(send._id), image: pictures.length > 0 });
     if (!entry) {
         await WaSend.updateOne({ _id: send._id }, { $set: { status: "failed", result: "The tablet queue is full", doneAt: new Date(now) } });
         if (recipient) await WaRecipient.updateOne({ _id: recipient._id }, { $set: { status: "pending" }, $inc: { attempts: -1 } });
@@ -158,11 +167,11 @@ async function tickOwner(owner, now = Date.now(), random = Math.random) {
     const picked = await pickRecipient(owner, local.date);
     if (!picked) return note("Nobody is left to message");
     const text = textFor(picked.sheet, picked.recipient, random);
-    if (!text && !picked.sheet.image) {
+    if (!text && !imagesOf(picked.sheet).length) {
         await WaRecipient.updateOne({ _id: picked.recipient._id }, { $set: { status: "pending" }, $inc: { attempts: -1 } });
         return note(`"${picked.sheet.name}" has no message or picture yet`);
     }
-    const send = await dispatch({ owner, tablet, sheet: picked.sheet, recipient: picked.recipient, phone: picked.recipient.phone, name: picked.recipient.name, text, kind: "scheduled", day: local.date, now });
+    const send = await dispatch({ owner, tablet, sheet: picked.sheet, recipient: picked.recipient, phone: picked.recipient.phone, name: picked.recipient.name, text, kind: "scheduled", day: local.date, now, random });
     if (!send) return note("The tablet queue is full");
     const gap = s.testMode ? 0.25 : nextGapMinutes(s, random);
     await WaSettings.updateOne({ owner }, { $set: { nextDueAt: new Date(now + gap * 60000), status: `Sent to the tablet: ${picked.recipient.name || picked.recipient.phone}`, lastTickAt: new Date(now) } });
@@ -205,4 +214,4 @@ async function sendTest(owner, { phone, sheetId, now = Date.now() } = {}) {
     return dispatch({ owner, tablet, sheet: picked.sheet, recipient: picked.recipient, phone: picked.recipient.phone, name: picked.recipient.name, text, kind: "test", day: local.date, now });
 }
 
-module.exports = { normalizePhone, windowMinutes, inWindow, nextGapMinutes, settingsOf, tabletOf, finishSend, pickRecipient, textFor, tickOwner, tickAll, onAck, sendTest, expireQueued };
+module.exports = { imagesOf, normalizePhone, windowMinutes, inWindow, nextGapMinutes, settingsOf, tabletOf, finishSend, pickRecipient, textFor, tickOwner, tickAll, onAck, sendTest, expireQueued };

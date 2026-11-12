@@ -7,6 +7,7 @@ import { Section, Skeleton } from "../Render/RenderUi";
 import { errorMessage } from "../Render/renderUtils";
 import { ago } from "../../lib/smartHome";
 import { contactsFromCsv, peopleFromLines } from "../../lib/waContacts";
+import { STARTER_QUOTES, textsToBox, boxToTexts } from "../../lib/waStarter";
 import "../Render/RenderDashboard.css";
 import "./WhatsAppSender.css";
 
@@ -27,7 +28,7 @@ function Count({ label, n, tone }) {
 
 /** One sheet: its on/off, limit, messages, picture, people and counts. */
 function SheetCard({ sheet, onChanged }) {
-  const [texts, setTexts] = useState((sheet.texts || []).join("\n"));
+  const [texts, setTexts] = useState(textsToBox(sheet.texts));
   const [limit, setLimit] = useState(String(sheet.dailyLimit || 0));
   const [people, setPeople] = useState("");
   const [busy, setBusy] = useState(false);
@@ -42,7 +43,11 @@ function SheetCard({ sheet, onChanged }) {
     finally { setBusy(false); }
   };
 
-  const saveTexts = () => run(() => saveWaSheet(sheet._id, { texts: texts.split("\n").map((t) => t.trim()).filter(Boolean) }), "Messages saved.");
+  const saveTexts = () => run(() => saveWaSheet(sheet._id, { texts: boxToTexts(texts) }), "Messages saved.");
+  const useStarter = () => {
+    if (texts.trim() && !window.confirm("Replace the messages in the box with the 25 We Three quotes? Nothing is saved until you press Save messages.")) return;
+    setTexts(textsToBox(STARTER_QUOTES));
+  };
   const saveLimit = () => run(() => saveWaSheet(sheet._id, { dailyLimit: Number(limit) || 0 }), "Limit saved.");
   const pickImage = async (e) => {
     const f = e.target.files && e.target.files[0];
@@ -50,7 +55,7 @@ function SheetCard({ sheet, onChanged }) {
     if (!f) return;
     if (!/^image\/(png|jpeg|webp)$/.test(f.type)) return toast.error("Choose a PNG, JPEG or WebP picture.");
     if (f.size > MAX_IMAGE) return toast.error("That picture is over 2 MB.");
-    run(async () => saveWaSheet(sheet._id, { image: await readFile(f, "url") }), "Picture saved.");
+    run(async () => saveWaSheet(sheet._id, { addImage: await readFile(f, "url") }), "Picture added.");
   };
   const addPeople = () => {
     const list = peopleFromLines(people);
@@ -70,17 +75,17 @@ function SheetCard({ sheet, onChanged }) {
       </div>
       <div className="wa-grid">
         <div>
-          <label className="wa-label" htmlFor={"t" + sheet._id}>Messages, one per line. One is picked at random for each person. Use {"{name}"} for the first name.</label>
-          <textarea id={"t" + sheet._id} className="wa-input" rows={5} value={texts} onChange={(e) => setTexts(e.target.value)} placeholder={"Happy Diwali {name}! ...\nWishing you and your family a bright Diwali ..."} />
-          <button className="rd-btn" disabled={busy} onClick={saveTexts}>Save messages</button>
+          <label className="wa-label" htmlFor={"t" + sheet._id}>Messages. Put a line with only --- between two messages (a message can have many lines). One is picked at random for each person. Use {"{name}"} for the first name.</label>
+          <textarea id={"t" + sheet._id} className="wa-input" rows={5} value={texts} onChange={(e) => setTexts(e.target.value)} placeholder={"Happy Diwali {name}!\nWishing you and your family a bright Diwali.\n---\nDiwali greetings from ..."} />
+          <div className="wa-row"><button className="rd-btn" disabled={busy} onClick={saveTexts}>Save messages</button><button className="rd-btn is-quiet" disabled={busy} onClick={useStarter}>Use the 25 We Three quotes</button><span className="wa-muted">{boxToTexts(texts).length} messages</span></div>
         </div>
         <div>
-          <span className="wa-label">Picture (PNG, JPEG or WebP, up to 2 MB)</span>
+          <span className="wa-label">Pictures (PNG, JPEG or WebP, up to 2 MB each, up to 5). One is picked at random for each message.</span>
           <div className="wa-picture">
-            {sheet.hasImage ? <span className="wa-pill">Picture saved</span> : <span className="wa-pill is-warn">No picture yet</span>}
+            {sheet.imageCount > 0 ? <span className="wa-pill">{sheet.imageCount} picture{sheet.imageCount === 1 ? "" : "s"} saved</span> : <span className="wa-pill is-warn">No picture yet</span>}
             <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={pickImage} />
-            <button className="rd-btn" disabled={busy} onClick={() => fileRef.current && fileRef.current.click()}>{sheet.hasImage ? "Change picture" : "Upload picture"}</button>
-            {sheet.hasImage && <button className="rd-btn is-quiet" disabled={busy} onClick={() => run(() => saveWaSheet(sheet._id, { image: "" }), "Picture removed.")}>Remove</button>}
+            <button className="rd-btn" disabled={busy || sheet.imageCount >= 5} onClick={() => fileRef.current && fileRef.current.click()}>Add a picture</button>
+            {sheet.imageCount > 0 && <button className="rd-btn is-quiet" disabled={busy} onClick={() => { if (window.confirm("Remove all pictures from this sheet?")) run(() => saveWaSheet(sheet._id, { image: "" }), "Pictures removed."); }}>Remove all</button>}
           </div>
           <label className="wa-label" htmlFor={"l" + sheet._id}>Limit for this sheet per day (0 = only the main limit)</label>
           <div className="wa-row"><input id={"l" + sheet._id} className="wa-input is-short" type="number" min="0" max="60" value={limit} onChange={(e) => setLimit(e.target.value)} /><button className="rd-btn" disabled={busy} onClick={saveLimit}>Save limit</button></div>

@@ -38,3 +38,18 @@ test("peopleFromLines", () => {
   const out = peopleFromLines("Ravi, 98100 12345\n98100 55555\n\nbad line\nRavi again, 98100 12345");
   assert.deepEqual(out, [{ name: "Ravi", phone: "919810012345" }, { name: "", phone: "919810055555" }]);
 });
+
+import { STARTER_QUOTES, textsToBox, boxToTexts } from "../src/lib/waStarter.js";
+
+test("the 25 We Three quotes are all here, each with a contact line or the brand", () => {
+  assert.equal(STARTER_QUOTES.length, 25);
+  assert.equal(new Set(STARTER_QUOTES).size, 25);
+  for (const q of STARTER_QUOTES) assert.ok(q.includes("9310994032") || q.includes("SHINE ONE ESTATE"));
+});
+
+test("messages with several lines survive the box", () => {
+  const texts = ["Line one\nLine two", "Second message"];
+  assert.deepEqual(boxToTexts(textsToBox(texts)), texts);
+  assert.deepEqual(boxToTexts(""), []);
+  assert.deepEqual(boxToTexts("a\n---\n\n---\nb"), ["a", "b"]);
+});

@@ -26,9 +26,10 @@ const automation = require("../utils/homeAutomation");
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, message: "Too many changes. Slow down." });
 const imageLimiter = rateLimit({ windowMs: 60 * 1000, max: 120, message: "Too many requests." });
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
+const MAX_IMAGES = 5;
 const MAX_IMPORT = 5000;
 const validId = (id) => /^[a-f0-9]{24}$/.test(String(id || ""));
-const fail = (res, e, fallback) => res.status(Number.isInteger(e.status) ? e.status : 500).json({ error: Number.isInteger(e.status) ? e.message : fallback });
+const fail = (res, e, fallback) => { if (!Number.isInteger(e.status)) console.log("[wa] request failed:", e && e.message); return res.status(Number.isInteger(e.status) ? e.status : 500).json({ error: Number.isInteger(e.status) ? e.message : fallback }); };
 const clamp = (v, lo, hi, d) => { const n = Number(v); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, Math.round(n))) : d; };
 
 function cleanTexts(list) {
@@ -59,7 +60,9 @@ router.get("/wa/overview", authenticate, async (req, res) => {
         const settings = await sender.settingsOf(owner);
         const local = automation.localParts(Date.now(), settings.timezone);
         const sheets = await WaSheet.find({ owner }).select("-image").sort({ name: 1 }).lean();
-        const withImage = new Set((await WaSheet.find({ owner, image: { $ne: "" } }).select("_id").lean()).map((s) => String(s._id)));
+        const imageCounts = {};
+        for (const row of await WaSheet.aggregate([{ $match: { owner } }, { $project: { n: { $cond: [{ $gt: [{ $size: { $ifNull: ["$images", []] } }, 0] }, { $size: "$images" }, { $cond: [{ $ne: ["$image", ""] }, 1, 0] }] } } }])) imageCounts[String(row._id)] = row.n;
+        const withImage = new Set(Object.keys(imageCounts).filter((k) => imageCounts[k] > 0));
         const { bySheet, today } = await countsFor(owner, local.date);
         const tablet = await sender.tabletOf(owner);
         const recent = await WaSend.find({ owner }).sort({ createdAt: -1 }).limit(30).lean();
@@ -68,7 +71,7 @@ router.get("/wa/overview", authenticate, async (req, res) => {
             settings, today: local.date, sentToday, tablet: tablet ? { id: tablet._id, name: tablet.name } : null,
             sheets: sheets.map((s) => {
                 const c = bySheet[String(s._id)] || {};
-                return { ...s, hasImage: withImage.has(String(s._id)), counts: { pending: c.pending || 0, queued: c.queued || 0, sent: c.sent || 0, failed: c.failed || 0, skipped: c.skipped || 0 }, sentToday: today[String(s._id)] || 0 };
+                return { ...s, hasImage: withImage.has(String(s._id)), imageCount: imageCounts[String(s._id)] || 0, counts: { pending: c.pending || 0, queued: c.queued || 0, sent: c.sent || 0, failed: c.failed || 0, skipped: c.skipped || 0 }, sentToday: today[String(s._id)] || 0 };
             }),
             recent: recent.map((r) => ({ id: r._id, phone: r.phone, name: r.name, status: r.status, kind: r.kind, result: r.result, at: r.createdAt, doneAt: r.doneAt }))
         });
@@ -101,7 +104,7 @@ router.post("/wa/sheets", authenticate, writeLimiter, async (req, res) => {
         const name = String(b.name || "").trim().slice(0, 80);
         if (!name) return res.status(400).json({ error: "Give the sheet a name." });
         const doc = { owner, name, source: ["leads", "contacts", "manual"].includes(b.source) ? b.source : "manual", dailyLimit: clamp(b.dailyLimit, 0, 60, 0), texts: cleanTexts(b.texts) };
-        if (b.image) Object.assign(doc, cleanImage(b.image));
+        if (b.image) { const c = cleanImage(b.image); doc.images = [{ data: c.image, mime: c.imageType }]; }
         const sheet = await WaSheet.create(doc);
         res.status(201).json({ id: sheet._id });
     } catch (e) { if (e && e.code === 11000) return res.status(409).json({ error: "A sheet with that name already exists." }); fail(res, e, "Could not create the sheet."); }
@@ -115,8 +118,24 @@ router.patch("/wa/sheets/:id", authenticate, writeLimiter, async (req, res) => {
         if (typeof b.enabled === "boolean") set.enabled = b.enabled;
         if (b.dailyLimit !== undefined) set.dailyLimit = clamp(b.dailyLimit, 0, 60, 0);
         if (b.texts !== undefined) set.texts = cleanTexts(b.texts);
-        if (b.image === "") { set.image = ""; set.imageType = ""; } else if (b.image) Object.assign(set, cleanImage(b.image));
-        const doc = await WaSheet.findOneAndUpdate({ _id: req.params.id, owner: req.rootUser._id }, { $set: set }, { new: true }).select("-image").lean();
+        const filter = { _id: req.params.id, owner: req.rootUser._id };
+        const ops = { $set: set };
+        if (b.image === "") { set.image = ""; set.imageType = ""; set.images = []; }                                  // remove every picture
+        else if (b.addImage) {                                                                                       // add one picture (up to 5)
+            const c = cleanImage(b.addImage);
+            const cur = await WaSheet.findOne(filter).select("images image imageType").lean();
+            if (!cur) return res.status(404).json({ error: "Sheet not found." });
+            const list = sender.imagesOf(cur);
+            if (list.length >= MAX_IMAGES) return res.status(400).json({ error: `A sheet can have up to ${MAX_IMAGES} pictures.` });
+            set.images = [...list, { data: c.image, mime: c.imageType }]; set.image = ""; set.imageType = "";
+        } else if (b.removeImage !== undefined) {                                                                    // remove one picture by position
+            const cur = await WaSheet.findOne(filter).select("images image imageType").lean();
+            if (!cur) return res.status(404).json({ error: "Sheet not found." });
+            const list = sender.imagesOf(cur), i = Number(b.removeImage);
+            if (!Number.isInteger(i) || i < 0 || i >= list.length) return res.status(400).json({ error: "No such picture." });
+            set.images = list.filter((_, k) => k !== i); set.image = ""; set.imageType = "";
+        } else if (b.image) { const c = cleanImage(b.image); set.images = [{ data: c.image, mime: c.imageType }]; set.image = ""; set.imageType = ""; }
+        const doc = await WaSheet.findOneAndUpdate(filter, ops, { new: true }).select("-image -images").lean();
         if (!doc) return res.status(404).json({ error: "Sheet not found." });
         res.json(doc);
     } catch (e) { if (e && e.code === 11000) return res.status(409).json({ error: "A sheet with that name already exists." }); fail(res, e, "Could not save the sheet."); }
@@ -191,12 +210,14 @@ router.get("/wa/sends/:id", authenticate, async (req, res) => {
 router.get("/wa/agent/image/:sendId", imageLimiter, (req, res, next) => require("./home").agentAuth(req, res, next), async (req, res) => {
     try {
         if (!validId(req.params.sendId)) return res.status(404).end();
-        const send = await WaSend.findOne({ _id: req.params.sendId, device: req.device._id }).select("sheet").lean();
+        const send = await WaSend.findOne({ _id: req.params.sendId, device: req.device._id }).select("sheet imageIndex").lean();
         if (!send || !send.sheet) return res.status(404).end();
-        const sheet = await WaSheet.findById(send.sheet).select("image imageType").lean();
-        if (!sheet || !sheet.image) return res.status(404).end();
-        const buf = Buffer.from(sheet.image.slice(sheet.image.indexOf(",") + 1), "base64");
-        res.set("Content-Type", sheet.imageType || "image/jpeg").set("Cache-Control", "private, max-age=600").send(buf);
+        const sheet = await WaSheet.findById(send.sheet).select("image imageType images").lean();
+        const pictures = sender.imagesOf(sheet);
+        if (!pictures.length) return res.status(404).end();
+        const pic = pictures[Math.min(pictures.length - 1, Math.max(0, Number(send.imageIndex) || 0))];
+        const buf = Buffer.from(pic.data.slice(pic.data.indexOf(",") + 1), "base64");
+        res.set("Content-Type", pic.mime || "image/jpeg").set("Cache-Control", "private, max-age=600").send(buf);
     } catch (e) { res.status(500).end(); }
 });
 

@@ -270,6 +270,29 @@ describe("the website API", () => {
         expect((await request(app).get(`/wa/agent/image/${send._id}`).set(bearer(other.token))).status).toBe(404);
     });
 
+    test("a sheet keeps up to five pictures and each message uses one of them at random", async () => {
+        const { auth, hub, sheet, o } = await setup();
+        const pic = (t) => "data:image/png;base64," + Buffer.from(t).toString("base64");
+        for (const t of ["one", "two", "three"]) expect((await request(app).patch(`/wa/sheets/${sheet.id}`).set(auth).send({ addImage: pic(t) })).status).toBe(200);
+        expect((await request(app).get("/wa/overview").set(auth)).body.sheets[0].imageCount).toBe(3);
+        await sender.tickOwner(o, NOON, () => 0.99);                          // the last picture
+        const send = await WaSend.findOne({});
+        expect(send.imageIndex).toBe(2);
+        const got = await request(app).get(`/wa/agent/image/${send._id}`).set(bearer(hub.token));
+        expect(got.body.toString()).toBe("three");
+        const cmd = (await hubReport(hub.token)).body.commands.find((c) => c.type === "send_wa");
+        expect(cmd.args.image).toBe(true);
+        // Two more fit, a sixth does not; one can be removed by position.
+        await request(app).patch(`/wa/sheets/${sheet.id}`).set(auth).send({ addImage: pic("four") });
+        await request(app).patch(`/wa/sheets/${sheet.id}`).set(auth).send({ addImage: pic("five") });
+        expect((await request(app).patch(`/wa/sheets/${sheet.id}`).set(auth).send({ addImage: pic("six") })).status).toBe(400);
+        await request(app).patch(`/wa/sheets/${sheet.id}`).set(auth).send({ removeImage: 0 });
+        expect((await request(app).get("/wa/overview").set(auth)).body.sheets[0].imageCount).toBe(4);
+        expect((await request(app).patch(`/wa/sheets/${sheet.id}`).set(auth).send({ removeImage: 9 })).status).toBe(400);
+        await request(app).patch(`/wa/sheets/${sheet.id}`).set(auth).send({ image: "" });
+        expect((await request(app).get("/wa/overview").set(auth)).body.sheets[0].hasImage).toBe(false);
+    });
+
     test("someone else's sheet is not reachable", async () => {
         const { sheet } = await setup();
         const bob = await signUp("bob@example.com");

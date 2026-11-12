@@ -10,6 +10,7 @@ const waSendSchema = new mongoose.Schema({
     name: { type: String, default: "" },
     text: { type: String, default: "" },
     kind: { type: String, enum: ["scheduled", "test"], default: "scheduled" },
+    imageIndex: { type: Number, default: 0 },                      // which of the sheet's pictures this message uses
     status: { type: String, enum: ["queued", "sent", "failed"], default: "queued", index: true },
     result: { type: String, default: "" },
     device: { type: mongoose.Schema.Types.ObjectId },

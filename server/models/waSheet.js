@@ -8,8 +8,9 @@ const waSheetSchema = new mongoose.Schema({
     enabled: { type: Boolean, default: true },
     dailyLimit: { type: Number, default: 0, min: 0, max: 60 },    // 0: only the account limit applies
     texts: { type: [String], default: [] },                        // one is picked at random for each message
-    image: { type: String, default: "" },                          // data URL, up to ~2 MB
-    imageType: { type: String, default: "" }
+    image: { type: String, default: "" },                          // the first picture (older sheets); see images
+    imageType: { type: String, default: "" },
+    images: { type: [{ data: String, mime: String, _id: false }], default: [] }   // up to 5 pictures (data URLs, 2 MB each); one is picked at random for each message
 }, { timestamps: true });
 waSheetSchema.index({ owner: 1, name: 1 }, { unique: true });
 
