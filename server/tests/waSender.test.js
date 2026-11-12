@@ -49,6 +49,7 @@ async function setup({ people = 3 } = {}) {
     const sheet = (await request(app).post("/wa/sheets").set(auth).send({ name: "Test", texts: ["Hello {name}, new plots", "Hi {name}!"] })).body;
     const recipients = Array.from({ length: people }, (_, i) => ({ name: `Person ${i + 1}`, phone: `98100000${String(i + 1).padStart(2, "0")}` }));
     await request(app).post(`/wa/sheets/${sheet.id}/recipients`).set(auth).send({ recipients });
+    await request(app).patch(`/wa/sheets/${sheet.id}`).set(auth).send({ enabled: true });
     await request(app).put("/wa/settings").set(auth).send({ enabled: true, dailyLimit: 2 });
     return { auth, hub, sheet, o: await owner() };
 }
@@ -168,7 +169,7 @@ describe("the sender", () => {
         for (let i = 0; i < 2; i++) {
             expect((await sender.tickOwner(o, t, () => 0)).did).toBe("queued");
             const cmd = (await hubReport(hub.token)).body.commands[0];
-            await hubReport(hub.token, [{ id: cmd.id, ok: false, message: "Timed out" }]);
+            await hubReport(hub.token, [{ id: cmd.id, ok: false, message: "Timed out before pressing Send (step 1)" }]);
             t += 20 * 60000;
         }
         expect((await WaRecipient.findOne({})).status).toBe("failed");
@@ -179,6 +180,7 @@ describe("the sender", () => {
         const { auth, hub, sheet, o } = await setup({ people: 1 });
         const second = (await request(app).post("/wa/sheets").set(auth).send({ name: "Other", texts: ["Hi"] })).body;
         await request(app).post(`/wa/sheets/${second.id}/recipients`).set(auth).send({ recipients: [{ name: "Same", phone: "9810000001" }] });
+        await request(app).patch(`/wa/sheets/${second.id}`).set(auth).send({ enabled: true });
         await sender.tickOwner(o, NOON, () => 0);
         const cmd = (await hubReport(hub.token)).body.commands[0];
         await hubReport(hub.token, [{ id: cmd.id, ok: true, message: "Sent" }]);
@@ -187,12 +189,38 @@ describe("the sender", () => {
         expect((await WaRecipient.findOne({ sheet: second.id })).status).toBe("skipped");
     });
 
-    test("a message the tablet never answers is given up and the person goes back in line", async () => {
+    test("a message the tablet never picked up goes back in line", async () => {
         const { o } = await setup({ people: 1 });
-        await sender.tickOwner(o, NOON, () => 0);
+        await sender.tickOwner(o, NOON, () => 0);                            // queued, the tablet has not reported since
         await sender.tickOwner(o, NOON + 7 * 60000, () => 0);
         expect((await WaSend.findOne({})).status).toBe("failed");
         expect((await WaRecipient.findOne({})).status).toBe("pending");
+    });
+
+    test("a message the tablet took but never answered is NOT retried, so nobody gets it twice", async () => {
+        const { hub, o } = await setup({ people: 1 });
+        await sender.tickOwner(o, NOON, () => 0);
+        await hubReport(hub.token);                                          // the tablet takes the command (it is now "sent")
+        await sender.tickOwner(o, NOON + 7 * 60000, () => 0);
+        expect((await WaSend.findOne({})).status).toBe("failed");
+        expect((await WaRecipient.findOne({})).status).toBe("failed");
+        expect((await WaRecipient.findOne({})).attempts).toBe(1);
+        expect((await sender.tickOwner(o, NOON + 30 * 60000, () => 0)).status).toMatch(/Nobody is left/);
+    });
+
+    test("'pressed Send but WhatsApp did not confirm' is not retried either", async () => {
+        const { hub, o } = await setup({ people: 1 });
+        await sender.tickOwner(o, NOON, () => 0);
+        const cmd = (await hubReport(hub.token)).body.commands[0];
+        await hubReport(hub.token, [{ id: cmd.id, ok: false, message: "Pressed Send but WhatsApp did not confirm" }]);
+        expect((await WaRecipient.findOne({})).status).toBe("failed");
+    });
+
+    test("a new sheet sends nothing until it is switched on", async () => {
+        const auth = await signUp();
+        const made = (await request(app).post("/wa/sheets").set(auth).send({ name: "Fresh" })).body;
+        expect((await request(app).get("/wa/overview").set(auth)).body.sheets[0].enabled).toBe(false);
+        expect(made.id.length).toBe(24);
     });
 
     test("an offline tablet means nothing is queued", async () => {

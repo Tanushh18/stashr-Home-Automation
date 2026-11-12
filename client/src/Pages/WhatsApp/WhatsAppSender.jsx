@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import {
   getWaLink, connectWaLink, disconnectWaLink, getWaOrigins, importWaOrigin,
-  getWaOverview, saveWaSettings, createWaSheet, saveWaSheet, deleteWaSheet, addWaPeople, retryWaSheet, sendWaTest, getWaSend
+  getWaOverview, saveWaSettings, resetWaSheet, createWaSheet, saveWaSheet, deleteWaSheet, addWaPeople, retryWaSheet, sendWaTest, getWaSend
 } from "../../api/client";
 import { Section, Skeleton } from "../Render/RenderUi";
 import { errorMessage } from "../Render/renderUtils";
@@ -97,6 +97,7 @@ function SheetCard({ sheet, onChanged }) {
       <div className="wa-row">
         <button className="rd-btn" disabled={busy || !people.trim()} onClick={addPeople}>Add people</button>
         {c.failed > 0 && <button className="rd-btn" disabled={busy} onClick={() => run(() => retryWaSheet(sheet._id), (r) => `${r.requeued} back in line.`)}>Retry the {c.failed} failed</button>}
+        <button className="rd-btn is-quiet" disabled={busy} title="For testing: everyone on this sheet goes back in line, so the same test number can be messaged again" onClick={() => { if (window.confirm(`Put everyone on "${sheet.name}" back in line? Use this only for a test sheet.`)) run(() => resetWaSheet(sheet._id), (r) => `${r.reset} people back in line.`); }}>Reset for testing</button>
         <button className="rd-btn is-danger" disabled={busy} onClick={() => { if (window.confirm(`Delete "${sheet.name}" and its ${total} people? Messages already sent stay in the log.`)) run(() => deleteWaSheet(sheet._id), "Sheet deleted."); }}>Delete sheet</button>
       </div>
     </Section>
@@ -225,6 +226,7 @@ export default function WhatsAppSender() {
   const [settings, setSettings] = useState(null);
   const [newName, setNewName] = useState("");
   const [testPhone, setTestPhone] = useState("");
+  const [testSheet, setTestSheet] = useState("");
   const [testNote, setTestNote] = useState("");
   const editing = useRef(false);
 
@@ -264,7 +266,7 @@ export default function WhatsAppSender() {
 
   return (
     <div className="rd-page wa-page">
-      <header className="rd-pagehead"><h1>WhatsApp sender</h1><p>Messages go out from the tablet through WhatsApp Business, one at a time, spread over the day.</p></header>
+      <header className="rd-pagehead"><h1>WhatsApp sender</h1><p>This page is the only place that starts or stops sending. Turn sending on, switch on the sheets you want, and messages go out from the tablet through WhatsApp Business, one at a time, inside the limits below.</p></header>
 
       <Section
         title={s.enabled ? "Sending is on" : "Sending is off"}
@@ -296,7 +298,11 @@ export default function WhatsAppSender() {
       <Section title="Test the full flow" subtitle="Sends through the same path as a real message: the server queues it, the tablet sends it, the answer comes back here.">
         <div className="wa-row">
           <input className="wa-input" placeholder="Number, e.g. 98100 12345" value={testPhone} onChange={(e) => setTestPhone(e.target.value)} />
-          <button className="rd-btn is-primary" disabled={!testPhone.trim() || !data.tablet} onClick={() => test({ phone: testPhone })}>Send a test to this number</button>
+          <button className="rd-btn is-primary" disabled={!testPhone.trim() || !data.tablet} onClick={() => test({ phone: testPhone, ...(testSheet ? { sheetId: testSheet } : {}) })}>Send a test to this number</button>
+          <select className="wa-input is-short" value={testSheet} onChange={(e) => setTestSheet(e.target.value)} aria-label="Use this sheet's messages and pictures">
+            <option value="">Plain test text</option>
+            {data.sheets.map((sh) => <option key={sh._id} value={sh._id}>Use "{sh.name}" messages and pictures</option>)}
+          </select>
           <button className="rd-btn" disabled={!data.tablet} onClick={() => { if (window.confirm("This sends one real message to the next person on your sheets, now. Continue?")) test({}); }}>Send to the next person now</button>
         </div>
         {testNote && <p className="wa-note" role="status">{testNote}</p>}

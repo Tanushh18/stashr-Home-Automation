@@ -23,7 +23,7 @@ const WaLink = require("../models/waLink");
 const sender = require("../utils/waSender");
 
 /* A tiny stand-in for the We Three server. */
-let fake, fakeUrl, valid, marks, patchStatus, refreshes;
+let fake, fakeUrl, valid, marks, patchStatus, refreshes, leadsOverride = null;
 const leadsFor = () => [
     { id: "l1", name: "Ravi Kumar", phone: "+919810000001", archived: false, whatsappSentAt: null },
     { id: "l2", name: "Done Already", phone: "9810000002", archived: false, whatsappSentAt: "2026-11-01T00:00:00Z" },
@@ -52,7 +52,7 @@ beforeAll(async () => {
         if (req.method === "GET" && url.pathname === "/leads/origins") return send(res, 200, { origins: [{ name: "Test", count: 5, sent: 1 }, { name: "Calling data", count: 1993, sent: 153 }] });
         if (req.method === "GET" && url.pathname === "/leads") {
             if (url.searchParams.get("origin") !== "Test") return send(res, 200, { leads: [], totalPages: 1 });
-            const page = Number(url.searchParams.get("page")), all = leadsFor();
+            const page = Number(url.searchParams.get("page")), all = leadsOverride || leadsFor();
             return send(res, 200, { leads: all.slice((page - 1) * 3, page * 3), totalPages: 2 });     // pages of 3 to exercise paging
         }
         if (req.method === "PATCH" && url.pathname.startsWith("/leads/")) {
@@ -138,7 +138,7 @@ describe("the We Three link", () => {
         const { auth, hub, o } = await linked();
         await request(app).post("/wa/threads/import").set(auth).send({ origin: "Test" });
         const sheet = await WaSheet.findOne({});
-        await WaSheet.updateOne({ _id: sheet._id }, { $set: { texts: ["Hello {name}"] } });
+        await WaSheet.updateOne({ _id: sheet._id }, { $set: { texts: ["Hello {name}"], enabled: true } });
         await request(app).put("/wa/settings").set(auth).send({ enabled: true, dailyLimit: 5 });
         patchStatus = 500;                                                    // We Three is failing right now
         await sender.tickOwner(o, NOON, () => 0);
@@ -161,7 +161,7 @@ describe("the We Three link", () => {
     test("a number that is not on WhatsApp is marked in We Three as skipped, so it is never tried again", async () => {
         const { auth, hub, o } = await linked();
         await request(app).post("/wa/threads/import").set(auth).send({ origin: "Test" });
-        await WaSheet.updateOne({}, { $set: { texts: ["Hi"] } });
+        await WaSheet.updateOne({}, { $set: { texts: ["Hi"], enabled: true } });
         await request(app).put("/wa/settings").set(auth).send({ enabled: true, dailyLimit: 5 });
         await sender.tickOwner(o, NOON, () => 0);
         const cmd = (await hubReport(hub.token)).body.commands.find((c) => c.type === "send_wa");
@@ -169,6 +169,34 @@ describe("the We Three link", () => {
         await new Promise((r) => setTimeout(r, 150));
         expect((await WaRecipient.findOne({ externalId: "l1" })).status).toBe("skipped");
         expect(marks).toEqual([{ id: "l1", whatsappSent: true, whatsappTemplateName: "No WhatsApp (skipped)" }]);
+    });
+
+    test("a person messaged in We Three after the import is not messaged again from Stashr", async () => {
+        const { auth } = await linked();
+        await request(app).post("/wa/threads/import").set(auth).send({ origin: "Test" });
+        // We Three now shows l1 as messaged.
+        const all = leadsFor; 
+        const before = all();
+        const spy = () => { const l = before[0]; l.whatsappSentAt = "2026-11-12T10:00:00Z"; return before; };
+        spy();
+        leadsOverride = before;
+        const r = await request(app).post("/wa/threads/import").set(auth).send({ origin: "Test" });
+        leadsOverride = null;
+        expect(r.body.closed).toBe(1);
+        expect((await WaRecipient.findOne({ externalId: "l1" })).status).toBe("skipped");
+        expect((await WaRecipient.findOne({ externalId: "l5" })).status).toBe("pending");
+    });
+
+    test("a sheet can be reset for testing, but not while a message is on the tablet", async () => {
+        const { auth, o } = await linked();
+        await request(app).post("/wa/threads/import").set(auth).send({ origin: "Test" });
+        const sheet = await WaSheet.findOne({});
+        await WaRecipient.updateMany({}, { $set: { status: "sent", attempts: 1 } });
+        const r = await request(app).post(`/wa/sheets/${sheet._id}/reset`).set(auth);
+        expect(r.body.reset).toBe(2);
+        expect(await WaRecipient.countDocuments({ status: "pending" })).toBe(2);
+        await WaRecipient.updateOne({ externalId: "l1" }, { $set: { status: "queued" } });
+        expect((await request(app).post(`/wa/sheets/${sheet._id}/reset`).set(auth)).status).toBe(409);
     });
 
     test("disconnecting forgets the sign-in", async () => {

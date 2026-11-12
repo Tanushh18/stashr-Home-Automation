@@ -67,10 +67,25 @@ async function tabletOf(owner, now = Date.now()) {
     return hubs.find((d) => (d.status || {}).agent === "stashr-hub" && home.isOnline(d, now)) || null;
 }
 
-/** Messages the tablet never answered are marked failed, and the person goes back in line. */
+/**
+ * Only these failures mean WhatsApp certainly did not send the message, so the person can safely go back in line.
+ * Anything else (no answer, "pressed Send but WhatsApp did not confirm") might have sent it: trying again could
+ * message the same person twice, so those are marked failed and wait for you.
+ */
+const SAFE_TO_RETRY = /before pressing send|accessibility settings|not installed|another message is being sent|could not save the picture|picture is not available|not a valid number|nothing to send/i;
+const safeToRetry = (message) => SAFE_TO_RETRY.test(String(message || ""));
+
+/** Messages the tablet never answered. If the tablet never picked the command up, the person goes back in line; if it did, the message may have gone out, so it is marked failed (never retried by itself). */
 async function expireQueued(owner, now = Date.now()) {
     const stale = await WaSend.find({ owner, status: "queued", queuedAt: { $lt: new Date(now - QUEUED_GIVE_UP_MS) } }).lean();
-    for (const s of stale) await finishSend(s._id, false, "The tablet did not answer", now);
+    for (const s of stale) {
+        let picked = true;
+        if (s.device && s.commandId) {
+            const d = await HomeDevice.findOne({ _id: s.device, "commands.id": s.commandId }, { "commands.$": 1 }).lean();
+            picked = Boolean(d && d.commands && d.commands[0] && d.commands[0].status !== "pending");
+        }
+        await finishSend(s._id, false, picked ? "No answer from the tablet after it took the message (it may have been sent: check WhatsApp)" : "The tablet never picked the message up. Before pressing Send", now);
+    }
 }
 
 /**
@@ -90,7 +105,7 @@ async function finishSend(sendId, ok, message, now = Date.now()) {
     const notOnWhatsApp = /not on whatsapp|isn't on whatsapp|invalid/i.test(String(message || ""));
     const r = await WaRecipient.findById(send.recipient).lean();
     if (!r) return send;
-    const again = !notOnWhatsApp && (r.attempts || 0) < MAX_ATTEMPTS;
+    const again = !notOnWhatsApp && safeToRetry(message) && (r.attempts || 0) < MAX_ATTEMPTS;
     await WaRecipient.updateOne({ _id: r._id }, { $set: { status: notOnWhatsApp ? "skipped" : again ? "pending" : "failed", error: String(message || "").slice(0, 200) } });
     if (notOnWhatsApp) waLeads.writeBack(send.owner, 3).catch(() => {});
     return send;
@@ -222,4 +237,4 @@ async function sendTest(owner, { phone, sheetId, now = Date.now() } = {}) {
     return dispatch({ owner, tablet, sheet: picked.sheet, recipient: picked.recipient, phone: picked.recipient.phone, name: picked.recipient.name, text, kind: "test", day: local.date, now });
 }
 
-module.exports = { waLeads, imagesOf, normalizePhone, windowMinutes, inWindow, nextGapMinutes, settingsOf, tabletOf, finishSend, pickRecipient, textFor, tickOwner, tickAll, onAck, sendTest, expireQueued };
+module.exports = { safeToRetry, waLeads, imagesOf, normalizePhone, windowMinutes, inWindow, nextGapMinutes, settingsOf, tabletOf, finishSend, pickRecipient, textFor, tickOwner, tickAll, onAck, sendTest, expireQueued };

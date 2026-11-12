@@ -193,6 +193,18 @@ router.post("/wa/sheets/:id/recipients", authenticate, writeLimiter, async (req,
     } catch (e) { fail(res, e, "Could not add the people."); }
 });
 
+// For testing: puts every person of a sheet back in line (sent, failed and skipped become pending) so the same test number can be messaged again.
+router.post("/wa/sheets/:id/reset", authenticate, writeLimiter, async (req, res) => {
+    try {
+        if (!validId(req.params.id)) return res.status(404).json({ error: "Sheet not found." });
+        const owner = req.rootUser._id;
+        if (await WaRecipient.exists({ owner, sheet: req.params.id, status: "queued" })) return res.status(409).json({ error: "A message from this sheet is being sent. Try again in a minute." });
+        const out = await WaRecipient.updateMany({ owner, sheet: req.params.id, status: { $in: ["sent", "failed", "skipped"] } },
+            { $set: { status: "pending", attempts: 0, error: "" }, $unset: { sentAt: 1, markedAt: 1 } });
+        res.json({ reset: out.modifiedCount || 0 });
+    } catch (e) { fail(res, e, "Could not reset the sheet."); }
+});
+
 router.post("/wa/sheets/:id/retry", authenticate, writeLimiter, async (req, res) => {
     try {
         if (!validId(req.params.id)) return res.status(404).json({ error: "Sheet not found." });

@@ -109,6 +109,7 @@ async function importSheet(owner, origin, normalizePhone) {
     if (!sheet) sheet = await WaSheet.create({ owner, name, source: "leads" });
     const last = await WaRecipient.findOne({ owner, sheet: sheet._id }).sort({ order: -1 }).select("order").lean();
     let order = (last && last.order) || 0, seen = 0, skippedSent = 0, invalid = 0, added = 0, dup = 0;
+    const doneInThree = [];                                       // leads already marked in We Three: never messaged from here
     for (let page = 1; page <= MAX_PAGES; page++) {
         const r = await call(owner, "GET", `/leads?page=${page}&limit=${PAGE}&status=all&origin=${encodeURIComponent(name)}`);
         if (r.status !== 200) { const e = new Error(r.json.error || `We Three answered HTTP ${r.status}`); e.status = 502; throw e; }
@@ -117,7 +118,7 @@ async function importSheet(owner, origin, normalizePhone) {
         for (const l of leads) {
             seen++;
             if (l.archived) continue;
-            if (l.whatsappSentAt) { skippedSent++; continue; }
+            if (l.whatsappSentAt) { skippedSent++; doneInThree.push(String(l.id)); continue; }
             const phone = normalizePhone(l.phone);
             if (!phone) { invalid++; continue; }
             rows.push({ owner, sheet: sheet._id, name: String(l.name || "").slice(0, 120), phone, externalId: String(l.id), order: ++order });
@@ -128,7 +129,14 @@ async function importSheet(owner, origin, normalizePhone) {
         }
         if (!leads.length || page >= (r.json.totalPages || 1)) break;
     }
-    return { sheetId: sheet._id, name, seen, added, duplicates: dup, alreadySent: skippedSent, invalid };
+    // A person imported earlier who has been messaged in We Three since (by hand, or by the app) is not messaged again from here.
+    let closed = 0;
+    if (doneInThree.length) {
+        const out = await WaRecipient.updateMany({ owner, sheet: sheet._id, externalId: { $in: doneInThree }, status: "pending" },
+            { $set: { status: "skipped", error: "Already messaged in We Three", markedAt: new Date(0) } });
+        closed = out.modifiedCount || 0;
+    }
+    return { sheetId: sheet._id, name, seen, added, duplicates: dup, alreadySent: skippedSent, invalid, closed };
 }
 
 /** Writes one lead's WhatsApp mark to We Three. Returns true when We Three accepted it. */
