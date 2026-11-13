@@ -63,7 +63,7 @@ beforeAll(async () => {
         }
         if (req.method === "GET" && url.pathname === "/leads" && weLeads.some((l) => l.origin === url.searchParams.get("origin"))) {
             const mine = weLeads.filter((l) => l.origin === url.searchParams.get("origin")), page = Number(url.searchParams.get("page"));
-            return send(res, 200, { leads: mine.slice((page - 1) * 2, page * 2), totalPages: Math.max(1, Math.ceil(mine.length / 2)) });
+            return send(res, 200, { leads: mine.slice((page - 1) * 100, page * 100), totalPages: Math.max(1, Math.ceil(mine.length / 100)) });
         }
         if (req.method === "GET" && url.pathname === "/leads") {
             if (url.searchParams.get("origin") !== "Test") return send(res, 200, { leads: [], totalPages: 1 });
@@ -293,5 +293,18 @@ describe("sheets that live in Stashr and We Three both", () => {
         expect((await WaRecipient.find({ sheet: made.body.id }).lean()).map((r) => r.phone).sort()).toEqual(["919810000011", "919810000055", "919810000066"]);
         expect(weLeads.some((l) => l.phone === "9810000066" && l.origin === "Mine")).toBe(true);
         expect((await require("../utils/waLeads").syncLinked(o, sender.normalizePhone)).skipped).toBe(true);           // not again within 10 minutes
+    });
+
+    test("2016 people added at once to a We Three sheet are all saved, even though We Three needs several calls", async () => {
+        const { auth } = await linked();
+        const made = await request(app).post("/wa/sheets").set(auth).send({ name: "Leads-Scrap", weThree: true });
+        const many = Array.from({ length: 2016 }, (_, i) => ({ name: "Lead " + i, phone: String(9100000000 + i) }));
+        const t0 = Date.now();
+        const add = await request(app).post(`/wa/sheets/${made.body.id}/recipients`).set(auth).send({ recipients: many });
+        expect(add.status).toBe(200);
+        expect(add.body).toMatchObject({ added: 2016 });
+        expect(await WaRecipient.countDocuments({ sheet: made.body.id })).toBe(2016);
+        expect(add.body.weThree).toMatchObject({ sent: 2016, added: 2016, linked: 2016, notLinked: 0 });
+        expect(Date.now() - t0 < 20000).toBe(true);
     });
 });

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import {
   getWaLink, connectWaLink, disconnectWaLink, getWaOrigins, importWaOrigin,
-  getWaOverview, saveWaSettings, resetWaSheet, sendWaReportNow, createWaSheet, saveWaSheet, deleteWaSheet, addWaPeople, sendWaSheetToWeThree, retryWaSheet, sendWaTest, getWaSend, getWaPictures, getWaPicture
+  getWaOverview, saveWaSettings, resetWaSheet, sendWaReportNow, createWaSheet, saveWaSheet, deleteWaSheet, addWaPeople, addWaPeopleInBatches, sendWaSheetToWeThree, retryWaSheet, sendWaTest, getWaSend, getWaPictures, getWaPicture
 } from "../../api/client";
 import { Section, Skeleton } from "../Render/RenderUi";
 import { errorMessage } from "../Render/renderUtils";
@@ -170,7 +170,7 @@ function SheetCard({ sheet, onChanged }) {
   const addFound = () => {
     const chosen = found.filter((r) => foundPicked[r.phone]);
     if (!chosen.length) return toast.error("Tick at least one person.");
-    run(() => addWaPeople(sheet._id, chosen), (r) => `Added ${r.added}. ${r.duplicates} already there, ${r.invalid} not valid.`).then(() => { setFound([]); setFoundPicked({}); });
+    run(() => addWaPeopleInBatches(sheet._id, chosen), (r) => `Added ${r.added}. ${r.duplicates} already there, ${r.invalid} not valid.`).then(() => { setFound([]); setFoundPicked({}); });
   };
   const addPeople = () => {
     const list = peopleFromLines(people);
@@ -327,7 +327,9 @@ function ContactsGroup({ onChanged }) {
     setBusy(true);
     try {
       const made = await createWaSheet({ name: name.trim(), source: "contacts", weThree: connected && alsoThree });
-      const r = await addWaPeople(made.id, chosen);
+      let r;
+      try { r = await addWaPeopleInBatches(made.id, chosen); }
+      catch (err) { try { await deleteWaSheet(made.id); } catch { /* nothing more to do */ } throw err; }    // no empty group is left behind
       toast.success(`Group created with ${r.added} people.${r.weThree ? " Also in We Three." : ""} Now add its messages and picture.`);
       setRows([]); setPicked({}); setName("");
       await onChanged();
@@ -367,9 +369,20 @@ function NewSheet({ existing, onChanged }) {
   const [alsoThree, setAlsoThree] = useState(true);
   const [busy, setBusy] = useState(false);
   const [file, setFile] = useState("");
+  const [progress, setProgress] = useState("");
   const [tabs, setTabs] = useState([]);                       // [{ tab, include, name, parts, people }]
   const fileRef = useRef(null);
-  const taken = new Set(existing.map((n) => n.toLowerCase()));
+  const taken = new Set(existing.map((x) => x.name.toLowerCase()));
+  const oldOf = (n) => existing.find((x) => x.name.toLowerCase() === String(n || "").trim().toLowerCase());
+  /** Removes an old sheet (after asking) so its name can be used again. Its messages and people are deleted; We Three keeps its leads. */
+  const removeOld = async (n) => {
+    const old = oldOf(n);
+    if (!old) return;
+    if (!window.confirm(`Delete the old sheet "${old.name}" and its ${old.total} people? Messages already sent stay in the log. Leads in We Three are not deleted.`)) return;
+    setBusy(true);
+    try { await deleteWaSheet(old.id); toast.success(`Old sheet "${old.name}" deleted.`); await onChanged(); }
+    catch (e) { toast.error(errorMessage(e)); } finally { setBusy(false); }
+  };
   const plan = planSheets(tabs, taken);
   const clash = plan.some((p) => p.clash);
 
@@ -399,15 +412,17 @@ function NewSheet({ existing, onChanged }) {
     try {
       for (const p of plan) {
         const sheet = await createWaSheet({ name: p.name, weThree: connected && alsoThree });
+        let r;
+        try { r = await addWaPeopleInBatches(sheet.id, p.people, 500, (done, all) => setProgress(`${p.name}: ${done} of ${all}`)); }
+        catch (err) { try { await deleteWaSheet(sheet.id); } catch { /* nothing more to do */ } throw err; }   // no empty sheet is left behind
         made++;
-        const r = await addWaPeople(sheet.id, p.people);
         people += r.added;
         if (r.weThree) three++;
       }
       toast.success(`${made} ${made === 1 ? "sheet" : "sheets"} created with ${people} people.${three ? ` Also in We Three.` : ""} Now add their messages and pictures.`);
       setTabs([]); setFile("");
     } catch (err) { toast.error(`${errorMessage(err)} ${made} of ${plan.length} sheets were created before this.`); }
-    finally { setBusy(false); await onChanged(); }
+    finally { setBusy(false); setProgress(""); await onChanged(); }
   };
 
   return (
@@ -415,7 +430,10 @@ function NewSheet({ existing, onChanged }) {
       <div className="wa-row">
         <input className="wa-input" placeholder="Sheet name" value={name} maxLength={80} onChange={(e) => setName(e.target.value)} />
         <button className="rd-btn is-primary" disabled={busy || !name.trim() || taken.has(name.trim().toLowerCase())} onClick={createOne}>Create sheet</button>
-        {name.trim() && taken.has(name.trim().toLowerCase()) ? <span className="wa-muted">A sheet with that name already exists.</span> : null}
+        {name.trim() && taken.has(name.trim().toLowerCase()) ? <>
+          <span className="wa-muted">A sheet with that name already exists.</span>
+          <button className="rd-btn is-danger" disabled={busy} onClick={() => removeOld(name)}>Delete the old sheet</button>
+        </> : null}
       </div>
       {connected ? <label className="wa-check"><input type="checkbox" checked={alsoThree} onChange={(e) => setAlsoThree(e.target.checked)} /> Also create it in We Three (people and “sent” marks stay the same in both)</label> : null}
       <div className="wa-row">
@@ -439,11 +457,12 @@ function NewSheet({ existing, onChanged }) {
           ))}
           {plan.length > 0 && (
             <ul className="wa-plan">
-              {plan.map((p, i) => <li key={i} className={p.clash ? "is-bad" : ""}>{p.name || "(no name)"} · {p.people.length} people{p.clash ? (p.name ? " · name already used" : " · needs a name") : ""}</li>)}
+              {plan.map((p, i) => <li key={i} className={p.clash ? "is-bad" : ""}>{p.name || "(no name)"} · {p.people.length} people{p.clash ? (p.name ? " · name already used" : " · needs a name") : ""}{p.clash && oldOf(p.name) ? <> <button className="rd-btn is-danger" disabled={busy} onClick={() => removeOld(p.name)}>Delete the old sheet</button></> : null}</li>)}
             </ul>
           )}
           <div className="wa-row">
             <button className="rd-btn is-primary" disabled={busy || !plan.length || clash} onClick={createFromExcel}>Create {plan.length} {plan.length === 1 ? "sheet" : "sheets"}</button>
+            {progress ? <span className="wa-muted">Adding people… {progress}</span> : null}
             <button className="rd-btn is-quiet" disabled={busy} onClick={() => { setTabs([]); setFile(""); }}>Cancel</button>
           </div>
         </div>
@@ -556,7 +575,7 @@ export default function WhatsAppSender() {
       {data.sheets.length === 0 && <Section title="No sheets yet"><p className="wa-muted">Make a sheet below, add its messages, a picture and the people to message.</p></Section>}
       {data.sheets.map((sh) => <SheetCard key={sh._id} sheet={sh} onChanged={load} />)}
 
-      <NewSheet existing={data.sheets.map((sh) => sh.name)} onChanged={load} />
+      <NewSheet existing={data.sheets.map((sh) => ({ id: sh._id, name: sh.name, total: Object.values(sh.counts || {}).reduce((a, b) => a + b, 0) }))} onChanged={load} />
 
       <ThreeLink onChanged={load} />
       <ContactsGroup onChanged={load} />

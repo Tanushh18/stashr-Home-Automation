@@ -48,7 +48,7 @@ export function contactsFromCsv(text) {
         const phone = cleanPhone(part);
         if (!phone || seen.has(phone)) continue;
         seen.add(phone);
-        out.push({ name, phone });
+        out.push({ name: name.slice(0, 120), phone });
       }
     }
   }
@@ -99,7 +99,7 @@ export function contactsFromVcf(text) {
       const phone = cleanPhone(t);
       if (!phone || seen.has(phone)) continue;
       seen.add(phone);
-      out.push({ name, phone });
+      out.push({ name: name.slice(0, 120), phone });
     }
     card = null;
   };
@@ -163,7 +163,7 @@ export function peopleFromRows(rows) {
         const phone = cleanPhone(part);
         if (!phone || seen.has(phone)) continue;
         seen.add(phone);
-        out.push({ name, phone });
+        out.push({ name: name.slice(0, 120), phone });
       }
     }
   }
