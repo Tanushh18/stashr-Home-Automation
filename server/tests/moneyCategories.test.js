@@ -127,3 +127,20 @@ describe("a message for a payment the bank statement already added", () => {
         expect((await st.list()).length).toBe(3);
     });
 });
+
+describe("a description on a payment", () => {
+    test("is saved with the entry, shown in the list, kept when the category changes, and can be cleared", async () => {
+        const auth = await signUp();
+        await request(app).post("/expenses/start").set(auth).send({ date: recent(30) });
+        const st = await seed([{ merchant: "Kesar Rajwad (kesarr@ybl)", amount: 290 }]);
+        const row = (await st.list())[0];
+        const r = await request(app).put("/expenses/description").set(auth).send({ index: row.index, description: "  breakfast   with   Mom  " });
+        expect(r.body).toMatchObject({ ok: true, description: "breakfast with Mom" });
+        await request(app).put("/expenses/category").set(auth).send({ index: row.index, category: "Food", remember: false });
+        const shown = (await list(auth)).rows.find((t) => t.index === row.index);
+        expect(shown).toMatchObject({ description: "breakfast with Mom", category: "Food" });
+        await request(app).put("/expenses/description").set(auth).send({ index: row.index, description: "" });
+        expect((await list(auth)).rows.find((t) => t.index === row.index).description).toBe("");
+        expect((await request(app).put("/expenses/description").set(auth).send({ index: "nope", description: "x" })).status).toBe(400);
+    });
+});

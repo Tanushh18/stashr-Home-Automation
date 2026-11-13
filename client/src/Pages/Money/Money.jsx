@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import {
-  getExpenseSettings, saveExpenseSheet, setExpenseStorage, unlinkExpenseSheet, exportExpenseSheet, setExpenseStart, changeExpenseStart, removeUnmatchedExpenses, uploadStatementAsync, getStatementJob, getSavedStatements, searchStatements, deleteSavedStatement, postExpenseSms, requestExpenseSync, getExpenses, getUncategorized, setExpenseCategory, reviewExpense, uploadStatement
+  getExpenseSettings, saveExpenseSheet, setExpenseStorage, unlinkExpenseSheet, exportExpenseSheet, setExpenseStart, changeExpenseStart, removeUnmatchedExpenses, uploadStatementAsync, getStatementJob, getSavedStatements, searchStatements, deleteSavedStatement, postExpenseSms, requestExpenseSync, getExpenses, getUncategorized, setExpenseDescription, setExpenseCategory, reviewExpense, uploadStatement
 } from "../../api/client";
 import { Section, Skeleton, useConfirm } from "../Render/RenderUi";
 import { errorMessage } from "../Render/renderUtils";
@@ -305,8 +305,27 @@ function CategoryEditor({ tx, categories, onClose, onSaved }) {
   );
 }
 
+/** The owner's own words for a payment ("birthday gift for Mom"). */
+function DescriptionEditor({ tx, onClose, onSaved }) {
+  const [text, setText] = useState(tx.description || "");
+  const [busy, setBusy] = useState(false);
+  const save = async () => {
+    setBusy(true);
+    try { await setExpenseDescription(tx.index, text); toast.success("Description saved."); onSaved(); }
+    catch (err) { toast.error(errorMessage(err, "Could not save the description.")); setBusy(false); }
+  };
+  return (
+    <div className="mn-edit">
+      <input type="text" value={text} maxLength={300} onChange={(e) => setText(e.target.value)} placeholder="What was this for?" aria-label="Description" autoFocus />
+      <button className="rd-btn rd-btn--primary" onClick={save} disabled={busy || text.trim() === (tx.description || "")}>Save</button>
+      <button className="rd-btn rd-btn--quiet" onClick={onClose}>Cancel</button>
+    </div>
+  );
+}
+
 function TxRow({ tx, categories, onChanged }) {
   const [editing, setEditing] = useState(false);
+  const [describing, setDescribing] = useState(false);
   const [open, setOpen] = useState(false);
   const uncategorized = tx.category === "Uncategorized";
   return (
@@ -316,10 +335,12 @@ function TxRow({ tx, categories, onChanged }) {
           <b>{tx.merchant || "Unknown"}</b>
           <span>{tx.time || ""}{tx.method ? <i className="mn-method">{tx.method}</i> : null}</span>
         </button>
+        <button type="button" className="mn-desc" onClick={() => setDescribing(!describing)} aria-label={tx.description ? "Edit description" : "Add description"}>{tx.description ? "✎ " + tx.description : "+ description"}</button>
         <button type="button" className={"mn-cat" + (uncategorized ? " is-uncat" : "")} onClick={() => setEditing(!editing)} aria-label={`Category ${tx.category}. Change`}>{tx.category}</button>
         <span className={"mn-amt " + (tx.type === "Credit" ? "is-credit" : "")}>{tx.type === "Credit" ? "+" : ""}{inr(tx.amount)}</span>
         <span className={"mn-badge is-" + statusTone(tx.status)}>{STATUS_LABEL[tx.status] || tx.status || "Unverified"}</span>
       </div>
+      {describing ? <DescriptionEditor tx={tx} onClose={() => setDescribing(false)} onSaved={() => { setDescribing(false); onChanged(); }} /> : null}
       {editing ? <CategoryEditor tx={tx} categories={categories} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); onChanged(); }} /> : null}
       {open ? (
         <dl className="mn-detail">

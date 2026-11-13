@@ -22,7 +22,7 @@ const cellValue = (k, v) => (k === "flags" ? (v || []).join(" | ") : v == null ?
 
 /* ───────── Stashr storage (MongoDB, encrypted) ───────── */
 
-const SECRET = ["time", "amount", "type", "merchant", "category", "account", "method", "ref", "balance", "source", "note", "received", "flags"];
+const SECRET = ["time", "amount", "type", "merchant", "category", "account", "method", "ref", "balance", "source", "note", "description", "received", "flags"];
 const expireAtOf = (date) => new Date(Date.parse(`${date}T00:00:00+05:30`) + RETENTION_DAYS * DAY);
 const hashKey = (t) => (t.ref ? `ref:${t.ref}|${t.amount}` : `k:${t.date}|${t.time}|${t.amount}|${ex.norm(t.merchant)}`);
 
@@ -31,7 +31,7 @@ function dbStore(owner, dataKey) {
     const open = (doc) => {
         let secret = {};
         try { secret = unsealJSONWithKey(dataKey, doc.enc); } catch (e) { secret = { merchant: "(could not be decrypted)", amount: 0, type: "", flags: [] }; }
-        return { index: String(doc._id), date: doc.date, month: doc.month, status: doc.status, time: "", amount: 0, type: "", merchant: "", category: "Uncategorized", account: "", method: "", ref: "", balance: null, source: "", note: "", received: "", flags: [], ...secret };
+        return { index: String(doc._id), date: doc.date, month: doc.month, status: doc.status, time: "", amount: 0, type: "", merchant: "", description: "", category: "Uncategorized", account: "", method: "", ref: "", balance: null, source: "", note: "", received: "", flags: [], ...secret };
     };
     const seal = (t) => sealJSONWithKey(dataKey, Object.fromEntries(SECRET.map((k) => [k, t[k]])));
     const idOf = (index) => (mongoose.isValidObjectId(String(index)) ? String(index) : null);

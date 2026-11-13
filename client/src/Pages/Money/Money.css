@@ -109,3 +109,6 @@ label.mn-chip:has(input:disabled) { opacity: .55; cursor: not-allowed; }
 .mn-quick li { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
 .mn-quick em { font-style: normal; opacity: .7; font-size: .85em; }
 .mn-quick select { min-height: 40px; }
+
+.mn-desc { background: none; border: 0; padding: 2px 0; color: inherit; opacity: .65; font-size: .8em; text-align: left; cursor: pointer; flex-basis: 100%; }
+.mn-desc:hover { opacity: 1; text-decoration: underline; }

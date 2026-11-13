@@ -337,6 +337,22 @@ router.get("/expenses/uncategorized", authenticate, async (req, res) => {
     } catch (e) { return fail(res, e, "Could not load the unsorted payments."); }
 });
 
+/** The owner's own description of a payment ("birthday gift for Mom"). Kept encrypted with the entry; Stashr storage only (the sheet has fixed columns). */
+router.put("/expenses/description", authenticate, writeLimiter, async (req, res) => {
+    try {
+        const owner = req.rootUser._id, s = await settingsOf(owner);
+        const { st } = await storeFor(req, s);
+        if (st.mode !== "db") return res.status(400).json({ error: "Descriptions are kept in Stashr storage. Switch Storage to \"Stashr (encrypted)\" to use them." });
+        const index = req.body && req.body.index;
+        const description = String((req.body && req.body.description) || "").replace(/\s+/g, " ").trim().slice(0, 300);
+        if (!st.isIndex(index)) return res.status(400).json({ error: "Pick a payment." });
+        const row = (await st.list()).find((t) => String(t.index) === String(index));
+        if (!row) return res.status(404).json({ error: "That payment is gone. Reload the list." });
+        await st.updateMany([{ index: row.index, fields: { description }, tx: row }]);
+        return res.json({ ok: true, description });
+    } catch (e) { return fail(res, e, "Could not save the description."); }
+});
+
 router.put("/expenses/review", authenticate, writeLimiter, async (req, res) => {
     try {
         const owner = req.rootUser._id, s = await settingsOf(owner);

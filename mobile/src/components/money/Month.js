@@ -45,6 +45,8 @@ function Entry({ tx, categories, onChange }) {
   const act = useAct();
   const [open, setOpen] = useState(false);
   const [pick, setPick] = useState(false);
+  const [describe, setDescribe] = useState(false);
+  const [text, setText] = useState(tx.description || "");
   const credit = tx.type === "Credit";
   return (
     <View style={{ paddingVertical: 8, borderTopWidth: 1, borderTopColor: theme.line, gap: 6 }}>
@@ -58,7 +60,15 @@ function Entry({ tx, categories, onChange }) {
       <Row>
         <Btn label={tx.category} kind={tx.category === "Uncategorized" ? "primary" : "quiet"} onPress={() => setPick(true)} />
         <StatusBadge status={tx.status} />
+        <Btn label={tx.description ? "Edit description" : "+ Description"} kind="quiet" onPress={() => { setText(tx.description || ""); setDescribe(!describe); }} />
       </Row>
+      {tx.description && !describe ? <Dim>{tx.description}</Dim> : null}
+      {describe ? (
+        <Row>
+          <View style={{ flex: 1, minWidth: 160 }}><Input value={text} onChangeText={setText} placeholder="What was this for?" maxLength={300} /></View>
+          <Btn kind="primary" label="Save" onPress={async () => { if (await act(() => money.setDescription(tx.index, text), "Description saved")) { setDescribe(false); onChange(); } }} />
+        </Row>
+      ) : null}
       {open ? (
         <View style={{ gap: 2 }}>
           {tx.ref ? <Dim>Reference {tx.ref}</Dim> : null}
