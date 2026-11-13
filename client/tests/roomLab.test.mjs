@@ -46,3 +46,20 @@ test("the live rows list every calculated value, and the headline says room, uns
   assert.equal(barText(130, 4), "████");
   assert.equal(Object.fromEntries(liveRows({ cv: { tested: 0 }, field: { total: 0 }, current: null }))["accuracy (chhupa ke guess)"], "abhi nahi bani");
 });
+
+import { autoLine, learnWhy } from "../src/lib/roomLab.js";
+test("auto-improve reads plainly: off, paused with why, on with how much and when, and the guard's numbers", () => {
+  const now = Date.UTC(2026, 10, 13, 12);
+  assert.equal(autoLine({ auto: { on: false } }, now), "band (is phone ke liye)");
+  assert.match(autoLine({ auto: { on: true, paused: true, why: "accuracy giri", pausedUntil: now + 7 * 86400000 } }, now), /^ruka hua \(accuracy giri\), 20 Nov tak$/);
+  assert.equal(autoLine({ auto: { on: true, total: 0 } }, now), "on · abhi tak kuch nahi seekha");
+  assert.equal(autoLine({ auto: { on: true, total: 12, lastAt: now - 5 * 60000, lastRoom: "Bedroom", guard: { with: 91, without: 88 } } }, now), "on · 12 scan apne aap seekhe · aakhri: Bedroom, 5 min pehle · jaanch: saath 91% / bina 88%");
+  assert.equal(learnWhy("the scan is not fresh"), "scan taaza nahi (Stashr Location 1.10 chahiye)");
+  assert.equal(learnWhy("something new"), "something new");
+  const p = { on: true, trained: true, cv: { tested: 10, accuracy: 90, unsure: 0 }, field: { total: 0 }, auto: { on: true, total: 2, lastAt: now - 60000, lastRoom: "Hall" }, tune: { width: 7, accuracy: 93, gone: 2 },
+    current: { name: "Hall", confidence: 0.9, sure: true, fresh: true, ageSec: 3, nearest: 4, heard: { wifi: 10, ble: 0 }, samples: 40, learned: false, learnWhy: "one a while ago" } };
+  const rows = Object.fromEntries(liveRows(p, now));
+  assert.equal(rows["apne aap seekhna"], "on · 2 scan apne aap seekhe · aakhri: Hall, 1 min pehle");
+  assert.equal(rows["is scan se seekha?"], "nahi: is kamre ka abhi-abhi seekha (10 min mein ek)");
+  assert.equal(rows["chaudai (tuned)"], "7 dBm · test 93% · 2 purane network ignore");
+});

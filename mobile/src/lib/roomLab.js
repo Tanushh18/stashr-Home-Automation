@@ -38,7 +38,37 @@ export function liveRows(p, now = Date.now()) {
   }
   rows.push(["accuracy (chhupa ke guess)", p.cv.tested ? `${p.cv.accuracy}% · ${p.cv.tested} scan ka test · ${p.cv.unsure}% pakka nahi` : "abhi nahi bani"]);
   rows.push(["asli accuracy (aapke taps)", p.field.total ? `${p.field.accuracy}% · ${p.field.confirmed} sahi, ${p.field.wrong} galat` : "abhi koi tap nahi"]);
+  if (p.auto) rows.push(["apne aap seekhna", autoLine(p, now)]);
+  if (cur && p.auto) rows.push(["is scan se seekha?", cur.learned ? "haan (auto sample bana)" : `nahi: ${learnWhy(cur.learnWhy)}`]);
+  if (p.tune) rows.push(["chaudai (tuned)", `${p.tune.width} dBm${p.tune.accuracy !== null && p.tune.accuracy !== undefined ? ` · test ${p.tune.accuracy}%` : ""}${p.tune.gone ? ` · ${p.tune.gone} purane network ignore` : ""}`]);
   return rows;
+}
+
+/** Why a live scan was not learned from, in plain words (the server's reasons, see server/utils/roomModel.autoGate). */
+const WHY = {
+  "auto-improve is off": "apne aap seekhna band hai",
+  "paused": "ruka hua hai",
+  "the scan is not fresh": "scan taaza nahi (Stashr Location 1.10 chahiye)",
+  "not sure": "kamra pakka nahi",
+  "not sure enough": "75% se kam pakka",
+  "two rooms are close": "do kamre milte-julte lage",
+  "not a familiar spot": "ye jagah anjaan lagi",
+  "the room is not settled": "abhi kamre mein aaye (sthir nahi)",
+  "not trained enough by a person": "pehle har kamre mein 5+ scan khud train karo",
+  "already have this spot": "ye jagah pehle se seekhi hui",
+  "one a while ago": "is kamre ka abhi-abhi seekha (10 min mein ek)"
+};
+export const learnWhy = (why) => WHY[why] || why || "—";
+
+/** Auto-improve of one phone in one line: off, paused (why, until when), or on with how much it learned and when. */
+export function autoLine(p, now = Date.now()) {
+  const a = p.auto || {};
+  if (!a.on) return "band (is phone ke liye)";
+  if (a.paused) return `ruka hua${a.why ? ` (${a.why})` : ""}${a.pausedUntil ? `, ${new Date(a.pausedUntil).toLocaleDateString("en-IN", { day: "numeric", month: "short" })} tak` : ""}`;
+  const total = a.total ?? a.added ?? 0;
+  const head = total ? `on · ${total} scan apne aap seekhe${a.lastAt ? ` · aakhri: ${a.lastRoom || "?"}, ${agoText(a.lastAt, now)}` : ""}` : "on · abhi tak kuch nahi seekha";
+  const g = a.guard;
+  return g && Number.isFinite(g.with) ? `${head} · jaanch: saath ${g.with}% / bina ${g.without}%` : head;
 }
 
 /** What the headline says for a phone: the room, "(?)" when unsure, "(purana)" when old, or why there is none. */

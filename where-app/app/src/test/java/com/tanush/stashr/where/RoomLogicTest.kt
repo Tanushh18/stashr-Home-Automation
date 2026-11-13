@@ -59,4 +59,40 @@ class RoomLogicTest {
         assertEquals(rooms, RoomLogic.rooms(JSONObject("""{"rooms":["Bedroom","Kitchen","Hall"]}""")))
         assertTrue(RoomLogic.parseCounts(null).isEmpty())
     }
+
+    @Test fun ageIsTheOldestReadingInSecondsAndNothingIsMinusOne() {
+        val now = 500_000_000L                                             // microseconds since boot
+        assertEquals(30, RoomLogic.ageSec(now, listOf(now - 5_000_000L, now - 30_000_000L)))
+        assertEquals(0, RoomLogic.ageSec(now, listOf(now + 1_000L)))         // never negative
+        assertEquals(-1, RoomLogic.ageSec(now, emptyList()))
+    }
+
+    @Test fun aNewWifiScanIsAskedOnlyWhenOnStaleAndNotTooOften() {
+        val t = 1_000_000_000L
+        assertTrue(RoomLogic.autoScanDue(true, 400, t, 0L))
+        assertTrue(RoomLogic.autoScanDue(true, -1, t, t - RoomLogic.AUTO_SCAN_EVERY_MS))
+        assertFalse(RoomLogic.autoScanDue(false, 400, t, 0L))              // auto-improve off
+        assertFalse(RoomLogic.autoScanDue(true, 60, t, 0L))                // readings already fresh
+        assertFalse(RoomLogic.autoScanDue(true, 400, t, t - 60_000L))      // asked a minute ago
+    }
+
+    @Test fun theScanSaysHowOldItIsAndWhetherItMayTeach() {
+        val j = RoomLogic.withMeta(RoomLogic.scanJson(listOf(Hear("w1", -50), Hear("w2", -60)), emptyList()), 12, true)
+        assertEquals(12, j.getInt("ageSec"))
+        assertTrue(j.getBoolean("auto"))
+        assertEquals(2, j.getJSONArray("wifi").length())
+        assertTrue(RoomLogic.withMeta(JSONObject(), -1, false).isNull("ageSec"))
+    }
+
+    @Test fun autoImproveReadsPlainly() {
+        val now = 1_800_000_000_000L
+        assertEquals("Server purana hai: apne aap seekhna abhi nahi.", RoomLogic.autoSummary(null, now))
+        assertEquals("Apne aap seekhna band hai.", RoomLogic.autoSummary(JSONObject("""{"on":false}"""), now))
+        assertTrue(RoomLogic.autoSummary(JSONObject("""{"on":true,"paused":true,"why":"accuracy giri"}"""), now).startsWith("Ruka hua: accuracy giri"))
+        assertTrue(RoomLogic.autoSummary(JSONObject("""{"on":true,"counts":{}}"""), now).startsWith("On: abhi tak kuch nahi"))
+        assertEquals("On: 7 scan apne aap seekhe · aakhri: Bedroom, 5 min pehle",
+            RoomLogic.autoSummary(JSONObject("""{"on":true,"counts":{"Bedroom":4,"Hall":3},"lastRoom":"Bedroom","lastAt":${now - 5 * 60_000L}}"""), now))
+        assertEquals("scan taaza nahi tha", RoomLogic.learnWhy("the scan is not fresh"))
+        assertEquals("something new", RoomLogic.learnWhy("something new"))
+    }
 }

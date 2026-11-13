@@ -26,7 +26,9 @@ import org.json.JSONObject
  * Room Lab. Stand in a room, tap "Main yahan hoon: <room>", keep the phone still for 15 seconds: it listens to the Wi-Fi networks and
  * Bluetooth devices around it and sends what it heard, labelled with the room. Do this in 4-5 different spots of each room. Stashr then
  * works out the room from every later scan and shows how well it works (the accuracy). If it ever names the wrong room, tell it the right
- * one ("Galat hai"), and that correction teaches it too.
+ * one ("Galat hai"), and that correction teaches it too; "Sahi hai" sends a short scan that teaches it as well.
+ * Auto-improve (on unless switched off): when Stashr is very sure of the room, the normal checks teach the model by themselves.
+ * "Kamra hatao" deletes a room for the whole home.
  */
 class RoomLabActivity : Activity() {
     private lateinit var ui: Ui
@@ -58,6 +60,7 @@ class RoomLabActivity : Activity() {
             try {
                 config = withContext(Dispatchers.IO) { Api(this@RoomLabActivity).roomConfig() }
                 prefs.roomOn = config.optBoolean("on")
+                config.optJSONObject("auto")?.let { prefs.roomAuto = it.optBoolean("on", true) }
             } catch (e: Exception) { status = "Server se baat nahi ho paayi: " + (e.message ?: "") }
             draw()
         }
@@ -75,7 +78,10 @@ class RoomLabActivity : Activity() {
         val cur = config.optJSONObject("current")
         val field = config.optJSONObject("field")
         live.addView(ui.body(if (cur != null) "Stashr ke hisaab se aap: ${cur.optString("name")} mein (${(cur.optDouble("confidence") * 100).toInt()}% pakka)" else if (prefs.roomOn) "Kamra abhi pata nahi." else "Room location band hai: ek kamre ko train karoge to apne aap on ho jayega."))
-        if (cur != null) live.addView(ui.quiet("Sahi hai ✓") { if (!busy()) scope.launch { try { withContext(Dispatchers.IO) { Api(this@RoomLabActivity).roomConfirm() }; status = "Shukriya: sahi gina gaya."; refresh() } catch (e: Exception) { status = e.message ?: "Could not save"; draw() } } })
+        if (cur != null) {
+            if (cur.has("learned")) live.addView(ui.dim(if (cur.optBoolean("learned")) "Is scan se model ne apne aap seekha." else "Is scan se nahi seekha: ${RoomLogic.learnWhy(cur.optString("learnWhy"))}"))
+            live.addView(ui.quiet("Sahi hai ✓ (6 second sunega)") { withPermission { confirm(cur.optString("name")) } }.apply { isEnabled = !busy() })
+        }
         val sw = Switch(this).apply {
             text = "Room location on (checks ke saath Wi-Fi/Bluetooth scan jaayega)"; isChecked = prefs.roomOn; setTextColor(ui.c.text)
             setOnCheckedChangeListener { _, on -> if (!busy()) scope.launch { try { withContext(Dispatchers.IO) { Api(this@RoomLabActivity).roomOn(on) }; prefs.roomOn = on } catch (e: Exception) { status = e.message ?: "Could not save"; draw() } } }
@@ -86,6 +92,12 @@ class RoomLabActivity : Activity() {
             setOnCheckedChangeListener { _, on -> prefs.roomBle = on }
         }
         live.addView(bleSw)
+        val autoSw = Switch(this).apply {
+            text = "Apne aap behtar ho (auto-improve): jab Stashr bahut pakka ho, wo scan khud seekhe"; isChecked = prefs.roomAuto; setTextColor(ui.c.text)
+            setOnCheckedChangeListener { _, on -> if (!busy()) scope.launch { try { withContext(Dispatchers.IO) { Api(this@RoomLabActivity).roomAuto(on) }; prefs.roomAuto = on; refresh() } catch (e: Exception) { status = e.message ?: "Could not save"; draw() } } }
+        }
+        live.addView(autoSw)
+        live.addView(ui.dim(RoomLogic.autoSummary(config.optJSONObject("auto"))))
         body.addView(live)
 
         val train = ui.card("Kamre sikhao", RoomLogic.summary(rooms, counts))
@@ -102,12 +114,49 @@ class RoomLabActivity : Activity() {
             body.addView(wrong)
         }
 
+        if (rooms.isNotEmpty()) {
+            val del = ui.card("Kamra hatao", "Kamra poore ghar ke liye hatega: sab phones ki us kamre ki training aur map se bhi. Wapas nahi aayega.")
+            for (r in rooms) del.addView(ui.danger("✕ $r hatao (${counts[r] ?: 0} scan)") { askDelete(r) }.apply { isEnabled = !busy() })
+            body.addView(del)
+        }
+
         val rep = ui.card("Kitna sahi hai?", "Har scan ko chhupa ke baaki se guess karwaya jaata hai; jitne sahi, wahi accuracy.")
         if (report.isNotEmpty()) rep.addView(ui.body(report))
         rep.addView(ui.quiet("Report dekho") { loadReport() })
         body.addView(rep)
 
         body.addView(ui.quiet("Wapas") { finish() })
+    }
+
+    /** "Kamra hatao": asks first, then deletes the room for the whole home. */
+    private fun askDelete(room: String) {
+        if (busy()) return
+        android.app.AlertDialog.Builder(this).setTitle("“$room” hatana hai?")
+            .setMessage("Ye kamra poore ghar se hatega: sab phones ki is kamre ki training, aur website ke map/3D model se. Wapas nahi aayega.")
+            .setPositiveButton("Haan, hatao") { _, _ ->
+                job = scope.launch {
+                    status = "“$room” hata raha hoon…"; draw()
+                    status = try {
+                        val r = withContext(Dispatchers.IO) { Api(this@RoomLabActivity).roomDelete(room) }
+                        "“$room” hata diya: ${r.optInt("deleted")} scan mite."
+                    } catch (e: Exception) { "Nahi hata: " + (e.message ?: e.javaClass.simpleName) }
+                    refresh()
+                }
+            }
+            .setNegativeButton("Rehne do", null).show()
+    }
+
+    /** "Sahi hai": listens 6 seconds and sends that scan with the room, so a right answer also teaches the model. */
+    private fun confirm(room: String) {
+        job = scope.launch {
+            status = "Sun raha hoon… phone ko sthir rakho."; draw()
+            try {
+                val got = RoomScan.capture(this@RoomLabActivity, 6, prefs.roomBle) { tick -> status = "Sun raha hoon… $tick"; draw() }
+                val r = withContext(Dispatchers.IO) { Api(this@RoomLabActivity).roomConfirm(room, got.scans) }
+                status = if (r.optInt("added") > 0) "Shukriya: sahi gina gaya, aur ${r.optInt("added")} scan se model ne seekha." else "Shukriya: sahi gina gaya."
+            } catch (e: Exception) { status = "Save nahi hua: " + (e.message ?: e.javaClass.simpleName) }
+            refresh()
+        }
     }
 
     /** "Main yahan hoon": asks which room this is (a new name, or one of the rooms already there), adds it if it is new, then listens. */

@@ -185,6 +185,15 @@
 .hm-key { display: inline-block; width: .7rem; height: .7rem; border-radius: 50%; vertical-align: -1px; }
 .hm-key.hm-dot--person { background: #3b82f6; } .hm-key.hm-dot--hub { background: #a855f7; }
 .hm-key.hm-dot--device-up { background: #22c55e; } .hm-key.hm-dot--device-down { background: #9ca3af; }
+/* the 3D model view: the canvas, its controls, the legend and the panel of the room you tapped */
+.hm3d { display: grid; gap: .45rem; max-width: 900px; }
+.hm-3dmodel { width: 100%; border: 1px solid #30363d; border-radius: 8px; overflow: hidden; background: #0d1117; touch-action: none; }
+.hm3d-tools { display: flex; flex-wrap: wrap; gap: .4rem; }
+.hm3d-key { margin: 0; }
+.hm-key.hm3d-unsure { background: #7d8590; opacity: .6; }
+.hm3d-panel { max-width: 900px; }
+.hm3d-devices { list-style: none; margin: 0; padding: 0; display: grid; gap: .25rem; }
+.hm3d-devices li { display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
 
 /* ───────── where everyone went: the map (TrailMap.jsx) ───────── */
 .tm-map { height: 420px; border-radius: var(--r-md); border: 1px solid var(--line-strong); margin: .5rem 0; z-index: 0; }

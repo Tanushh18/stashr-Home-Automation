@@ -125,7 +125,7 @@ function answer(res, out, settings, where, now, device, loc, batt) {
     const liveOn = tvLiveOn || locateOn;
     const watch = !liveOn && device ? placeTrail.watchFor(settings.places, device._id, loc, automation.localParts(now, settings.timezone || "Asia/Kolkata").minutes, batt) : { near: false };
     return res.json({
-        roomOn: Boolean(device && device.roomOn), live: liveOn, ok: true, state: where.state, traffic: Boolean(where.traffic), distanceKm: where.distanceKm ?? null, etaMinutes: where.state === "home" ? 0 : where.etaMinutes ?? null,
+        roomOn: Boolean(device && device.roomOn), roomAuto: device ? roomLive.autoOf(device).on : true, live: liveOn, ok: true, state: where.state, traffic: Boolean(where.traffic), distanceKm: where.distanceKm ?? null, etaMinutes: where.state === "home" ? 0 : where.etaMinutes ?? null,
         nextCheckSec: liveOn ? 8 : watch.near ? Math.min(automation.checkInterval(where, batt), watch.sec) : automation.checkInterval(where, batt), home: { set: where.state !== "unset" },
         // near one of its places during an arrive/leave window: look closely (every 3 minutes, a real fix every time)
         precise: watch.near,

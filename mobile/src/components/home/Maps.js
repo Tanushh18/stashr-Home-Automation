@@ -5,7 +5,7 @@ import { home } from "../../lib/homeApi";
 import { useTheme, alpha } from "../../lib/theme";
 import { shapes, awayLine } from "../../lib/homeMap";
 import { colourFor, pointsSince, itemsSince, coordKey, placeLabel, mapsLink, kmOf } from "../../lib/trailView";
-import { confusionRows, thinRooms, liveRows, headline } from "../../lib/roomLab";
+import { confusionRows, thinRooms, liveRows, headline, autoLine } from "../../lib/roomLab";
 import { Bad, Boundary, Box, Btn, Dim, Good, Input, Row, Toggle, Txt, ask, useAct, useLoad, usePoll } from "./h";
 
 /* The house map, Room Lab and the 24-hour trail: the same cards as the website's Insights tab, drawn with react-native-svg. */
@@ -71,6 +71,7 @@ function LivePhone({ p }) {
       {cur ? cur.ranking.map((r) => <Dim key={r.room}>{`${r.p === top ? "● " : "○ "}${r.room}  ${Math.round(r.p * 100)}%`}</Dim>) : null}
       {cur && !cur.sure && cur.why ? <Bad>{cur.why}</Bad> : null}
       {!p.trained ? <Bad>Train at least 2 rooms in Stashr Location → Room Lab on the phone.</Bad> : null}
+      {p.auto ? (p.auto.paused ? <Bad>Auto-improve: {autoLine(p)}</Bad> : <Dim>Auto-improve: {autoLine(p)}</Dim>) : null}
       {liveRows(p).map(([k, v]) => <Dim key={k}>{k}: {v}</Dim>)}
       {p.cv.verdict ? <Dim>{p.cv.verdict}</Dim> : null}
     </View>
@@ -81,50 +82,55 @@ function RoomLabCard() {
   const act = useAct();
   const { data: live, setData: setLive, reload: loadLive } = useLoad(() => home.roomLive(), []);
   const { data: d, reload: loadRooms } = useLoad(() => home.rooms(), []);
-  const [rooms, setRooms] = useState(null);
   const [name, setName] = useState("");
   const [note, setNote] = useState("");
   usePoll(() => loadLive(), 6000);
   usePoll(() => loadRooms(), 30000);
-  useEffect(() => { if (d && rooms === null) setRooms(d.rooms); }, [d, rooms]);
   if (!live || !d) return null;
-  const list = rooms || d.rooms;
-  const dirty = JSON.stringify(list) !== JSON.stringify(d.rooms);
+  const list = d.rooms;
   const toggle = async () => {
     const r = await act(() => home.roomModel(!live.running));
     if (r) { setLive(r.live); setNote(r.blocked && r.blocked.length ? r.blocked.map((b) => `${b.person}: ${b.why}`).join("\n") : ""); }
   };
-  const add = () => { const n = name.trim(); if (n.length >= 2 && !list.includes(n) && list.length < d.max) { setRooms([...list, n]); setName(""); } };
-  const save = async () => {
-    const gone = d.rooms.filter((r) => !list.includes(r));
-    if (gone.length && !(await ask(`Delete ${gone.join(", ")}?`, "All training for this room (every phone) is deleted.", "Delete", true))) return;
-    if (await act(() => home.saveRooms(list), "Rooms saved.")) { setRooms(null); loadRooms(); loadLive(); }
+  // a new room is saved at once; ✕ deletes a room at once (after asking), everywhere: every phone's training, the map
+  const add = async () => {
+    const n = name.trim();
+    if (n.length < 2 || list.some((r) => r.toLowerCase() === n.toLowerCase()) || list.length >= d.max) return;
+    if (await act(() => home.saveRooms([...list, n]), `${n} added.`)) { setName(""); loadRooms(); loadLive(); }
   };
+  const remove = async (room) => {
+    const scans = d.phones.reduce((t, p) => t + ((p.counts || {})[room] || 0) + ((p.autoCounts || {})[room] || 0), 0);
+    if (!(await ask(`Delete ${room}?`, `The room goes from the list and the house map, with every phone's training for it (${scans} scans). It cannot be undone.`, "Delete room", true))) return;
+    if (await act(() => home.deleteRoom(room), `${room} deleted.`)) { loadRooms(); loadLive(); }
+  };
+  const tuneNow = async () => { const r = await act(() => home.roomMaintain(), "Tuned."); if (r) setLive(r.live); };
   const s = live.summary;
   return (
     <Box title={`Room model · ${live.running ? "running" : "stopped"}`} subtitle="Room location: each phone hears Wi-Fi and Bluetooth signal strengths, and Stashr says which room it is in.">
       <Row>
         <Btn kind={live.running ? "danger" : "primary"} label={live.running ? "Stop model" : "Start model"} onPress={toggle} />
         <Btn label="Refresh" onPress={() => { loadLive(); loadRooms(); }} />
+        <Btn label="Tune now" onPress={tuneNow} />
       </Row>
-      <Dim>{s.on}/{s.phones} phones on · {s.trained} trained{s.cvAccuracy !== null ? ` · accuracy ${s.cvAccuracy}%` : ""}{s.fieldAccuracy !== null ? ` · real ${s.fieldAccuracy}%` : ""} · every 5 seconds</Dim>
+      <Dim>{s.on}/{s.phones} phones on · {s.trained} trained{s.cvAccuracy !== null ? ` · accuracy ${s.cvAccuracy}%` : ""}{s.fieldAccuracy !== null ? ` · real ${s.fieldAccuracy}%` : ""}{s.autoOn !== undefined ? ` · auto-improving: ${s.autoOn} phones, ${s.autoSamples} scans` : ""} · every 5 seconds</Dim>
       {note ? <Bad>{note}</Bad> : null}
       {!live.phones.length ? <Dim>No Stashr Location phone is linked.</Dim> : live.phones.map((p) => <LivePhone key={p.id} p={p} />)}
 
       <Txt bold>Rooms</Txt>
-      <Row>{list.map((r) => <Btn key={r} label={`${r} ✕`} onPress={() => setRooms(list.filter((x) => x !== r))} />)}{!list.length ? <Dim>No room yet.</Dim> : null}</Row>
+      <Row>{list.map((r) => <Btn key={r} label={`${r} ✕`} onPress={() => remove(r)} />)}{!list.length ? <Dim>No room yet.</Dim> : null}</Row>
       <Row wrap={false}>
         <Input value={name} onChangeText={setName} placeholder="Room, e.g. Bedroom" maxLength={24} autoCapitalize="words" style={{ flex: 1 }} onSubmitEditing={add} />
-        <Btn label="Add" onPress={add} disabled={name.trim().length < 2 || list.length >= d.max} />
+        <Btn kind="primary" label="Add" onPress={add} disabled={name.trim().length < 2 || list.length >= d.max} />
       </Row>
-      <Btn kind="primary" label="Save rooms" onPress={save} disabled={!dirty} />
+      <Dim>Tap ✕ to delete a room everywhere (it asks first).</Dim>
 
       {d.phones.map((p) => {
         const t = confusionRows(p.report), thin = thinRooms(d.rooms, p.counts);
         return (
           <View key={p.id} style={{ gap: 4, paddingTop: 8 }}>
             <Toggle label={`${p.person}: room location`} value={p.on} onChange={async () => { if (await act(() => home.roomPhone(p.id, !p.on))) { loadRooms(); loadLive(); } }} />
-            <Dim>Training: {d.rooms.map((r) => `${r} ${p.counts[r] || 0}`).join(" · ") || "none"}</Dim>
+            <Toggle label={`${p.person}: auto-improve`} value={Boolean(p.auto && p.auto.on)} onChange={async () => { if (await act(() => home.roomAuto(p.id, !(p.auto && p.auto.on)))) { loadRooms(); loadLive(); } }} />
+            <Dim>Training: {d.rooms.map((r) => `${r} ${p.counts[r] || 0}${(p.autoCounts || {})[r] ? ` (+${p.autoCounts[r]} auto)` : ""}`).join(" · ") || "none"}</Dim>
             {thin.length ? <Bad>Needs more training: {thin.join(", ")} (at least 5 scans, from 4-5 different spots)</Bad> : null}
             {t.rows.map((r) => <Dim key={r.room}>{`${r.room} (${r.n} scans): ${r.accuracy}% right`}</Dim>)}
             <Row><Btn kind="danger" label="Delete this phone's training" onPress={async () => { if (await ask(`Delete ${p.person}'s training?`, "All room samples of this phone are deleted.", "Delete", true) && await act(() => home.deleteRoomSamples({ phone: p.id }), "Deleted.")) { loadRooms(); loadLive(); } }} /></Row>

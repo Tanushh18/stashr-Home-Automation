@@ -8,7 +8,9 @@ const homeRoomSampleSchema = new mongoose.Schema({
     phone: { type: mongoose.Schema.Types.ObjectId, required: true },
     room: { type: String, required: true, maxlength: 24 },
     session: { type: String, default: "" },          // the tap that made it: scans of one tap are hidden together when the accuracy is tested
-    src: { type: String, enum: ["train", "fix"], default: "train" },   // "fix" = the person said "wrong, I am in X"
+    // "train" = "main yahan hoon", "fix" = the person said "wrong, I am in X", "confirm" = "Sahi hai" with a scan,
+    // "auto" = a live scan the model was very sure about (auto-improve, see utils/roomModel.autoGate)
+    src: { type: String, enum: ["train", "fix", "confirm", "auto"], default: "train" },
     wifi: { type: [hear], default: [] },
     ble: { type: [hear], default: [] },
     at: { type: Date, default: Date.now, expires: 120 * 24 * 3600 }

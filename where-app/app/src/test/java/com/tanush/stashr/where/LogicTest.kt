@@ -13,6 +13,8 @@ class LogicTest {
         assertEquals(true, Logic.parseAnswer(JSONObject("""{"state":"home","roomOn":true}""")).roomOn)
         assertEquals(false, Logic.parseAnswer(JSONObject("""{"state":"home","roomOn":false}""")).roomOn)
         assertNull(Logic.parseAnswer(JSONObject("""{"state":"home"}""")).roomOn)          // an older server says nothing: the phone keeps its own choice
+        assertEquals(false, Logic.parseAnswer(JSONObject("""{"state":"home","roomAuto":false}""")).roomAuto)
+        assertNull(Logic.parseAnswer(JSONObject("""{"state":"home"}""")).roomAuto)
     }
 
     @Test fun pushIsDroppedOnlyWhenTheServerWasJustCalled() {

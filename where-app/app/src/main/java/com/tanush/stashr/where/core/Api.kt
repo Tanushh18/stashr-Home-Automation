@@ -80,8 +80,13 @@ class Api(ctx: Context) {
     /** "That was wrong, I am in <room>": the scans are saved as a correction. */
     fun roomFix(room: String, scans: List<JSONObject>): JSONObject = post("/home/agent/room/fix", JSONObject().put("room", room).put("session", "fix" + System.currentTimeMillis()).put("scans", org.json.JSONArray(scans)), auth = true, timeoutMs = 40000)
     fun roomReport(): JSONObject = get("/home/agent/room/report", auth = true)
-    /** "Sahi hai": the room Stashr showed was right (counted for the real-life accuracy). */
-    fun roomConfirm(): JSONObject = post("/home/agent/room/confirm", JSONObject(), auth = true)
+    /** "Sahi hai": the room Stashr showed was right (counted for the real-life accuracy). With a short scan it also teaches the model. */
+    fun roomConfirm(room: String = "", scans: List<JSONObject> = emptyList()): JSONObject =
+        post("/home/agent/room/confirm", JSONObject().apply { if (room.isNotEmpty() && scans.isNotEmpty()) { put("room", room); put("scans", org.json.JSONArray(scans)) } }, auth = true, timeoutMs = 40000)
+    /** Auto-improve on or off for this phone. */
+    fun roomAuto(on: Boolean): JSONObject = post("/home/agent/room/auto", JSONObject().put("on", on), auth = true)
+    /** "Kamra hatao": deletes a room for the whole home (every phone's training for it). */
+    fun roomDelete(name: String): JSONObject = post("/home/agent/room/delete", JSONObject().put("name", name), auth = true)
 
     /** GET /api/mobile-updates/where/latest. */
     fun latest(currentVersionCode: Int): JSONObject = get("/api/mobile-updates/where/latest?currentVersionCode=$currentVersionCode", auth = true)   // the device token tells Stashr which phone is asking, so an update can be offered to chosen devices only

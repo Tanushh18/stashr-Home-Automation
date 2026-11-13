@@ -1,10 +1,11 @@
-import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
-import { Section } from "../Render/RenderUi";
+import { Section, useConfirm } from "../Render/RenderUi";
 import "./techie.css";
 import { errorMessage } from "../Render/renderUtils";
-import { getHomeMap, saveHomeMap, saveHouseLayout, getHouseModel, saveHouseModel, deleteHouseModel } from "../../api/client";
+import { getHomeMap, saveHomeMap, saveHouseLayout, getHouseModel, saveHouseModel, deleteHouseModel, deleteHomeRoom, getHomeRooms } from "../../api/client";
 import { buildGlb, glbPartNames, matchParts } from "../../lib/houseGlb";
+import { roomFacts } from "../../lib/houseScene";
 import { shapes, awayLine, SCALE_2D, moveBlock, resizeBlock, clampBlock, overlapping, layoutOf, exportText, parseLayoutFile } from "../../lib/homeMap";
 
 /** A picture from a phone scan app, shrunk so it fits the 2 MB the server accepts. */
@@ -37,6 +38,9 @@ export function HouseMapCard() {
   const [sel, setSel] = useState("");
   const [glb, setGlb] = useState(null);          // the imported 3D model: ArrayBuffer
   const [glbInfo, setGlbInfo] = useState(null);
+  const [picked3d, setPicked3d] = useState("");   // the room tapped in the 3D model: its panel shows below
+  const [training, setTraining] = useState(null); // GET /home/rooms, for "how much is each phone trained in this room"
+  const confirm = useConfirm();
   const modelFile = useRef(null);
   const file = useRef(null);
   const layoutFile = useRef(null);
@@ -46,6 +50,14 @@ export function HouseMapCard() {
   useEffect(() => { load(); const t = setInterval(load, 30000); return () => clearInterval(t); }, [load]);
   const hasModel = !!(map && map.model);
   useEffect(() => { if (mode !== "model" || !hasModel) return undefined; let live = true; getHouseModel().then((b) => { if (live) setGlb(b); }).catch((e) => toast.error(errorMessage(e, "Could not load the 3D model."))); return () => { live = false; }; }, [mode, hasModel, map && map.model && map.model.at]);
+  // No imported model: the 3D model is made from your layout (one box per room, its own height), so devices can be seen in 3D anyway.
+  // Rebuilt only when the layout changes, not on every 30-second refresh.
+  const layoutKey = JSON.stringify(map ? map.zones.filter((z) => z.roomBlock).map((z) => [z.name, z.x, z.y, z.w, z.h, z.z || 0.55]) : []);
+  const generated = useMemo(() => {
+    const blocks = JSON.parse(layoutKey);
+    return !hasModel && blocks.length ? buildGlb(blocks.map(([name, x, y, w, h, z]) => ({ name, x, y, w, h, z }))) : null;
+  }, [layoutKey, hasModel]);
+  useEffect(() => { if (!picked3d) return undefined; let live = true; getHomeRooms().then((r) => { if (live) setTraining(r); }).catch(() => {}); return () => { live = false; }; }, [picked3d]);
   if (!map) return null;
   const save = async (body, ok) => { setBusy(true); try { setMap(await saveHomeMap(body)); if (ok) toast.success(ok); } catch (e) { toast.error(errorMessage(e, "Could not save.")); } finally { setBusy(false); } };
   const pick = async (e) => {
@@ -104,11 +116,30 @@ export function HouseMapCard() {
       toast.success(`Model import ho gaya. ${Object.keys(m.matched).length}/${roomNames.length} kamre naam se mile${m.missing.length ? `; nahi mile: ${m.missing.join(", ")}` : ""}.`);
     } catch (err) { toast.error(errorMessage(err, "Could not import the model.")); } finally { setBusy(false); }
   };
+  /** Deletes a room everywhere (asks first): the 3D room panel and the layout editor use it. */
+  const removeRoom = async (name) => {
+    const scans = training ? training.phones.reduce((t, p) => t + ((p.counts || {})[name] || 0) + ((p.autoCounts || {})[name] || 0), 0) : null;
+    if (!(await confirm.ask({ title: `“${name}” delete karein?`, message: `Ye kamra har jagah se hatega: room list, ghar ka map aur 3D model, aur sab phones ki is kamre ki training${scans !== null ? ` (${scans} scan)` : ""}. Wapas nahi aayega.`, confirmLabel: "Delete room", danger: true }))) return;
+    setBusy(true);
+    try {
+      const r = await deleteHomeRoom(name);
+      toast.success(`${r.room} hata diya · ${r.deleted} training scan mite.`);
+      setPicked3d(""); setDraft((cur) => cur.filter((b) => b.name !== r.room)); setSel("");
+      await load();
+    } catch (err) { toast.error(errorMessage(err, "Could not delete the room.")); } finally { setBusy(false); }
+  };
   const removeModel = async () => { setBusy(true); try { await deleteHouseModel(); setGlb(null); setMode("3d"); await load(); toast.success("3D model hata diya."); } catch (err) { toast.error(errorMessage(err, "Could not remove it.")); } finally { setBusy(false); } };
   const sampleModel = () => {
     const url = URL.createObjectURL(new Blob([buildGlb(roomBlocks.map((z) => ({ name: z.name, x: z.x, y: z.y, w: z.w, h: z.h, z: z.z || 0.55 })))], { type: "model/gltf-binary" }));
     const a = document.createElement("a"); a.href = url; a.download = "stashr-house-sample.glb"; a.click(); URL.revokeObjectURL(url);
   };
+  const canModel = hasModel || roomBlocks.length > 0;
+  const modelBuffer = hasModel ? glb : generated;
+  const pickedZone = picked3d ? roomBlocks.find((z) => z.name === picked3d) : null;
+  const facts = pickedZone ? roomFacts(pickedZone, training ? {
+    training: Object.fromEntries(training.phones.map((p) => [p.person, (p.counts || {})[pickedZone.name] || 0])),
+    autoTraining: Object.fromEntries(training.phones.map((p) => [p.person, (p.autoCounts || {})[pickedZone.name] || 0]))
+  } : {}) : null;
   const stacked = edit ? overlapping(draft) : [];
   const picked = draft.find((b) => b.name === sel);
   const learned = map.zones.filter((z) => !z.labelOnly);
@@ -119,7 +150,7 @@ export function HouseMapCard() {
         <div role="group" aria-label="View">
           <button type="button" className={`rd-btn ${mode === "2d" ? "rd-btn--primary" : "rd-btn--quiet"}`} onClick={() => setMode("2d")} aria-pressed={mode === "2d"}>2D</button>{" "}
           <button type="button" className={`rd-btn ${mode === "3d" ? "rd-btn--primary" : "rd-btn--quiet"}`} onClick={() => setMode("3d")} aria-pressed={mode === "3d"}>3D</button>{" "}
-          {hasModel ? <button type="button" className={`rd-btn ${mode === "model" ? "rd-btn--primary" : "rd-btn--quiet"}`} onClick={() => { setEdit(false); setMode("model"); }} aria-pressed={mode === "model"}>3D model</button> : null}
+          {canModel ? <button type="button" className={`rd-btn ${mode === "model" ? "rd-btn--primary" : "rd-btn--quiet"}`} onClick={() => { setEdit(false); setMode("model"); }} aria-pressed={mode === "model"}>3D model</button> : null}
         </div>
         <button type="button" className="rd-btn rd-btn--quiet" onClick={load}>Refresh</button>
         {roomBlocks.length && !edit ? <button type="button" className="rd-btn rd-btn--quiet" onClick={startEdit}>Edit layout</button> : null}
@@ -134,19 +165,32 @@ export function HouseMapCard() {
       ) : null}
       {!roomBlocks.length ? <p className="sh-dim">Layout edit tab hoga jab kamre ban jayenge (Room Lab mein kamre banao): phir har kamre ka block aap drag, resize aur ऊँचा-नीचा kar sakoge.</p> : null}
       <p className="sh-dim">{map.note}</p>
-      {mode === "model" && hasModel && !edit ? (
+      {mode === "model" && canModel && !edit ? (
         <div>
-          {glb ? (
+          {modelBuffer ? (
             <Suspense fallback={<p className="sh-dim">3D load ho raha hai…</p>}>
-              <HouseModelView buffer={glb} rooms={roomBlocks.map((z) => ({ name: z.name, people: z.people || [] }))} onInfo={setGlbInfo} />
+              <HouseModelView buffer={modelBuffer} rooms={roomBlocks.map((z) => ({ name: z.name, people: z.people || [], devices: z.devices || [], hub: Boolean(z.hub) }))} selected={picked3d} onSelect={setPicked3d} onInfo={setGlbInfo} />
             </Suspense>
           ) : <p className="sh-dim">Model load ho raha hai…</p>}
-          <p className="sh-dim">{map.model.name} · {(map.model.size / 1048576).toFixed(1)} MB · ghumane ke liye drag, zoom ke liye scroll. Jis hisse ka naam kamre ke naam se milta hai (jaise “Bedroom”, “Bedroom_wall”) wo kamra jagta hai aur uske log label mein dikhte hain.</p>
-          {glbInfo && glbInfo.missing.length ? <p className="dev-warn">In kamron ka model mein koi hissa nahi mila (naam milao): {glbInfo.missing.join(", ")}</p> : null}
-          {glbInfo && glbInfo.extra.length ? <p className="sh-dim">Kisi kamre se nahi mile (sajawat): {glbInfo.extra.join(", ")}</p> : null}
+          <p className="sh-dim">{hasModel ? `${map.model.name} · ${(map.model.size / 1048576).toFixed(1)} MB · ` : "Ye 3D aapke layout se bana hai (Edit layout se kamron ki jagah, size aur unchai badlo; asli ghar jaisa chahiye to .glb import karo) · "}ghumane ke liye drag, zoom ke liye scroll ya do ungli. Jis hisse ka naam kamre ke naam se milta hai (jaise “Bedroom”, “Bedroom.001”, “Bedroom_wall”) wo kamra jagta hai, aur uske log aur devices usme dikhte hain.</p>
+          {hasModel && glbInfo && glbInfo.missing.length ? <p className="dev-warn">In kamron ka model mein koi hissa nahi mila (naam milao): {glbInfo.missing.join(", ")}</p> : null}
+          {hasModel && glbInfo && glbInfo.extra.length ? <p className="sh-dim">Kisi kamre se nahi mile (sajawat): {glbInfo.extra.join(", ")}</p> : null}
+          {facts ? (
+            <div className="sh-editor hm3d-panel" role="region" aria-label={`${facts.name} details`}>
+              <div className="sh-row"><b>{facts.name}</b><button type="button" className="rd-btn rd-btn--quiet" onClick={() => setPicked3d("")}>Band karo</button></div>
+              <span className="sh-dim">Andar: {facts.people.length ? facts.people.join(", ") : "koi nahi"}{facts.hub ? " · tablet yahan hai" : ""}</span>
+              {facts.devices.length ? (
+                <ul className="hm3d-devices">
+                  {facts.devices.map((d, i) => <li key={`${d.label}-${i}`}><span className={`hm-key ${d.up ? "hm-dot--device-up" : "hm-dot--device-down"}`} /> {d.label}{d.tag ? ` · ${d.tag}` : ""} <span className="sh-dim">{d.up ? "Wi-Fi par" : "kuch der se nahi dikha"}</span></li>)}
+                </ul>
+              ) : <span className="sh-dim">Is kamre mein koi device nahi (tablet ki Wi-Fi list mein device ko ye kamra do).</span>}
+              <span className="sh-dim">Training: {facts.training.length ? facts.training.join(" · ") : training ? "kisi phone ne nahi kiya" : "…"}</span>
+              <div className="sh-row"><button type="button" className="rd-btn rd-btn--danger-quiet" disabled={busy} onClick={() => removeRoom(facts.name)}>Ye kamra delete karo</button></div>
+            </div>
+          ) : roomBlocks.length ? <p className="sh-dim">Kisi kamre par tap karo: uske log, devices, training aur delete ka option yahan dikhega.</p> : null}
         </div>
       ) : null}
-      {map.zones.length && !(mode === "model" && hasModel && !edit) ? (
+      {map.zones.length && !(mode === "model" && canModel && !edit) ? (
         <div className="hm-wrap">
           <svg ref={svgRef} className={`hm-svg${edit ? " hm-edit" : ""}`} viewBox={`0 0 ${view.width} ${view.height}`} role="img" aria-label="Map of the house" style={{ maxWidth: view.width, touchAction: edit ? "none" : undefined }} onPointerMove={edit ? pointerMove : undefined} onPointerUp={edit ? pointerUp : undefined} onPointerCancel={edit ? pointerUp : undefined}>
             {view.items.map((it, i) => {
@@ -179,6 +223,7 @@ export function HouseMapCard() {
                   <input type="number" step="0.5" value={picked[k]} onChange={(e) => setField(picked.name, { [k]: Number(e.target.value) })} style={{ width: 70 }} aria-label={`${picked.name} ${k}`} /></label>
               ))}
               <label className="sh-dim">ऊँचाई (3D){" "}<input type="range" min="0.3" max="3" step="0.05" value={picked.z} onChange={(e) => setField(picked.name, { z: Number(e.target.value) })} aria-label={`${picked.name} height`} /> {picked.z}</label>
+              <button type="button" className="rd-btn rd-btn--danger-quiet" disabled={busy} onClick={() => removeRoom(picked.name)}>Ye kamra delete karo</button>
             </div>
           ) : null}
           {stacked.length ? <span className="dev-warn">Ye kamre ek-doosre par chadhe hain: {stacked.join(", ")}</span> : null}
@@ -213,6 +258,6 @@ export function HouseMapCard() {
         <button type="button" className="rd-btn rd-btn--quiet" disabled={busy} onClick={() => file.current && file.current.click()}>{map.plan ? "Change floor plan picture" : "Add a floor plan picture (from a phone scan app)"}</button>
         {map.plan ? <button type="button" className="rd-btn rd-btn--danger-quiet" disabled={busy} onClick={() => save({ plan: "" }, "Floor plan removed.")}>Remove it</button> : null}
       </div>
-    </Section></div>
+    </Section>{confirm.dialog}</div>
   );
 }

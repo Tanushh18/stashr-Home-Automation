@@ -58,7 +58,8 @@ object Reporter {
         val (pct, charging) = battery(app)
         val bssid = currentBssid(app)
         // Room location on: what this phone hears goes along with the check (Wi-Fi Android already measured; Bluetooth only if allowed).
-        val roomScan = if (prefs.roomOn && !liveMode) RoomScan.light(app, prefs.roomBle) else null
+        // Auto-improve, on the home Wi-Fi: a fresh Wi-Fi scan now and then, so Stashr can also learn from it when it is very sure.
+        val roomScan = if (prefs.roomOn && !liveMode) RoomScan.light(app, prefs.roomBle, auto = prefs.roomAuto && bssid.isNotEmpty()) else null
         if (Logic.lowSpellOver(pct, charging)) prefs.lowSent = false
         // 20% or less: one real fix goes out now (the last known place), before the phone stops reporting.
         val finalFix = given == null && Logic.finalFixDue(pct, charging, liveMode, prefs.lowSent)
@@ -150,6 +151,7 @@ object Reporter {
         prefs.live = answer.live
         prefs.precise = answer.precise
         answer.roomOn?.let { prefs.roomOn = it }          // the model was started or stopped on the website or the tablet: follow it
+        answer.roomAuto?.let { prefs.roomAuto = it }      // auto-improve switched on the website: follow it
         val delay = Logic.batteryDelay(pct, charging, answer.live, Logic.clampDelay(answer.nextCheckSec, answer.live, answer.precise))
         prefs.lastDelaySec = delay
         Notices.show(app, answer.notices)
