@@ -137,6 +137,8 @@ router.post("/home/agent/location", agentLimiter, (req, res, next) => homeRouter
     try {
         const d = req.device;
         if (d.kind !== "phone") return res.status(403).json({ error: "Only a family phone can share its location." });
+        // Syncing turned off for this phone (Stashr website or app): nothing is stored, no trail or place is updated, and the phone is asked to check back in a while.
+        if (d.syncPaused) return res.json({ ok: true, paused: true, state: "paused", nextCheckSec: 900, notices: [], live: false, roomOn: false, precise: false });
         const b = req.body || {};
         const now = Date.now();
         const prev = (d.status && d.status.location) || null;
@@ -309,7 +311,7 @@ router.get("/home/where", authenticate, async (req, res) => {
             people: phones.map((p) => {
                 const w = automation.whereIs(s, p, now), st = p.status || {};
                 return { id: String(p._id), name: p.person || p.name, app: st.agent === "stashr-where" ? "Stashr Location" : "Stashr Hub", ...w,
-                    battery: home.batteryOf(st), lastSeen: p.lastSeen || null,
+                    battery: home.batteryOf(st), lastSeen: p.lastSeen || null, syncPaused: Boolean(p.syncPaused),
                     wifi: Boolean(st.wifi), accuracyM: st.location ? Math.round(st.location.acc || 0) : null };
             }).sort((a, b) => ({ coming: 0, away: 1, home: 2, unknown: 3, unset: 4 }[a.state] - { coming: 0, away: 1, home: 2, unknown: 3, unset: 4 }[b.state]) || a.name.localeCompare(b.name))
         });

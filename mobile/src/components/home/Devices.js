@@ -13,6 +13,17 @@ const tone = (state) => (state === "on" ? "ok" : state === "standby" || state ==
 
 /** Rename or remove a device. */
 /** Merge a device that was linked again under another name into the one you keep: its history, places and trail move over, then it is removed. */
+/** Syncing on or off for one device. Off: it stays linked but nothing it sends (a phone's location included) is saved. */
+function SyncToggle({ device, paused, reload }) {
+  const act = useAct();
+  const [off, setOff] = useState(Boolean(paused));
+  const set = async (on) => {
+    if (!on && !(await ask(`Turn off syncing for ${device.name}?`, device.kind === "phone" ? "Its location stops being saved: no trail, no places, no home or away updates until you turn it back on. The phone notices within about 15 minutes." : "It stays linked but is treated as disconnected until you turn syncing back on.", "Turn off", true))) return;
+    if (await act(() => home.setSync(device.id, !on), on ? "Syncing is on" : "Syncing is off")) { setOff(!on); reload(); }
+  };
+  return <Toggle label="Sync this device" hint={off ? "Off: nothing from this device is saved" : "On"} value={!off} onChange={set} />;
+}
+
 function MergeInto({ device, reload }) {
   const act = useAct();
   const [open, setOpen] = useState(false);
@@ -43,6 +54,7 @@ function DeviceMenu({ device, reload }) {
   return (
     <View style={{ gap: 8 }}>
       <Input value={name} onChangeText={setName} placeholder="Name" maxLength={60} autoCapitalize="words" />
+      <SyncToggle device={device} paused={device.syncPaused} reload={reload} />
       <Row>
         <Btn label="Save name" kind="primary" onPress={async () => { if (await act(() => home.renameDevice(device.id, name.trim()), "Renamed.")) { setOpen(false); reload(); } }} />
         <Btn label="Remove device" kind="danger" onPress={async () => { if (await ask(`Remove ${device.name}?`, "It stops reporting. Link it again with the code to bring it back.", "Remove", true) && await act(() => home.removeDevice(device.id), "Removed.")) reload(); }} />
@@ -209,6 +221,7 @@ function PhonesCard({ phones, reload }) {
               <Btn label="Save" onPress={async () => { if (await act(() => home.setPerson(p.id, (who[p.id] ?? p.person ?? "").trim()), "Saved.")) reload(); }} />
               <Btn label="Remove" kind="danger" onPress={async () => { if (await ask(`Remove ${p.name}?`, "The phone stops reporting.", "Remove", true) && await act(() => home.removeDevice(p.id), "Removed.")) reload(); }} />
             </Row>
+            <SyncToggle device={p} paused={p.syncPaused} reload={reload} />
             <MergeInto device={p} reload={reload} />
           </View>
         );
@@ -254,6 +267,7 @@ function LocationsCard({ settings, save }) {
           <Txt bold>{p.state === "coming" ? "🚗" : p.state === "home" ? "🏠" : "📍"} {p.name}</Txt>
           <Dim>{whereText(p)}{p.battery?.pct != null ? ` · battery ${p.battery.pct}%${p.battery.charging ? " (charging)" : ""}` : ""}{p.lastSeen ? ` · updated ${ago(p.lastSeen)}` : ""}{p.app === "Stashr Hub" ? " · via Stashr Hub" : ""}</Dim>
           <Btn label="Disconnect" kind="danger" onPress={async () => { if (await ask(`Disconnect ${p.name}?`, "Their phone stops being tracked here. They can link again with the code.", "Disconnect", true) && await act(() => home.removeDevice(p.id), "Disconnected.")) reload(); }} />
+          <SyncToggle device={{ id: p.id, name: p.name, kind: "phone" }} paused={p.syncPaused} reload={reload} />
           <MergeInto device={{ id: p.id, name: p.name, kind: "phone" }} reload={reload} />
         </View>
       )) : <Dim>No phone is linked yet.</Dim>}

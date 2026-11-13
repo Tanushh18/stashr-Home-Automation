@@ -6,6 +6,7 @@ const j = (path, method, body, timeout) => request(path, { method, body, timeout
 export const home = {
   devices: () => request("/home/devices"),
   renameDevice: (id, name) => j(`/home/devices/${id}`, "PUT", { name }),
+  setSync: (id, paused) => j(`/home/devices/${id}/sync`, "PUT", { paused }),
   removeDevice: (id) => j(`/home/devices/${id}`, "DELETE"),
   // A device linked again under another name: everything of the old entry (id) moves to the one kept (into), then the old one is removed.
   mergeDevice: (id, into) => j(`/home/devices/${id}/merge`, "POST", { into }, 40000),

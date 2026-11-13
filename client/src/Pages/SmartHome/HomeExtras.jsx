@@ -52,8 +52,8 @@ export function PairCard({ devices = [], onChanged = () => {} }) {
   };
   const togglePause = async (d) => {
     const pause = !d.syncPaused;
-    if (pause && !(await ask({ title: `Pause syncing with ${d.name || "the tablet"}?`, message: "The tablet stays linked but is treated as disconnected: no Wi-Fi scan results, no camera or messages, and WhatsApp place messages will not be sent. Resume any time.", confirmLabel: "Pause syncing" }))) return;
-    try { await setHomeSyncPaused(d.id, pause); toast.success(pause ? "Syncing paused. The tablet picks this up within a couple of minutes." : "Syncing is back on."); onChanged(); } catch (e) { toast.error(errorMessage(e, "Could not change syncing.")); }
+    if (pause && !(await ask({ title: `Turn off syncing for ${d.name || "this device"}?`, message: d.kind === "phone" ? "The phone stays linked, but its location stops being saved: no trail, no places, no home or away updates for this phone until you turn it back on. The phone picks this up within about 15 minutes." : "The device stays linked but is treated as disconnected: no Wi-Fi scan results, no camera or messages, and WhatsApp place messages will not be sent. Resume any time.", confirmLabel: "Turn off syncing" }))) return;
+    try { await setHomeSyncPaused(d.id, pause); toast.success(pause ? "Syncing is off for this device. It picks this up within a few minutes." : "Syncing is back on."); onChanged(); } catch (e) { toast.error(errorMessage(e, "Could not change syncing.")); }
   };
   const make = async (e) => {
     e.preventDefault();
@@ -76,9 +76,9 @@ export function PairCard({ devices = [], onChanged = () => {} }) {
             return (
               <li key={d.id || d.name} className={d.online ? "is-home" : ""}>
                 <span className="sh-avatar" aria-hidden="true">{d.kind === "tv" ? "TV" : d.kind === "phone" ? "PH" : "TB"}</span>
-                <div className="sh-linked__info"><b>{d.name || "Unnamed"}</b><span>{KIND_LABEL[d.kind] || d.kind} · {d.syncPaused ? "syncing paused" : d.online ? "online" : "offline"}{d.lastSeen ? ` · seen ${ago(d.lastSeen)}` : ""}</span></div>
+                <div className="sh-linked__info"><b>{d.name || "Unnamed"}</b><span>{KIND_LABEL[d.kind] || d.kind} · {d.syncPaused ? "syncing off" : d.online ? "online" : "offline"}{d.lastSeen ? ` · seen ${ago(d.lastSeen)}` : ""}</span></div>
                 <div className="sh-linked__actions">
-                  {d.kind === "hub" && !d.viaHub ? <button type="button" className="rd-btn rd-btn--quiet" onClick={() => togglePause(d)}>{d.syncPaused ? "Resume syncing" : "Pause syncing"}</button> : null}
+                  {!d.viaHub ? <button type="button" className={"rd-btn " + (d.syncPaused ? "rd-btn--primary" : "rd-btn--quiet")} onClick={() => togglePause(d)} aria-pressed={!d.syncPaused}>{d.syncPaused ? "Turn syncing on" : "Turn syncing off"}</button> : null}
                   {!d.viaHub && others.length ? <button type="button" className="rd-btn rd-btn--quiet" onClick={() => setMerging(open ? { id: "", into: "" } : { id: d.id, into: "" })}>{open ? "Cancel merge" : "Merge into…"}</button> : null}
                   {!d.viaHub ? <button type="button" className="rd-btn rd-btn--quiet" onClick={() => disconnect(d)}>Disconnect</button> : null}
                 </div>

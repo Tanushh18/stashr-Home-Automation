@@ -42,7 +42,7 @@ const validId = (id) => mongoose.isValidObjectId(id);
 function publicDevice(d, now = Date.now()) {
     const out = {
         id: String(d._id), name: d.name, kind: d.kind, tokenHint: d.tokenHint || "", viaHub: Boolean(d.parent),
-        online: d.kind === "phone" ? Boolean(d.lastSeen) && now - new Date(d.lastSeen).getTime() < PHONE_ONLINE_MS : Boolean(d.online) && home.isOnline(d, now), lastSeen: d.lastSeen || null, onlineSince: d.onlineSince || null, syncPaused: Boolean(d.syncPaused),
+        online: d.syncPaused ? false : d.kind === "phone" ? Boolean(d.lastSeen) && now - new Date(d.lastSeen).getTime() < PHONE_ONLINE_MS : Boolean(d.online) && home.isOnline(d, now), lastSeen: d.lastSeen || null, onlineSince: d.onlineSince || null, syncPaused: Boolean(d.syncPaused),
         status: d.status || {},
         ...(d.kind === "phone" ? { roomOn: Boolean(d.roomOn) } : {}),
         ...(d.kind === "phone" ? { push: { on: Boolean(d.fcmSet), seenAt: d.fcmSeenAt || null, askedAt: d.fcmPushedAt || null, misses: d.fcmMisses || 0 } } : {}),
@@ -126,12 +126,12 @@ router.put("/home/devices/:id", authenticate, writeLimiter, async (req, res) => 
     } catch (e) { return fail(res, e, "Could not rename it."); }
 });
 
-// Pause or resume syncing for the home tablet: it stays linked, but is treated as disconnected until it is resumed.
+// Pause or resume syncing for one device (a phone's location, the tablet, the TV): it stays linked, but nothing it sends is stored and it is shown offline until resumed.
 router.put("/home/devices/:id/sync", authenticate, writeLimiter, async (req, res) => {
     try {
         if (!validId(req.params.id) || typeof (req.body && req.body.paused) !== "boolean") return res.status(400).json({ error: "Say whether syncing is paused." });
         const paused = req.body.paused;
-        const d = await HomeDevice.findOne({ _id: req.params.id, owner: req.rootUser._id, parent: { $exists: false }, kind: "hub" });
+        const d = await HomeDevice.findOne({ _id: req.params.id, owner: req.rootUser._id, parent: { $exists: false } });
         if (!d) return res.status(404).json({ error: "Device not found." });
         if (Boolean(d.syncPaused) === paused) return res.json({ ok: true, syncPaused: paused });
         const set = { syncPaused: paused };
