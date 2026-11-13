@@ -232,9 +232,14 @@ router.post("/expenses/sms", authenticate, smsLimiter, async (req, res) => {
         const known = [...existing, ...archived];
         let accounts = [...(s.knownAccounts || [])];
         const fresh = [];
+        const claimed = new Set();
         for (const { p, sender, received, hadDate } of parsed) {
             const same = known.find((t) => ex.sameTx(t, { ...p, merchant: p.counterparty }));
             if (same) { duplicates++; continue; }
+            // The bank statement may already have added this very payment (it has no time and often another reference format): the message
+            // then belongs to that entry, one message per entry, so two real payments of the same amount on a day stay two.
+            const fromStatement = known.find((t) => !t.time && t.source === "Statement" && !claimed.has(t.index) && t.type === p.type && Math.abs(t.amount - p.amount) < 0.005 && t.date === p.date && !(t.ref && p.ref && t.ref !== p.ref && t.ref.length === p.ref.length));
+            if (fromStatement) { claimed.add(fromStatement.index); duplicates++; continue; }
             const clash = p.ref ? known.find((t) => t.ref && t.ref === p.ref) : null;
             const before = known.filter((t) => t.balance != null && key(t) <= key(p)).sort((a, b) => key(a).localeCompare(key(b))).pop();
             const reasons = ex.assess(p, { sender, receivedAt: received, knownAccounts: accounts, lastBalance: before ? before.balance : null, now });

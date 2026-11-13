@@ -107,3 +107,23 @@ describe("the payments not sorted yet, in groups", () => {
         expect(g.groups[0].key).toBe("realpay");
     });
 });
+
+describe("a message for a payment the bank statement already added", () => {
+    const smsOn = (date, amount, ref) => {
+        const d = new Date(date + "T10:00:00Z"), mon = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getUTCMonth()];
+        return { address: "VM-FEDBNK-S", date: Date.parse(date + "T05:00:00Z"), body: `Debited Rs ${amount}.00 from a/c X9229 on ${String(d.getUTCDate()).padStart(2, "0")}${mon}${String(d.getUTCFullYear()).slice(2)} 10:30 via UPI to Meta Verifie. Ref ${ref}.Bal Rs 2507.75. Not you?Call 18004251199 -Federal Bank` };
+    };
+    test("belongs to that entry (one message per entry), so nothing is counted twice", async () => {
+        const auth = await signUp();
+        await request(app).post("/expenses/start").set(auth).send({ date: recent(30) });
+        const user = await User.findOne({ email: "ana@example.com" });
+        const st = stores.dbStore(user._id, await user.getDataKey());
+        const day = recent(2);
+        const fromStmt = (ref) => ex.makeTx({ date: day, time: "", amount: 100, type: "Debit", counterparty: "UPIInt (Meta Ads)", method: "UPI", ref }, "Meta Ads", "Statement", "Verified", "Added from your statement (no message was found)", 0, []);
+        await st.append([fromStmt("STMTREF1"), fromStmt("")]);
+        // three messages for three Rs 100 payments that day: two are the statement's, the third is new
+        const r = await request(app).post("/expenses/sms").set(auth).send({ messages: [smsOn(day, 100, "629482059801"), smsOn(day, 100, "629482059802"), smsOn(day, 100, "629482059803")] });
+        expect(r.status).toBe(200);
+        expect((await st.list()).length).toBe(3);
+    });
+});
