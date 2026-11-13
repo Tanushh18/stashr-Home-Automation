@@ -7,6 +7,8 @@ export const admin = {
   users: (q = "") => request(`/admin/users?q=${encodeURIComponent(q)}&limit=300`, { timeout: 30000 }),
   setFeature: (id, key, enabled) => j(`/admin/users/${encodeURIComponent(id)}/features`, "PUT", { key, enabled }),
   deleteUser: (id, confirmEmail) => j(`/admin/users/${encodeURIComponent(id)}`, "DELETE", { confirmEmail }, 30000),
+  // Live usage and limits of the services each Render app uses.
+  liveDashboard: (refresh) => request(`/render/live-dashboard${refresh ? "?refresh=1" : ""}`, { timeout: 60000 }),
   rollout: () => request("/api/app-rollout", { timeout: 30000 }),
   saveRollout: (app, body) => j(`/api/app-rollout/${app}`, "PUT", body),
 };

@@ -3,6 +3,7 @@ import { View } from "react-native";
 import { home } from "../../lib/homeApi";
 import { Bad, Boundary, Box, Btn, Dim, Input, Row, Sub, Toggle, Txt, ask, useAct, useLoad } from "./h";
 import { CommuteChart } from "./Charts";
+import Maps from "./Maps";
 
 const tripTime = (ms) => new Date(ms).toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" });
 
@@ -63,5 +64,10 @@ function InsightsCard() {
 }
 
 export default function Insights() {
-  return <Boundary name="Family insights"><InsightsCard /></Boundary>;
+  return (
+    <View style={{ gap: 14 }}>
+      <Maps />
+      <Boundary name="Family insights"><InsightsCard /></Boundary>
+    </View>
+  );
 }

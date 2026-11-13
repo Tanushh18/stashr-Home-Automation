@@ -7,7 +7,13 @@ export const wa = {
   overview: () => request("/wa/overview", { timeout: 30000 }),
   saveSettings: (body) => j("/wa/settings", "PUT", body),
   saveSheet: (id, body) => j(`/wa/sheets/${id}`, "PATCH", body, 40000),
-  createSheet: (name) => j("/wa/sheets", "POST", { name }),
+  createSheet: (name, source) => j("/wa/sheets", "POST", source ? { name, source } : { name }),
+  // The We Three account (lead sheets that can be brought in as sheets here).
+  link: () => request("/wa/threads"),
+  connectLink: (mobile, mpin) => j("/wa/threads/connect", "POST", { mobile, mpin }, 45000),
+  disconnectLink: () => j("/wa/threads", "DELETE"),
+  origins: () => request("/wa/threads/origins", { timeout: 45000 }),
+  importOrigin: (origin) => j("/wa/threads/import", "POST", { origin }, 180000),
   deleteSheet: (id) => j(`/wa/sheets/${id}`, "DELETE"),
   addPeople: (id, recipients) => j(`/wa/sheets/${id}/recipients`, "POST", { recipients }, 60000),
   retrySheet: (id) => j(`/wa/sheets/${id}/retry`, "POST", {}),
@@ -19,17 +25,7 @@ export const wa = {
   picture: (sheet, index) => request(`/wa/pictures/${sheet}/${index}`, { timeout: 30000 }),
 };
 
-/** "Name, 98100 12345" lines -> [{ name, phone }] (a line with only a number is allowed). */
-export function peopleFromLines(text) {
-  const out = [];
-  for (const raw of String(text || "").split(/\n/)) {
-    const line = raw.trim();
-    if (!line) continue;
-    const m = /^(.*?)[,;\t]+\s*([+\d][\d\s().-]{6,})$/.exec(line) || /^()([+\d][\d\s().-]{6,})$/.exec(line);
-    if (m) out.push({ name: m[1].trim(), phone: m[2].trim() });
-  }
-  return out;
-}
+export { peopleFromLines } from "./waContacts";
 
 /** Messages in the box are separated by a line with only three dashes (a message can have several lines). */
 export const textsToBox = (texts) => (texts || []).join("\n---\n");

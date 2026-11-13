@@ -5,6 +5,8 @@ import * as DocumentPicker from "expo-document-picker";
 import { Page, Loading, Note, Heading } from "../components/kit";
 import { Box, Btn, Dim, Good, Bad, Txt, Row, Input, Toggle, Boundary, ask, usePoll, useAct } from "../components/home/h";
 import { wa, peopleFromLines, textsToBox, boxToTexts, nextText, STEP_MARK, WHO } from "../lib/waApi";
+import { contactsFromCsv } from "../lib/waContacts";
+import { STARTER_QUOTES } from "../lib/waStarter";
 import { useTheme } from "../lib/theme";
 
 const when = (t) => { const s = Math.max(0, Math.round((Date.now() - new Date(t).getTime()) / 1000)); return s < 45 ? "just now" : s < 3600 ? `${Math.round(s / 60)} min ago` : s < 86400 ? `${Math.round(s / 3600)} h ago` : `${Math.round(s / 86400)} d ago`; };
@@ -33,6 +35,8 @@ export default function WhatsApp() {
           {data.sheets.length === 0 ? <Dim>No sheets yet. Make one on the website (WhatsApp sender), or here below.</Dim> : null}
           {data.sheets.map((s) => <Boundary key={s._id} name={s.name}><SheetCard sheet={s} all={data.sheets} reload={load} /></Boundary>)}
           <NewSheet reload={load} />
+          <Boundary name="We Three"><ThreeLink reload={load} /></Boundary>
+          <Boundary name="Contacts group"><ContactsGroup reload={load} /></Boundary>
           <Boundary name="Latest messages"><Latest rows={data.recent} /></Boundary>
         </View>
       ) : null}
@@ -147,7 +151,11 @@ function SheetCard({ sheet, all, reload }) {
 
       <Dim>Messages. A line with only --- separates two messages. One is picked at random for each person. {"{name}"} is the first name.</Dim>
       <Input value={texts} onChangeText={setTexts} multiline placeholder={"Happy Diwali {name}!\n---\nSecond message"} style={{ minHeight: 120, textAlignVertical: "top" }} />
-      <Row><Btn kind="primary" label="Save messages" onPress={() => run(() => wa.saveSheet(sheet._id, { texts: boxToTexts(texts) }), "Messages saved.")} /><Dim>{boxToTexts(texts).length} in the box</Dim></Row>
+      <Row>
+        <Btn kind="primary" label="Save messages" onPress={() => run(() => wa.saveSheet(sheet._id, { texts: boxToTexts(texts) }), "Messages saved.")} />
+        <Btn label="Use the 25 We Three quotes" onPress={async () => { if (texts.trim() && !(await ask("Replace the messages in the box?", "The box gets the 25 We Three quotes. Nothing is saved until you press Save messages.", "Replace"))) return; setTexts(textsToBox(STARTER_QUOTES)); }} />
+        <Dim>{boxToTexts(texts).length} in the box</Dim>
+      </Row>
       {unsaved
         ? <Bad>{`Not saved yet: the box has ${boxToTexts(texts).length}, but ${savedCount} ${savedCount === 1 ? "is" : "are"} saved on the server. Press Save messages, or they are lost when you leave.`}</Bad>
         : savedCount > 0 ? <Dim>{`Saved: ${savedCount} message${savedCount === 1 ? "" : "s"}. Every new lead from this sheet gets one of them, picked at random.`}</Dim>
@@ -255,5 +263,111 @@ function Steps({ row }) {
       {row.status === "queued" ? <Dim>{"… waiting for the tablet's answer"}</Dim> : null}
       {row.failedWhere ? <Txt bold>{`Stopped by: ${WHO[row.failedWhere] || row.failedWhere}`}</Txt> : null}
     </View>
+  );
+}
+
+/** The We Three account: type the mobile number and MPIN once, then bring any We Three sheet in as a sheet here. */
+function ThreeLink({ reload }) {
+  const [link, setLink] = useState(null);
+  const [mobile, setMobile] = useState("");
+  const [mpin, setMpin] = useState("");
+  const [origins, setOrigins] = useState(null);
+  const [busy, setBusy] = useState("");
+  const act = useAct();
+  const loadLink = useCallback(async () => { try { setLink(await wa.link()); } catch (e) { setLink({ connected: false }); } }, []);
+  const loadOrigins = useCallback(async () => {
+    setBusy("origins");
+    const r = await act(() => wa.origins());
+    if (r && r.origins) setOrigins(r.origins);
+    setBusy("");
+  }, [act]);
+  useEffect(() => { loadLink(); }, [loadLink]);
+  useEffect(() => { if (link && link.connected) loadOrigins(); }, [link, loadOrigins]);
+
+  const connect = async () => {
+    setBusy("connect");
+    const r = await act(() => wa.connectLink(mobile, mpin));
+    if (r) { setMpin(""); await loadLink(); }
+    setBusy("");
+  };
+  const importOne = async (name) => {
+    setBusy(`import:${name}`);
+    const r = await act(() => wa.importOrigin(name));
+    if (r && r.added !== undefined) { await act(async () => `"${name}": ${r.added} people added. ${r.alreadySent} already messaged, ${r.invalid} without a valid number.`, `"${name}": ${r.added} people added. ${r.alreadySent} already messaged, ${r.invalid} without a valid number.`); await reload(); await loadOrigins(); }
+    setBusy("");
+  };
+  return (
+    <Box title="We Three sheets" subtitle="Bring the lead sheets from the We Three app in as sheets here. Each message that goes out is marked on the lead in We Three too.">
+      {!link ? <Dim>Loading…</Dim> : !link.connected ? (
+        <View style={{ gap: 8 }}>
+          <Input value={mobile} onChangeText={setMobile} placeholder="We Three mobile number" keyboardType="phone-pad" maxLength={14} />
+          <Input value={mpin} onChangeText={setMpin} placeholder="MPIN" keyboardType="number-pad" secureTextEntry maxLength={6} />
+          <Btn kind="primary" label="Connect We Three" onPress={connect} loading={busy === "connect"} disabled={mobile.replace(/\D/g, "").length < 10 || mpin.length < 4} />
+          <Dim>Stashr keeps only a sealed sign-in, never the MPIN.</Dim>
+        </View>
+      ) : (
+        <View style={{ gap: 8 }}>
+          <Good>{`Connected as ${link.name || link.mobile}`}</Good>
+          <Row>
+            <Btn label="Refresh" onPress={loadOrigins} disabled={busy !== ""} />
+            <Btn kind="danger" label="Disconnect" onPress={async () => { if (await ask("Disconnect We Three?", "The sign-in kept for it is removed. Sheets already imported stay.", "Disconnect", true) && await act(() => wa.disconnectLink(), "Disconnected.")) { setOrigins(null); loadLink(); } }} />
+          </Row>
+          {!origins ? <Dim>Loading the sheets…</Dim> : origins.map((o) => (
+            <View key={o.name} style={{ gap: 3, paddingVertical: 4 }}>
+              <Txt bold>{o.name}</Txt>
+              <Dim>{o.count} leads · {o.sent} messaged</Dim>
+              <Row><Btn label={busy === `import:${o.name}` ? "Importing…" : "Import unsent leads"} onPress={() => importOne(o.name)} disabled={busy !== ""} /></Row>
+            </View>
+          ))}
+        </View>
+      )}
+    </Box>
+  );
+}
+
+/** A Google Contacts export (CSV) in, the people to keep ticked, a new group (sheet) out. */
+function ContactsGroup({ reload }) {
+  const [name, setName] = useState("");
+  const [rows, setRows] = useState([]);
+  const [picked, setPicked] = useState({});
+  const [busy, setBusy] = useState(false);
+  const act = useAct();
+  const pick = async () => {
+    try {
+      const res = await DocumentPicker.getDocumentAsync({ type: ["text/csv", "text/comma-separated-values", "*/*"], copyToCacheDirectory: true });
+      if (res.canceled || !res.assets || !res.assets[0]) return;
+      const a = res.assets[0];
+      const { File } = require("expo-file-system");
+      const list = contactsFromCsv(await new File(a.uri).text());
+      if (!list.length) { await act(async () => { throw new Error("No phone numbers found. Export from Google Contacts as Google CSV."); }); return; }
+      setRows(list); setPicked(Object.fromEntries(list.map((r) => [r.phone, true])));
+      if (!name) setName((a.name || "Contacts").replace(/\.csv$/i, "").slice(0, 60));
+    } catch (e) { await act(async () => { throw e; }); }
+  };
+  const chosen = rows.filter((r) => picked[r.phone]);
+  const create = async () => {
+    setBusy(true);
+    const made = await act(() => wa.createSheet(name.trim(), "contacts"));
+    if (made && made.id) {
+      const r = await act(() => wa.addPeople(made.id, chosen), `Group created. Now add its messages and picture.`);
+      if (r) { setRows([]); setPicked({}); setName(""); await reload(); }
+    }
+    setBusy(false);
+  };
+  return (
+    <Box title="Group from Google contacts" subtitle="Export your contacts from Google Contacts as CSV, pick the people, and they become their own sheet.">
+      <Row>
+        <Btn label="Choose the contacts file" onPress={pick} />
+        {rows.length > 0 ? <><Btn label="Tick all" onPress={() => setPicked(Object.fromEntries(rows.map((r) => [r.phone, true])))} /><Btn label="Untick all" onPress={() => setPicked({})} /><Dim>{chosen.length} of {rows.length} ticked</Dim></> : null}
+      </Row>
+      {rows.length > 0 ? (
+        <>
+          {rows.slice(0, 200).map((r) => <Toggle key={r.phone} label={r.name || "No name"} hint={`+${r.phone}`} value={Boolean(picked[r.phone])} onChange={(v) => setPicked({ ...picked, [r.phone]: v })} />)}
+          {rows.length > 200 ? <Dim>Showing the first 200 of {rows.length}. Tick all still includes everyone.</Dim> : null}
+          <Input value={name} onChangeText={setName} placeholder="Group name" autoCapitalize="words" maxLength={80} />
+          <Btn kind="primary" label={`Create group with ${chosen.length} people`} onPress={create} loading={busy} disabled={!name.trim() || !chosen.length} />
+        </>
+      ) : null}
+    </Box>
   );
 }

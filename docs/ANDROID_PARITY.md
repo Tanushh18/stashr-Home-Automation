@@ -26,13 +26,23 @@ round, ⛔ = not on the app (with the reason).
 | **Apps** (download Hub, TV, Location, Cast) | 🆕 Apps screen opens each download |
 | Servers (Render services, deploys), Monitoring (health pings, incidents), Server URLs | ✅ Servers, Monitoring, Server URLs |
 
-## Not on the app yet (web only)
+## Added in the second round
+| Website page | Android app |
+|---|---|
+| Smart home: 24-hour **trail** | 🆕 Insights tab: a route sketch (no street map) of every phone, the stops with addresses and a link to open each in Maps |
+| Smart home: **house map** (2D and isometric 3D) | 🆕 Insights tab, read-only (2D / 3D switch, devices and people on the zones) |
+| Smart home: **Room Lab** (start/stop the room model, rooms, per-phone training, accuracy) | 🆕 Insights tab |
+| WhatsApp sender: **We Three** import | 🆕 WhatsApp sender → We Three sheets (connect, import unsent leads) |
+| WhatsApp sender: **Google Contacts CSV** group | 🆕 WhatsApp sender → Group from Google contacts |
+| WhatsApp sender: the **25 We Three quotes** button | 🆕 on every sheet |
+| **Media** (ShineOne Estate website photos and videos, status shown on the website) | 🆕 ShineOne Estate Manager (administrators): sectors, upload photos/videos, show/hide, status, remove |
+| **Services** (usage and limits of each app's providers) | 🆕 Services screen |
+
+## Still web only
 | Website page | Why |
 |---|---|
-| Smart home: 24-hour trail **map**, **house map** and 3-D house model, **Room Lab** tuning | Map and 3-D drawing need a map/3-D library the app does not have (a native change and a new APK build with new dependencies). The phone shows the same facts as text on the Insights and Overview tabs. |
-| WhatsApp sender: **We Three import**, **Google Contacts CSV** import, the "25 We Three quotes" starter button | Large file import and the We Three login are easier on a computer; people can still be added one per line on the app. |
-| **Media** (ShineOne Estate website photos and videos, uploaded to Cloudinary) | Signed Cloudinary uploads of large photos and videos: needs its own screen and testing on a real phone. |
-| **Services** map and usage limits, **Cron** setup, Render **domain panel**, **robot army**, server-list **propagation**, Render audit log | Operations dashboards built for a wide screen. The app already shows service status, incidents and deploys on Servers and Monitoring. |
+| Smart home: editing the **house layout** (drag rooms), the imported **3-D model** (.glb), the street-map tiles under the trail | Needs a 3-D engine and a map-tile library the app does not have (a native change and a new build with new dependencies). The phone shows the map as a diagram and the trail as a route sketch. |
+| **Cron** setup (ping and alert rules), Render **domain panel**, **robot army**, server-list **propagation**, Render **audit log**, **service map** | Operations dashboards built for a wide screen. The app already shows service status, incidents, pings and deploys on Servers and Monitoring. |
 | **Photo import pipeline** (Google Photos into Drive, administrators) | A long-running administrator pipeline view. |
 | **Security scans** (GitHub scan status) | Only links to GitHub; open it in a browser. |
 | **Dashboard** and **Privacy** | The app's tabs are the dashboard; the privacy text is on the website. |

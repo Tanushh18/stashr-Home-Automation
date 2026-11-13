@@ -207,6 +207,7 @@ export default function Settings() {
             <Row icon="user" title="Shared with me" subtitle="Photo folders other people shared with you" onPress={() => router.push("/shared")} />
             {profile?.features?.projects !== false ? <Row icon="folder" title="Projects" subtitle="Notes, variables and deploy status for each project" onPress={() => router.push("/projects")} /> : null}
             {profile?.features?.servers !== false ? <Row icon="globe" title="Servers" subtitle="Render services: status, deploys, restart" onPress={() => router.push("/servers")} /> : null}
+            {profile?.features?.services !== false ? <Row icon="grid" title="Services" subtitle="How close each app is to its provider limits" onPress={() => router.push("/services")} /> : null}
             {profile?.features?.cron !== false ? <Row icon="pulse" title="Monitoring" subtitle="Health checks and incidents" onPress={() => router.push("/monitoring")} /> : null}
             <Row icon="repeat" title="GitHub" subtitle="Accounts used to read your repositories" onPress={() => router.push("/github")} />
             {profile?.features?.photos !== false ? <Row icon="cloud" title="Photo backup and storage" subtitle="Google accounts, camera-roll backup, share links" onPress={() => router.push("/photo-backup")} /> : null}
@@ -215,6 +216,7 @@ export default function Settings() {
             {profile?.features?.photos !== false ? <Row icon="image" title="Albums" subtitle="Collections across your accounts" onPress={() => router.push("/albums")} /> : null}
             {profile?.isAdmin ? <Row icon="download" title="App updates" subtitle="Which devices are offered each new app version" onPress={() => router.push("/app-updates")} /> : null}
             {profile?.features?.adminPanel ? <Row icon="user" title="Admin" subtitle="Users and which features each person sees" onPress={() => router.push("/admin")} /> : null}
+            {profile?.isAdmin ? <Row icon="image" title="ShineOne Estate Manager" subtitle="Website photos and videos per sector, and the status shown on the website" onPress={() => router.push("/media")} /> : null}
             <Row icon="download" title="Apps" subtitle="Download or update Stashr Hub, TV, Location and Cast" onPress={() => router.push("/apps")} />
             {profile?.isAdmin ? <Row icon="settings" title="Server URLs" subtitle="Backend addresses and environment sync" onPress={() => router.push("/server-urls")} /> : null}
           </Section>
