@@ -10,16 +10,17 @@ const ex = require("./expenses");
  * truth), write the changes in small batches and add what the messages missed. `progress({ stage, text, pct })` says how far it is.
  * Throws an Error with .status 400 and a plain message when the file is not usable.
  */
-async function processStatement({ s, st, copy, bytes, table: given = null, source = "", rules = [], cutoff = "", month = "", saveSummary = async () => {}, saveLines = async () => {}, progress = () => {} }) {
+async function processStatement({ s, st, copy, bytes, table: given = null, lines: savedLines = null, source = "", rules = [], cutoff = "", month = "", saveSummary = async () => {}, saveLines = async () => {}, progress = () => {} }) {
     const bad = (message) => Object.assign(new Error(message), { status: 400 });
     progress({ stage: "reading", text: "Reading the statement…", pct: 8 });
     let table = given;                                        // a PDF is read to a table before this (it needs the password)
-    if (!table) {
+    if (!table && !savedLines) {
         try { table = bytes.subarray(0, 2).toString() === "PK" ? ex.parseXlsx(bytes) : ex.parseCsv(bytes.toString("utf8")); }
         catch (e) { throw bad(e.message || "Could not read that file."); }
     }
     let stmt;
-    try { stmt = ex.statementRows(table); } catch (e) { throw bad(e.message); }
+    if (savedLines) stmt = savedLines;                         // checking again with statements already saved: no file, no password
+    else try { stmt = ex.statementRows(table); } catch (e) { throw bad(e.message); }
     if (source === "pdf") {
         // Reading text out of a PDF can go wrong where a bank lays its table out in an unusual way. A real statement's running balance always
         // follows its amounts, so rows that do not add up mean the PDF was misread: refuse rather than "correct" entries from wrong numbers.

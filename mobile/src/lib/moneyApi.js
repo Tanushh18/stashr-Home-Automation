@@ -18,6 +18,7 @@ export const money = {
   statement: (filename, bytes, { password, month } = {}) => requestBytes(
     `/expenses/statement?filename=${encodeURIComponent(filename)}${month ? `&month=${encodeURIComponent(month)}` : ""}`, bytes,
     { timeout: 120000, headers: password ? { "X-Statement-Password": encodeURIComponent(password) } : undefined }),
+  recheck: (month) => j(`/expenses/statement/recheck${month ? `?month=${encodeURIComponent(month)}` : ""}`, "POST", undefined, 120000),
   // Statements kept (encrypted) for searching later.
   savedStatements: () => request("/expenses/statement/saved", { timeout: 30000 }),
   searchStatements: (q, month) => request(`/expenses/statement/search?q=${encodeURIComponent(q)}${month ? `&month=${encodeURIComponent(month)}` : ""}`, { timeout: 30000 }),

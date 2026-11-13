@@ -32,6 +32,13 @@ export default function Statement({ settings, onChecked }) {
       else { setLocked(null); setError(e.message || "Could not check the statement."); }
     } finally { setBusy(false); }
   };
+  // the statements already saved, checked again: no file and no password
+  const recheck = async () => {
+    setError(""); setReport(null); setLocked(null); setBusy(true);
+    try { const r = await money.recheck(month || undefined); setReport(r.report || r); onChecked(); }
+    catch (e) { setError(e.message || "Could not check again."); }
+    finally { setBusy(false); }
+  };
   const pick = async () => {
     setError(""); setReport(null); setLocked(null);
     try {
@@ -52,6 +59,7 @@ export default function Statement({ settings, onChecked }) {
         <Dim>Month to match</Dim>
         <Pick options={[["", "Whole statement"], ...months.map((m) => [m, monthLabel(m)])]} value={month} onChange={setMonth} />
         <Btn kind="primary" label={busy ? "Checking…" : "Choose statement file"} onPress={pick} loading={busy} disabled={Boolean(locked)} />
+        <Btn label="Check again with my saved statements" onPress={recheck} disabled={busy || Boolean(locked)} />
         {locked ? (
           <View style={{ gap: 8 }}>
             <Txt bold>🔒 {locked.name} is locked</Txt>

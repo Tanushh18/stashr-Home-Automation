@@ -154,4 +154,37 @@ async function searchSaved(owner, dataKey, q, { month = "", statement = "", limi
     return { ...search(lines, q, { limit }), searched: lines.length };
 }
 
-module.exports = { parseQuery, scoreLine, search, lev, saveStatement, listStatements, removeStatement, searchSaved };
+/** Puts the lines of one day back in the order the bank had them, by following the running balance (each line starts where another ended). */
+function orderDay(day) {
+    if (day.length < 2 || day.some((l) => l.balance == null)) return day;
+    const signed = (l) => (l.type === "Credit" ? l.amount : -l.amount);
+    const before = (l) => Math.round((l.balance - signed(l)) * 100) / 100;
+    const ends = new Set(day.map((l) => Math.round(l.balance * 100) / 100));
+    const starts = day.filter((l) => !ends.has(before(l)));
+    if (starts.length !== 1) return day;
+    const out = [starts[0]], left = day.filter((l) => l !== starts[0]);
+    while (left.length) {
+        const last = Math.round(out[out.length - 1].balance * 100) / 100;
+        const next = left.findIndex((l) => before(l) === last);
+        if (next < 0) return day;
+        out.push(left.splice(next, 1)[0]);
+    }
+    return out;
+}
+
+/** Every saved line of the owner (optionally one month), decrypted and in statement order: [{ date, desc, amount, type, balance, ref }]. */
+async function loadLines(owner, dataKey, { month = "" } = {}) {
+    const filter = { owner };
+    if (/^\d{4}-\d{2}$/.test(month)) filter.month = month;
+    const days = new Map();
+    for (const r of await Line.find(filter).lean()) {
+        let secret;
+        try { secret = unsealJSONWithKey(dataKey, r.enc); } catch (e) { continue; }
+        const l = { date: r.date, desc: secret.desc, amount: secret.amount, type: secret.type, balance: secret.balance == null ? null : secret.balance, ref: secret.ref || "" };
+        if (!days.has(l.date)) days.set(l.date, []);
+        days.get(l.date).push(l);
+    }
+    return [...days.keys()].sort().flatMap((d) => orderDay(days.get(d)));
+}
+
+module.exports = { loadLines, orderDay, parseQuery, scoreLine, search, lev, saveStatement, listStatements, removeStatement, searchSaved };

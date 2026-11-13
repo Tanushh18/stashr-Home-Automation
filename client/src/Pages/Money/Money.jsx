@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import {
-  getExpenseSettings, saveExpenseSheet, setExpenseStorage, unlinkExpenseSheet, exportExpenseSheet, setExpenseStart, changeExpenseStart, removeUnmatchedExpenses, uploadStatementAsync, getStatementJob, getSavedStatements, searchStatements, deleteSavedStatement, postExpenseSms, requestExpenseSync, getExpenses, getUncategorized, setExpenseDescription, setExpenseCategory, reviewExpense, uploadStatement
+  getExpenseSettings, saveExpenseSheet, setExpenseStorage, unlinkExpenseSheet, exportExpenseSheet, setExpenseStart, changeExpenseStart, removeUnmatchedExpenses, uploadStatementAsync, getStatementJob, recheckStatements, getSavedStatements, searchStatements, deleteSavedStatement, postExpenseSms, requestExpenseSync, getExpenses, getUncategorized, setExpenseDescription, setExpenseCategory, reviewExpense, uploadStatement
 } from "../../api/client";
 import { Section, Skeleton, useConfirm } from "../Render/RenderUi";
 import { errorMessage } from "../Render/renderUtils";
@@ -549,6 +549,16 @@ function StatementCard({ settings, onDone }) {
       else { setLocked(null); setError(errorMessage(err, "Could not read that statement.")); }
     }
   };
+  // the statements already saved, checked again: no file and no password
+  const recheck = async () => {
+    setError(""); setReport(null); setJob(null);
+    try { const { job: j } = await recheckStatements({ month }); setJob(j); follow(j); }
+    catch (err) {
+      const data = err && err.response && err.response.data;
+      if (data && data.job) { setJob(data.job); follow(data.job); setError("A statement is already being checked; showing that one."); }
+      else setError(errorMessage(err, "Could not check again."));
+    }
+  };
   const pick = async (e) => {
     const file = e.target.files && e.target.files[0];
     e.target.value = "";
@@ -578,6 +588,7 @@ function StatementCard({ settings, onDone }) {
       <div className="mn-row">
         <input ref={input} type="file" accept=".pdf,.csv,.xlsx,.xls,text/csv,application/pdf" onChange={pick} hidden />
         <button className="rd-btn rd-btn--primary" onClick={() => input.current && input.current.click()} disabled={busy}>{sending !== null ? `Uploading… ${sending}%` : running ? "Checking…" : "Choose a statement (.pdf, .xlsx or .csv)"}</button>
+        {settings.lastStatement ? <button className="rd-btn rd-btn--quiet" onClick={recheck} disabled={busy} title="Uses the statements you already uploaded: no file, no password">Check again with my saved statements</button> : null}
       </div>
       {sending !== null || running ? (
         <div className="mn-progress" role="status" aria-live="polite">

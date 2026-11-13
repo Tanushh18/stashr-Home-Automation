@@ -96,3 +96,7 @@ read during the first sync is not kept; the statement check also looks only at t
 - A statement is rarely your whole history, so Stashr never assumes a zero opening balance. It compares only the dates the statement covers.
 - An entry that an earlier check verified but this newer statement does not have is **set aside** ("Not in statement", listed under Needs checking, not counted), never deleted. Entries you confirmed by hand stay counted. The statement's last day is not judged if it is still today. Each month shows how many entries were set aside and their amounts.
 - Sorting: pick a category once and every payment to or from the same UPI id (or name, when there is no id) gets it, old ones included, and later ones follow the saved rule. "Sort quickly" lists the unsorted payments in groups for one-tap sorting; names like "No Remark" are sorted one by one.
+
+## Check again with saved statements
+
+Every statement you check is saved (encrypted, lines only). "Check again with my saved statements" (web and Android) runs the same matching on those saved lines: no file, no password. Choose a month first to check just that month. Use it after upgrades, or after the SMS side changed, to bring every month back in line with the statement. Lines of the same day are put back in the bank's order by following the running balance.

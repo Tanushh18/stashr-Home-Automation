@@ -15,12 +15,14 @@ const User = require("../models/schema");
 const ExpenseSettings = require("../models/expenseSettings");
 const ExpenseTx = require("../models/expenseTx");
 const ex = require("../utils/expenses");
+const ExpenseStatement = require("../models/expenseStatement");
+const ExpenseStatementLine = require("../models/expenseStatementLine");
 const stores = require("../utils/expenseStore");
 
 let mongo;
 beforeAll(async () => { mongo = await MongoMemoryServer.create(); await mongoose.connect(mongo.getUri()); });
 afterAll(async () => { await mongoose.disconnect(); await mongo.stop(); });
-beforeEach(async () => { for (const M of [User, ExpenseSettings, ExpenseTx]) await M.deleteMany({}); });
+beforeEach(async () => { for (const M of [User, ExpenseSettings, ExpenseTx, ExpenseStatement, ExpenseStatementLine]) await M.deleteMany({}); });
 
 const signUp = async () => {
     await request(app).post("/register").send({ name: "Ana", email: "ana@example.com", password: "master-pass", cpassword: "master-pass" });
@@ -142,5 +144,41 @@ describe("a description on a payment", () => {
         await request(app).put("/expenses/description").set(auth).send({ index: row.index, description: "" });
         expect((await list(auth)).rows.find((t) => t.index === row.index).description).toBe("");
         expect((await request(app).put("/expenses/description").set(auth).send({ index: "nope", description: "x" })).status).toBe(400);
+    });
+});
+
+describe("checking again with the statements already saved", () => {
+    const dd = (iso) => iso.split("-").reverse().join("-");
+    test("no upload and no password: a leftover entry is set aside, nothing is saved twice, and a month can be chosen", async () => {
+        const auth = await signUp();
+        const d1 = recent(40), d2 = recent(38);
+        await request(app).post("/expenses/start").set(auth).send({ date: recent(60) });
+        const csv = Buffer.from(["Date,Particulars,Withdrawals,Deposits,Balance",
+            `${dd(d1)},UPI/DR/100000000001/MEESHO TECHNOLOGIES PRIVATE LIMITED/ICIC/m@ybl,100.00,,9900.00`,
+            `${dd(d1)},UPI/DR/100000000002/SWIGGY/ICIC/s@ybl,50.00,,9850.00`,
+            `${dd(d2)},UPI/CR/100000000003/RAHUL K/x@ybl,,1500.00,11350.00`].join("\n"));
+        const up = await request(app).post("/expenses/statement").set(auth).set("Content-Type", "application/octet-stream").send(csv);
+        expect(up.status).toBe(200);
+        expect(up.body.report.lines).toBe(3);
+        // an entry the statement does not have, inside its dates (as if an old SMS check had verified it)
+        const st = await seed([{ merchant: "Ghost (ghostpay@ybl)", amount: 777, days: 39 }]);
+        const ghost = (await st.list()).find((t) => t.merchant.startsWith("Ghost"));
+        await st.updateMany([{ index: ghost.index, fields: { status: "Verified" }, tx: ghost }]);
+        const savedBefore = await ExpenseStatementLine.countDocuments({});
+        const r = await request(app).post("/expenses/statement/recheck").set(auth);
+        expect(r.status).toBe(200);
+        expect(r.body.report).toMatchObject({ lines: 3, notInStatement: 1, balanceBreakCount: 0 });
+        expect((await st.list()).find((t) => t.index === ghost.index).status).toBe("Not in statement");
+        expect(await ExpenseStatementLine.countDocuments({})).toBe(savedBefore);
+        expect(await ExpenseStatement.countDocuments({})).toBe(1);
+        const m = await request(app).post(`/expenses/statement/recheck?month=${d2.slice(0, 7)}`).set(auth);
+        expect(m.status === 200 || m.status === 400).toBe(true);
+    });
+    test("with nothing saved it says so", async () => {
+        const auth = await signUp();
+        await request(app).post("/expenses/start").set(auth).send({ date: recent(60) });
+        const r = await request(app).post("/expenses/statement/recheck").set(auth);
+        expect(r.status).toBe(400);
+        expect(r.body.error).toMatch(/Upload one first/);
     });
 });

@@ -404,10 +404,10 @@ const officeCrypto = require("../utils/officeCrypto");
 const statementPdf = require("../utils/statementPdf");
 
 /** The statement check for this account, with its rules, the 4-month cut-off and where the result summary is saved. */
-const processStatement = ({ owner, s, st, copy, bytes, table = null, source = "", progress, month = "", filename = "", dataKey }) => runStatement({
-    s, st, copy, bytes, table, source, progress, month, rules: userRules(s), cutoff: cutoffDate(),
+const processStatement = ({ owner, s, st, copy, bytes, table = null, lines = null, source = "", progress, month = "", filename = "", dataKey }) => runStatement({
+    s, st, copy, bytes, table, lines, source, progress, month, rules: userRules(s), cutoff: cutoffDate(),
     saveSummary: (summary) => Settings.updateOne({ owner }, { $set: { lastStatement: summary } }),
-    saveLines: ({ lines }) => saved.saveStatement(owner, dataKey, { filename, month, lines })     // kept (encrypted) so it can be searched later
+    saveLines: lines ? async () => {} : ({ lines: got }) => saved.saveStatement(owner, dataKey, { filename, month, lines: got })     // kept (encrypted) so it can be searched later (not again when these ARE the saved lines)
 });
 
 router.post("/expenses/statement", authenticate, writeLimiter, express.raw({ type: "application/octet-stream", limit: "8mb" }), async (req, res) => {
@@ -468,6 +468,30 @@ router.post("/expenses/statement", authenticate, writeLimiter, express.raw({ typ
         const { report } = await processStatement({ owner, s, st, copy, bytes, table, source, month, filename: String(req.query.filename || ""), dataKey });
         return res.json({ report });
     } catch (e) { return fail(res, e, "Could not check the statement."); }
+});
+
+// Check again with the statements already saved: no file and no password. Same matching as an upload; ?month=YYYY-MM for one month; ?async=1 as the website does.
+router.post("/expenses/statement/recheck", authenticate, writeLimiter, async (req, res) => {
+    try {
+        const owner = req.rootUser._id, s = await settingsOf(owner);
+        const { st, copy } = await storeFor(req, s);
+        const month = String(req.query.month || "");
+        if (month && !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return res.status(400).json({ error: "Pick the month as YYYY-MM." });
+        const dataKey = await req.rootUser.getDataKey();
+        const lines = await saved.loadLines(owner, dataKey, { month });
+        if (!lines.length) return res.status(400).json({ error: month ? `No saved statement has lines in ${month}. Upload a statement first.` : "No statement is saved yet. Upload one first." });
+        const run = (progress) => processStatement({ owner, s, st, copy, lines, source: "saved", month, filename: "saved statements", dataKey, progress });
+        if (req.query.async === "1") {
+            const busy = jobs.running(owner);
+            if (busy) return res.status(409).json({ error: "A statement is already being checked. Wait for it to finish.", job: jobs.view(busy) });
+            const job = jobs.create(owner, { filename: "saved statements" });
+            res.status(202).json({ job: jobs.view(job) });
+            setImmediate(() => run((p) => jobs.progress(job.id, p)).then(({ report }) => jobs.finish(job.id, report))
+                .catch((e) => { if (!Number.isInteger(e.status)) console.error("[expenses] re-check failed:", e && e.message); jobs.fail(job.id, Number.isInteger(e.status) ? e.message : "Could not check again. Try once more."); }));
+            return undefined;
+        }
+        return res.json(await run());
+    } catch (e) { return fail(res, e, "Could not check again."); }
 });
 
 // How far a statement check is: ?job=<id>, or the newest one of this account when no id is given.

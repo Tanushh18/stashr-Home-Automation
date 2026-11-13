@@ -572,6 +572,7 @@ export const uploadStatementAsync = (file, onUploadProgress, { password, month }
 export const getSavedStatements = () => instance.get("/expenses/statement/saved").then((r) => r.data);
 export const searchStatements = (q, month) => instance.get("/expenses/statement/search", { params: { q, ...(month ? { month } : {}) } }).then((r) => r.data);
 export const deleteSavedStatement = (id) => instance.delete(`/expenses/statement/saved/${id}`).then((r) => r.data);
+export const recheckStatements = ({ month } = {}) => instance.post("/expenses/statement/recheck", null, { params: { async: 1, ...(month ? { month } : {}) } }).then((r) => r.data);
 export const getStatementJob = (id) => instance.get("/expenses/statement/status", { params: id ? { job: id } : {} }).then((r) => r.data);
 export const uploadStatement = (file) => instance.post("/expenses/statement", file, {
   params: { filename: file.name },
