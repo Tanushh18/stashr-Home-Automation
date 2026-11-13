@@ -56,3 +56,7 @@
 .wa-steps-row td { padding-top: 0; }
 
 .wa-edit { border: 1px solid rgba(127,127,127,.3); border-radius: 10px; padding: 10px; margin: 10px 0; display: grid; gap: 8px; }
+.wa-check { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.wa-tab { display: grid; gap: 6px; padding: 6px 0; border-top: 1px solid rgba(127,127,127,.15); }
+.wa-plan { list-style: none; margin: 4px 0; padding: 0; display: grid; gap: 2px; font-size: .9rem; }
+.wa-plan .is-bad { color: var(--danger, #d1495b); }

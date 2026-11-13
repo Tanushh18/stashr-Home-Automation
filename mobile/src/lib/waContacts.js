@@ -1,4 +1,4 @@
-/* Reading a Google Contacts export (CSV or vCard .vcf) for the WhatsApp sender. Kept apart from React so it can be tested. */
+/* Reading a Google Contacts export (CSV or vCard .vcf) and Excel sheets (.xlsx) for the WhatsApp sender. Kept apart from React so it can be tested. */
 
 /** Splits CSV text into rows of cells. Handles quoted cells, commas and line breaks inside quotes, and "" for a quote. */
 export function parseCsv(text) {
@@ -129,6 +129,76 @@ export function contactsFromFile(text, fileName = "") {
   const src = String(text || "").replace(/^\ufeff/, "");
   const isVcf = /\.(vcf|vcard)$/i.test(String(fileName)) || /^\s*BEGIN:VCARD/i.test(src);
   return isVcf ? contactsFromVcf(src) : contactsFromCsv(src);
+}
+
+const PHONE_HEAD = /(phone|mobile|whats ?app|contact ?(no|number)|number|cell|mob)/i;
+const NAME_HEAD = /(^|\b)(full ?name|name|customer|client|lead|person)(\b|$)/i;
+
+/**
+ * People from the rows of one Excel tab (an array of arrays, as SheetJS gives with header:1). The header row is the first row that
+ * has a phone-like heading; without one, the column that holds the most valid mobile numbers is used, and the name is the first
+ * text column next to it. Returns [{ name, phone }], one entry per number, without repeats.
+ */
+export function peopleFromRows(rows) {
+  const grid = (rows || []).map((r) => (Array.isArray(r) ? r : []).map((c) => (c === null || c === undefined ? "" : String(c).trim())));
+  if (!grid.length) return [];
+  const width = Math.max(...grid.map((r) => r.length));
+  let headerAt = -1, phoneCols = [], nameCol = -1;
+  for (let i = 0; i < Math.min(grid.length, 10); i++) {
+    const cols = grid[i].map((h, c) => (h && PHONE_HEAD.test(h) && !/^\d+$/.test(h) ? c : -1)).filter((c) => c >= 0);
+    if (cols.length) { headerAt = i; phoneCols = cols; nameCol = grid[i].findIndex((h) => h && NAME_HEAD.test(h) && !PHONE_HEAD.test(h)); break; }
+  }
+  if (headerAt < 0) {
+    let best = -1, bestN = 0;
+    for (let c = 0; c < width; c++) { const n = grid.reduce((k, r) => k + (cleanPhone(r[c]) ? 1 : 0), 0); if (n > bestN) { best = c; bestN = n; } }
+    if (best < 0) return [];
+    phoneCols = [best];
+    nameCol = Array.from({ length: width }, (_, c) => c).find((c) => c !== best && grid.some((r) => r[c] && !cleanPhone(r[c]) && /\p{L}/u.test(r[c]))) ?? -1;
+  }
+  const out = [], seen = new Set();
+  for (const r of grid.slice(headerAt + 1)) {
+    const name = nameCol >= 0 ? (r[nameCol] || "") : "";
+    for (const c of phoneCols) {
+      for (const part of String(r[c] || "").split(/[,;/\n]|:::/)) {
+        const phone = cleanPhone(part);
+        if (!phone || seen.has(phone)) continue;
+        seen.add(phone);
+        out.push({ name, phone });
+      }
+    }
+  }
+  return out;
+}
+
+/** The list cut into [parts] groups in order, sizes differing by at most one (10 people into 3: 4, 3, 3). */
+export function splitPeople(list, parts) {
+  const n = Math.max(1, Math.min(Math.floor(Number(parts)) || 1, list.length || 1));
+  const out = [], base = Math.floor(list.length / n), extra = list.length % n;
+  let at = 0;
+  for (let i = 0; i < n; i++) { const size = base + (i < extra ? 1 : 0); out.push(list.slice(at, at + size)); at += size; }
+  return out;
+}
+
+/**
+ * The sheets to create from the tabs of an Excel file. Each tab { include, name, parts, people } that is ticked becomes one sheet, or
+ * "name 1", "name 2" ... when it is split into several. `taken` is the set of sheet names already used (lower case). A sheet whose
+ * name is empty, too long or used twice gets clash = true, and nothing should be created until that is fixed.
+ */
+export function planSheets(tabs, taken = new Set()) {
+  const out = [], used = new Set([...taken].map((t) => String(t).toLowerCase()));
+  for (const t of tabs) {
+    if (!t.include || !t.people.length) continue;
+    const base = String(t.name || "").trim();
+    const groups = splitPeople(t.people, t.parts);
+    groups.forEach((people, i) => {
+      const name = (groups.length > 1 && base ? `${base} ${i + 1}` : base).slice(0, 80);
+      const key = name.toLowerCase();
+      const clash = !name || used.has(key);
+      used.add(key);
+      out.push({ name, people, clash, tab: t.tab });
+    });
+  }
+  return out;
 }
 
 /** The contacts that match a search: part of the name (any case) or part of the number (digits only, so "98100 12" finds 919810012345). */

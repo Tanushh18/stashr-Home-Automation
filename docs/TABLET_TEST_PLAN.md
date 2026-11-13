@@ -159,6 +159,8 @@ Adb access gives only a terminal on your computer. The app still talks to the St
 - [ ] After a TV restart the last finished/failed downloads are still listed (a download that was running shows as stopped).
 - [ ] WhatsApp sender → Group from Google contacts: a `.vcf` file loads (names with accents, several numbers per person); the Search box filters by name or number; "Tick these" only affects what the search shows.
 - [ ] A group's "Edit sheet" button opens an editor: type new numbers, or add from a contacts file (CSV or .vcf) with search; duplicates are reported, not added twice. Same in the Android app.
+- [ ] WhatsApp sender → New sheet: "Add an Excel file (.xlsx)" lists the tabs with their number counts; tick tabs, name each, choose how many sheets to split a tab into; the plan lists the final names ("Name 1", "Name 2"…) and refuses empty or used names.
+- [ ] With We Three connected, "Also create it in We Three" is ticked: the new sheet appears as a list in We Three with the same people; messaging one person in Stashr marks that lead in We Three; a lead added to the list in We Three shows up in Stashr within ~10 minutes. An older sheet has a "Send to We Three" button.
 
 ## 8. Updates (OTA)
 - [ ] Push a change under `hub-app/` to `main`; the GitHub Release is created and is **not** "latest".

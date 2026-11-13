@@ -2,12 +2,12 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import {
   getWaLink, connectWaLink, disconnectWaLink, getWaOrigins, importWaOrigin,
-  getWaOverview, saveWaSettings, resetWaSheet, sendWaReportNow, createWaSheet, saveWaSheet, deleteWaSheet, addWaPeople, retryWaSheet, sendWaTest, getWaSend, getWaPictures, getWaPicture
+  getWaOverview, saveWaSettings, resetWaSheet, sendWaReportNow, createWaSheet, saveWaSheet, deleteWaSheet, addWaPeople, sendWaSheetToWeThree, retryWaSheet, sendWaTest, getWaSend, getWaPictures, getWaPicture
 } from "../../api/client";
 import { Section, Skeleton } from "../Render/RenderUi";
 import { errorMessage } from "../Render/renderUtils";
 import { ago } from "../../lib/smartHome";
-import { contactsFromFile, filterContacts, peopleFromLines } from "../../lib/waContacts";
+import { contactsFromFile, filterContacts, peopleFromLines, peopleFromRows, planSheets } from "../../lib/waContacts";
 import { STARTER_QUOTES, textsToBox, boxToTexts } from "../../lib/waStarter";
 import "../Render/RenderDashboard.css";
 import "./WhatsAppSender.css";
@@ -231,6 +231,8 @@ function SheetCard({ sheet, onChanged }) {
         </div>
       )}
       <div className="wa-row">
+        {sheet.weThree ? <span className="wa-muted" title="People and sent marks are kept the same in We Three">Synced with We Three</span>
+          : <button className="rd-btn is-quiet" disabled={busy} title="Makes this sheet a list in We Three and keeps the two the same" onClick={() => run(() => sendWaSheetToWeThree(sheet._id), (r) => `Sent to We Three: ${r.added} new, ${r.existing} already there, ${r.linked} linked.`)}>Send to We Three</button>}
         <button className="rd-btn" aria-expanded={editing} onClick={() => setEditing((v) => !v)}>{editing ? "Close editor" : "Edit sheet"}</button>
         {c.failed > 0 && <button className="rd-btn" disabled={busy} onClick={() => run(() => retryWaSheet(sheet._id), (r) => `${r.requeued} back in line.`)}>Retry the {c.failed} failed</button>}
         <button className="rd-btn is-quiet" disabled={busy} title="For testing: everyone on this sheet goes back in line, so the same test number can be messaged again" onClick={() => { if (window.confirm(`Put everyone on "${sheet.name}" back in line? Use this only for a test sheet.`)) run(() => resetWaSheet(sheet._id), (r) => `${r.reset} people back in line.`); }}>Reset for testing</button>
@@ -298,6 +300,8 @@ function ThreeLink({ onChanged }) {
 
 /** Google Contacts export (CSV or vCard) in, the people to keep ticked, a new group out. */
 function ContactsGroup({ onChanged }) {
+  const connected = useWeThreeLink();
+  const [alsoThree, setAlsoThree] = useState(true);
   const [name, setName] = useState("");
   const [rows, setRows] = useState([]);
   const [picked, setPicked] = useState({});
@@ -322,9 +326,9 @@ function ContactsGroup({ onChanged }) {
     if (!chosen.length) return toast.error("Tick at least one person.");
     setBusy(true);
     try {
-      const made = await createWaSheet({ name: name.trim(), source: "contacts" });
+      const made = await createWaSheet({ name: name.trim(), source: "contacts", weThree: connected && alsoThree });
       const r = await addWaPeople(made.id, chosen);
-      toast.success(`Group created with ${r.added} people. Now add its messages and picture.`);
+      toast.success(`Group created with ${r.added} people.${r.weThree ? " Also in We Three." : ""} Now add its messages and picture.`);
       setRows([]); setPicked({}); setName("");
       await onChanged();
     } catch (err) { toast.error(errorMessage(err)); } finally { setBusy(false); }
@@ -342,7 +346,108 @@ function ContactsGroup({ onChanged }) {
           <input className="wa-input is-short" placeholder="Group name" value={name} maxLength={80} onChange={(e) => setName(e.target.value)} />
           <button className="rd-btn is-primary" disabled={busy} onClick={create}>Create group with {chosen.length} people</button>
         </div>
+        {connected ? <label className="wa-check"><input type="checkbox" checked={alsoThree} onChange={(e) => setAlsoThree(e.target.checked)} /> Also create it in We Three</label> : null}
       </>}
+    </Section>
+  );
+}
+
+/** "Also keep it in We Three": shown only when We Three is connected. The sheet's name becomes a list there and the two stay the same. */
+function useWeThreeLink() {
+  const [connected, setConnected] = useState(false);
+  useEffect(() => { let live = true; getWaLink().then((l) => { if (live) setConnected(Boolean(l && l.connected)); }).catch(() => {}); return () => { live = false; }; }, []);
+  return connected;
+}
+const weThreeNote = (r) => (r && r.weThree ? ` Also in We Three${r.weThree.notLinked ? ` (${r.weThree.notLinked} numbers were already there under another list)` : ""}.` : r && r.weThreeError ? ` Could not reach We Three: ${r.weThreeError}` : "");
+
+/** A new sheet: by name, or from an Excel file where each tab can become a sheet (or several) with names you choose. */
+function NewSheet({ existing, onChanged }) {
+  const connected = useWeThreeLink();
+  const [name, setName] = useState("");
+  const [alsoThree, setAlsoThree] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [file, setFile] = useState("");
+  const [tabs, setTabs] = useState([]);                       // [{ tab, include, name, parts, people }]
+  const fileRef = useRef(null);
+  const taken = new Set(existing.map((n) => n.toLowerCase()));
+  const plan = planSheets(tabs, taken);
+  const clash = plan.some((p) => p.clash);
+
+  const createOne = async () => {
+    setBusy(true);
+    try { const r = await createWaSheet({ name: name.trim(), weThree: connected && alsoThree }); setName(""); toast.success("Sheet created." + weThreeNote(r)); await onChanged(); }
+    catch (e) { toast.error(errorMessage(e)); } finally { setBusy(false); }
+  };
+
+  const pickExcel = async (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!f) return;
+    try {
+      const XLSX = await import("xlsx");
+      const wb = XLSX.read(new Uint8Array(await f.arrayBuffer()), { type: "array" });
+      const found = wb.SheetNames.map((tab) => ({ tab, include: true, name: tab.slice(0, 80), parts: 1, people: peopleFromRows(XLSX.utils.sheet_to_json(wb.Sheets[tab], { header: 1, defval: "", raw: false })) }));
+      if (!found.some((t) => t.people.length)) return toast.error("No phone numbers found in that file. Each tab needs a column with mobile numbers.");
+      setFile(f.name); setTabs(found.map((t) => ({ ...t, include: t.people.length > 0 })));
+    } catch (err) { toast.error("We could not read that Excel file."); }
+  };
+  const setTab = (i, patch) => setTabs((cur) => cur.map((t, k) => (k === i ? { ...t, ...patch } : t)));
+
+  const createFromExcel = async () => {
+    setBusy(true);
+    let made = 0, people = 0, three = 0;
+    try {
+      for (const p of plan) {
+        const sheet = await createWaSheet({ name: p.name, weThree: connected && alsoThree });
+        made++;
+        const r = await addWaPeople(sheet.id, p.people);
+        people += r.added;
+        if (r.weThree) three++;
+      }
+      toast.success(`${made} ${made === 1 ? "sheet" : "sheets"} created with ${people} people.${three ? ` Also in We Three.` : ""} Now add their messages and pictures.`);
+      setTabs([]); setFile("");
+    } catch (err) { toast.error(`${errorMessage(err)} ${made} of ${plan.length} sheets were created before this.`); }
+    finally { setBusy(false); await onChanged(); }
+  };
+
+  return (
+    <Section title="New sheet" subtitle="Make an empty sheet, or bring in an Excel file and turn its tabs into sheets.">
+      <div className="wa-row">
+        <input className="wa-input" placeholder="Sheet name" value={name} maxLength={80} onChange={(e) => setName(e.target.value)} />
+        <button className="rd-btn is-primary" disabled={busy || !name.trim() || taken.has(name.trim().toLowerCase())} onClick={createOne}>Create sheet</button>
+        {name.trim() && taken.has(name.trim().toLowerCase()) ? <span className="wa-muted">A sheet with that name already exists.</span> : null}
+      </div>
+      {connected ? <label className="wa-check"><input type="checkbox" checked={alsoThree} onChange={(e) => setAlsoThree(e.target.checked)} /> Also create it in We Three (people and “sent” marks stay the same in both)</label> : null}
+      <div className="wa-row">
+        <input ref={fileRef} type="file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden onChange={pickExcel} />
+        <button className="rd-btn" disabled={busy} onClick={() => fileRef.current && fileRef.current.click()}>Add an Excel file (.xlsx)</button>
+        {file ? <span className="wa-muted">{file} · {tabs.length} {tabs.length === 1 ? "tab" : "tabs"}</span> : null}
+      </div>
+      {tabs.length > 0 && (
+        <div className="wa-edit" role="group" aria-label="Sheets from the Excel file">
+          <p className="wa-muted">Tick the tabs to make into sheets. Give each a name, and choose how many sheets to split it into (the people are shared out in order: “Name 1”, “Name 2”…).</p>
+          {tabs.map((t, i) => (
+            <div key={t.tab} className="wa-tab">
+              <label className="wa-check"><input type="checkbox" checked={t.include} disabled={!t.people.length} onChange={(e) => setTab(i, { include: e.target.checked })} /> <b>{t.tab}</b> <span className="wa-muted">· {t.people.length} {t.people.length === 1 ? "number" : "numbers"}</span></label>
+              {t.include && t.people.length > 0 && (
+                <div className="wa-row">
+                  <input className="wa-input" aria-label={`Name for ${t.tab}`} placeholder="Sheet name" value={t.name} maxLength={76} onChange={(e) => setTab(i, { name: e.target.value })} />
+                  <label className="wa-muted">Sheets <input className="wa-input is-short" type="number" min="1" max={Math.min(20, t.people.length)} value={t.parts} aria-label={`How many sheets from ${t.tab}`} onChange={(e) => setTab(i, { parts: Math.max(1, Math.min(Number(e.target.value) || 1, Math.min(20, t.people.length))) })} /></label>
+                </div>
+              )}
+            </div>
+          ))}
+          {plan.length > 0 && (
+            <ul className="wa-plan">
+              {plan.map((p, i) => <li key={i} className={p.clash ? "is-bad" : ""}>{p.name || "(no name)"} · {p.people.length} people{p.clash ? (p.name ? " · name already used" : " · needs a name") : ""}</li>)}
+            </ul>
+          )}
+          <div className="wa-row">
+            <button className="rd-btn is-primary" disabled={busy || !plan.length || clash} onClick={createFromExcel}>Create {plan.length} {plan.length === 1 ? "sheet" : "sheets"}</button>
+            <button className="rd-btn is-quiet" disabled={busy} onClick={() => { setTabs([]); setFile(""); }}>Cancel</button>
+          </div>
+        </div>
+      )}
     </Section>
   );
 }
@@ -351,7 +456,6 @@ export default function WhatsAppSender() {
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
   const [settings, setSettings] = useState(null);
-  const [newName, setNewName] = useState("");
   const [testPhone, setTestPhone] = useState("");
   const [testSheet, setTestSheet] = useState("");
   const [reportNums, setReportNums] = useState(null);
@@ -452,12 +556,7 @@ export default function WhatsAppSender() {
       {data.sheets.length === 0 && <Section title="No sheets yet"><p className="wa-muted">Make a sheet below, add its messages, a picture and the people to message.</p></Section>}
       {data.sheets.map((sh) => <SheetCard key={sh._id} sheet={sh} onChanged={load} />)}
 
-      <Section title="New sheet">
-        <div className="wa-row">
-          <input className="wa-input" placeholder="Sheet name" value={newName} maxLength={80} onChange={(e) => setNewName(e.target.value)} />
-          <button className="rd-btn is-primary" disabled={!newName.trim()} onClick={async () => { try { await createWaSheet({ name: newName.trim() }); setNewName(""); toast.success("Sheet created."); await load(); } catch (e) { toast.error(errorMessage(e)); } }}>Create sheet</button>
-        </div>
-      </Section>
+      <NewSheet existing={data.sheets.map((sh) => sh.name)} onChanged={load} />
 
       <ThreeLink onChanged={load} />
       <ContactsGroup onChanged={load} />
