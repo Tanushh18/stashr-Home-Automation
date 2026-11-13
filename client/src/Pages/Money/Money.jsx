@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import {
-  getExpenseSettings, saveExpenseSheet, setExpenseStorage, unlinkExpenseSheet, exportExpenseSheet, setExpenseStart, changeExpenseStart, removeUnmatchedExpenses, uploadStatementAsync, getStatementJob, postExpenseSms, requestExpenseSync, getExpenses, setExpenseCategory, reviewExpense, uploadStatement
+  getExpenseSettings, saveExpenseSheet, setExpenseStorage, unlinkExpenseSheet, exportExpenseSheet, setExpenseStart, changeExpenseStart, removeUnmatchedExpenses, uploadStatementAsync, getStatementJob, getSavedStatements, searchStatements, deleteSavedStatement, postExpenseSms, requestExpenseSync, getExpenses, setExpenseCategory, reviewExpense, uploadStatement
 } from "../../api/client";
 import { Section, Skeleton, useConfirm } from "../Render/RenderUi";
 import { errorMessage } from "../Render/renderUtils";
@@ -351,6 +351,94 @@ function TxList({ rows, categories, filter, onClear, onChanged, uncategorized })
   );
 }
 
+/* ───────── 6b. search the saved statements ───────── */
+
+function StatementSearch({ refreshKey }) {
+  const { ask, dialog } = useConfirm();
+  const [saved, setSaved] = useState(null);              // { statements, months }
+  const [q, setQ] = useState("");
+  const [month, setMonth] = useState("");
+  const [found, setFound] = useState(null);              // { total, results, searched }
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const seq = useRef(0);
+
+  const loadSaved = useCallback(async () => { try { setSaved(await getSavedStatements()); } catch (e) { setError(errorMessage(e, "Could not load your saved statements.")); } }, []);
+  useEffect(() => { loadSaved(); }, [loadSaved, refreshKey]);
+  useEffect(() => {                                       // search a moment after the last key
+    const text = q.trim();
+    if (!text) { setFound(null); setError(""); return undefined; }
+    const mine = ++seq.current;
+    const t = setTimeout(async () => {
+      setBusy(true);
+      try { const r = await searchStatements(text, month); if (mine === seq.current) { setFound(r); setError(""); } }
+      catch (e) { if (mine === seq.current) setError(errorMessage(e, "Could not search.")); }
+      finally { if (mine === seq.current) setBusy(false); }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [q, month, refreshKey]);
+
+  const remove = async (s) => {
+    if (!(await ask({ title: `Delete the saved statement "${s.filename || "statement"}"?`, message: `Its ${s.lines} saved line${s.lines === 1 ? "" : "s"} can no longer be searched. Your Money entries are not changed.`, confirmLabel: "Delete", danger: true }))) return;
+    try { await deleteSavedStatement(s.id); toast.success("Deleted."); await loadSaved(); setFound(null); setQ((x) => x); } catch (e) { toast.error(errorMessage(e, "Could not delete it.")); }
+  };
+  const has = saved && saved.statements.length > 0;
+  return (
+    <Section title="Search your saved statements" subtitle="Every statement you check is kept (encrypted) so you can look something up months later: type a name, an amount, or part of a reference number. Small spelling slips are fine.">
+      {dialog}
+      {saved && !has ? <p className="mn-dim">Nothing saved yet. Upload a statement above and its lines are kept here for searching.</p> : null}
+      {has ? (
+        <>
+          <div className="mn-row">
+            <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="e.g. ramesh · 1200 · 500-2000 · >5000 · 6131123" aria-label="Search the saved statements" />
+            <select value={month} onChange={(e) => setMonth(e.target.value)} aria-label="Only this month">
+              <option value="">All saved months</option>
+              {saved.months.map((m) => <option key={m.month} value={m.month}>{monthLabel(m.month)} ({m.lines})</option>)}
+            </select>
+          </div>
+          <p className="mn-dim">Amounts: <code>1200</code> exact, <code>500-2000</code> a range, <code>&gt;5000</code> or <code>&lt;300</code>. Mix them with a name: <code>ramesh 350</code>.</p>
+          {error ? <p className="mn-bad" role="alert">{error}</p> : null}
+          {busy && !found ? <p className="mn-dim">Searching…</p> : null}
+          {found ? (
+            found.total === 0 ? <p className="mn-dim">Nothing found in {found.searched} saved line{found.searched === 1 ? "" : "s"}. Try fewer letters of the name.</p> : (
+              <>
+                <p className="mn-dim">{found.total} found{found.total > found.results.length ? ` (showing the best ${found.results.length})` : ""}</p>
+                <div className="mn-scroll">
+                  <table className="mn-table">
+                    <thead><tr><th>Date</th><th>Details</th><th className="r">Amount</th><th className="r">Balance</th><th>Statement</th></tr></thead>
+                    <tbody>
+                      {found.results.map((x) => (
+                        <tr key={x.id}>
+                          <td>{dayLabel(x.date)}</td>
+                          <td className="mn-wrap">{x.desc}{x.ref ? <small className="mn-dim"> · {x.ref}</small> : null}</td>
+                          <td className={"r " + (x.type === "Credit" ? "mn-ok" : "")}>{x.type === "Credit" ? "+" : "−"}{inr(x.amount)}</td>
+                          <td className="r">{x.balance == null ? "" : inr(x.balance)}</td>
+                          <td className="mn-dim">{x.file}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )
+          ) : null}
+          <details className="mn-saved">
+            <summary>Saved statements ({saved.statements.length})</summary>
+            <ul className="mn-savedlist">
+              {saved.statements.map((s) => (
+                <li key={s.id}>
+                  <span><b>{s.filename || "statement"}</b> · {s.from} to {s.to} · {s.lines} line{s.lines === 1 ? "" : "s"}{s.month ? ` · matched ${monthLabel(s.month)}` : ""}</span>
+                  <button type="button" className="rd-btn rd-btn--quiet" onClick={() => remove(s)}>Delete</button>
+                </li>
+              ))}
+            </ul>
+          </details>
+        </>
+      ) : null}
+    </Section>
+  );
+}
+
 /* ───────── 6. bank statement ───────── */
 
 function StatementCard({ settings, onDone }) {
@@ -361,6 +449,9 @@ function StatementCard({ settings, onDone }) {
   const [error, setError] = useState("");
   const input = useRef(null);
   const timer = useRef(null);
+  const [month, setMonth] = useState("");                // "" = the whole statement; else YYYY-MM to match
+  const [locked, setLocked] = useState(null);            // { file, wrong } while a locked statement waits for its password
+  const [password, setPassword] = useState("");
   const doneRef = useRef(onDone);
   doneRef.current = onDone;                              // the page reloads itself with whatever onDone is now, without restarting the polling
   const last = settings.lastStatement;
@@ -390,22 +481,33 @@ function StatementCard({ settings, onDone }) {
     return () => { live = false; };
   }, [follow]);
 
+  const send = async (file, pass) => {
+    setSending(0); setError(""); setReport(null); setJob(null);
+    try {
+      const { job: j } = await uploadStatementAsync(file, (ev) => { if (ev.total) setSending(Math.round((100 * ev.loaded) / ev.total)); }, { password: pass, month });
+      setSending(null); setLocked(null); setPassword(""); setJob(j); follow(j);
+    } catch (err) {
+      setSending(null);
+      const data = err && err.response && err.response.data;
+      if (data && (data.code === "password_required" || data.code === "wrong_password")) {
+        // a locked Excel file: ask for its password (the file stays here in the page; it is sent again with the password)
+        setLocked({ file, wrong: data.code === "wrong_password" }); setPassword("");
+        return;
+      }
+      if (data && data.job) { setLocked(null); setJob(data.job); follow(data.job); setError("A statement is already being checked; showing that one."); }
+      else { setLocked(null); setError(errorMessage(err, "Could not read that statement.")); }
+    }
+  };
   const pick = async (e) => {
     const file = e.target.files && e.target.files[0];
     e.target.value = "";
     if (!file) return;
     if (file.size > 8 * 1024 * 1024) { setError("That file is bigger than 8 MB."); return; }
-    setSending(0); setError(""); setReport(null); setJob(null);
-    try {
-      const { job: j } = await uploadStatementAsync(file, (ev) => { if (ev.total) setSending(Math.round((100 * ev.loaded) / ev.total)); });
-      setSending(null); setJob(j); follow(j);
-    } catch (err) {
-      setSending(null);
-      const existing = err && err.response && err.response.data && err.response.data.job;
-      if (existing) { setJob(existing); follow(existing); setError("A statement is already being checked; showing that one."); }
-      else setError(errorMessage(err, "Could not read that statement."));
-    }
+    setLocked(null);
+    await send(file, "");
   };
+  const unlock = async (e) => { e.preventDefault(); if (locked && password) await send(locked.file, password); };
+  const monthChoices = useMemo(() => { const now = new Date(); const out = []; for (let i = 0; i < 7; i++) { const d = new Date(now.getFullYear(), now.getMonth() - i, 1); out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`); } return out; }, []);
   const r = report || last;
   const removeUnmatched = async () => {
     if (!(await ask({ title: `Delete ${r.notInStatement} entries?`, message: "Your bank statement does not have them, so they are most likely duplicates or fake messages. They will be removed.", confirmLabel: "Delete them all", danger: true }))) return;
@@ -414,6 +516,14 @@ function StatementCard({ settings, onDone }) {
   return (
     <Section title="Check against a bank statement" subtitle="Download your Federal Bank statement from net banking as Excel or CSV and upload it. The statement is treated as the truth: what it confirms takes its date, amount and name, what is missing is added, and what it does not have is set aside.">
       {dialog}
+      <div className="mn-row">
+        <label className="mn-field">Month to match
+          <select value={month} onChange={(e) => setMonth(e.target.value)} disabled={busy || Boolean(locked)} aria-label="Which month of the statement to match">
+            <option value="">Whole statement (every month in it)</option>
+            {monthChoices.map((m) => <option key={m} value={m}>{monthLabel(m)} only</option>)}
+          </select>
+        </label>
+      </div>
       <div className="mn-row">
         <input ref={input} type="file" accept=".csv,.xlsx,.xls,text/csv" onChange={pick} hidden />
         <button className="rd-btn rd-btn--primary" onClick={() => input.current && input.current.click()} disabled={busy}>{sending !== null ? `Uploading… ${sending}%` : running ? "Checking…" : "Choose a statement (.csv or .xlsx)"}</button>
@@ -425,10 +535,21 @@ function StatementCard({ settings, onDone }) {
           {running ? <p className="mn-dim">The file is safely received. The server is reading and matching it in the background; you can use the rest of Stashr or leave this page.</p> : null}
         </div>
       ) : null}
+      {locked ? (
+        <form className="mn-unlock" onSubmit={unlock} aria-label="Unlock the statement">
+          <p><b>🔒 {locked.file.name} is locked.</b> {locked.wrong ? <span className="mn-bad" role="alert">That password did not open it. Check it and try again.</span> : "Enter the password the bank gave you for this file. It is used once to open the file and is not saved."}</p>
+          <div className="mn-row">
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Statement password" autoComplete="off" autoFocus aria-label="Statement password" />
+            <button className="rd-btn rd-btn--primary" type="submit" disabled={!password || busy}>Unlock and check</button>
+            <button className="rd-btn rd-btn--quiet" type="button" onClick={() => { setLocked(null); setPassword(""); }} disabled={busy}>Cancel</button>
+          </div>
+        </form>
+      ) : null}
       {error ? <p className="mn-bad" role="alert">{error}</p> : null}
       {r ? (
         <div className="mn-report">
           <p className="mn-dim">{report ? "Result" : "Last check"}{r.from ? `: ${r.from} to ${r.to}` : ""} · {r.lines} lines</p>
+          {report && report.saved ? <p className="mn-dim">{report.saved} line{report.saved === 1 ? "" : "s"} saved, so you can search this statement later (see “Search your saved statements” below).</p> : null}
           <div className="mn-tiles">
             <div className="mn-tile is-ok"><span>Verified</span><b>{r.verified}</b></div>
             <div className={"mn-tile" + (r.mismatched ? " is-warn" : "")}><span>Amount corrected</span><b>{r.mismatched}</b></div>
@@ -531,6 +652,7 @@ export default function Money() {
   const reload = useCallback(() => { loadSettings(); if (ready) loadData(month); }, [ready, month, loadData, loadSettings]);
 
   // Refresh: show what Stashr has, and ask the phone (it alone reads the bank SMS) to look for new payments right now.
+  const [statementsAt, setStatementsAt] = useState(0);        // bumped when a statement check ends, so the saved-statement search reloads
   const [phone, setPhone] = useState({ phase: "idle", text: "" });
   const pollTimer = useRef(null);
   useEffect(() => () => clearTimeout(pollTimer.current), []);
@@ -587,7 +709,8 @@ export default function Money() {
                   <CardBoundary><TxList rows={data.rows || []} categories={categories} filter={filter} onClear={() => setFilter("")} onChanged={reload} uncategorized={data.uncategorized || 0} /></CardBoundary>
                 </>
               )}
-              <CardBoundary><StatementCard settings={settings} onDone={reload} /></CardBoundary>
+              <CardBoundary><StatementCard settings={settings} onDone={() => { setStatementsAt(Date.now()); reload(); }} /></CardBoundary>
+              <CardBoundary><StatementSearch refreshKey={statementsAt} /></CardBoundary>
               <CardBoundary><PasteCard onDone={reload} /></CardBoundary>
             </>
           ) : null}

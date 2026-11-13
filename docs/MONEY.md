@@ -44,10 +44,31 @@ date; the arrival time disagrees with the date in the text; an amount over the U
 transaction** (a message may be missing). You can mark it *genuine* or *delete* it, or let the next statement decide.
 
 ## Check with your bank statement (any time, e.g. month end)
-Download the statement from Federal net banking as **Excel or CSV** (PDF is not read) and upload it on Money. Every line is matched by
+Download the statement from Federal net banking as **Excel or CSV** (PDF is not read) and upload it on Money (a locked Excel file asks for its password). Every line is matched by
 reference (else amount and day): **Verified**, **Mismatch** (amount differs), lines the sheet missed are **added** (Source: Statement), sheet rows inside
 the statement's dates that the bank does not show are **Not in statement**, and the statement's own running balance is checked for breaks.
 A flagged row that the statement confirms becomes Verified.
+
+**Locked statements.** An Excel file protected with a password (File > Info > Protect Workbook, or one the bank sends locked) is opened by
+asking for its password on the Money page: pick the file, type the password, *Unlock and check*. A wrong password says so and lets you try
+again. The password is sent once (in a request header, never the address), used to open the file in memory and is **not stored or logged**.
+Both Excel lock types are supported (Excel 2010 and newer "Agile", and the Excel 2007 / LibreOffice "Standard"). A locked **PDF** still
+cannot be read: download the Excel or CSV version.
+
+**Month to match.** Before uploading, choose *Month to match* (the last 7 months) to use only that month's lines of the statement: only that
+month's entries are checked and corrected, and a statement with nothing in that month is explained instead of silently doing nothing.
+*Whole statement* (the default) uses every line, as before.
+
+## Search your saved statements
+Every statement you check is kept so it can be searched later (Money → *Search your saved statements*): type a name (small spelling slips are
+fine: "rmesh kumr" finds "Ramesh Kumar", "meta verify" finds "Meta Verifie"), an amount (`1200`, `₹1,200.50`), a range (`500-2000`, `>5000`,
+`<300`), part of a reference number (9 digits or more), or a name with an amount (`ramesh 350`). Filter by month, and delete a saved statement
+when you do not want it kept.
+- **What is kept:** the lines of the statement (date, text, amount, balance, reference), not the file. Each line's text, amount, balance and
+  reference are **encrypted with your account's own key**, like Money entries; only the date and month stay readable.
+- **How long:** until you delete the statement. There is no 4-month expiry on saved statements (the Money entries still follow the 4-month rule).
+- **Sheet-only mode:** the lines are still kept (encrypted) in Stashr's database, because searching needs them there. Delete a saved statement to remove them.
+- Uploading an overlapping statement again does not double the lines: shared lines move to the newest upload.
 
 ## Keeping 4 months
 Each entry stays for 4 months (120 days after its date). In **Stashr storage** the database then deletes it (a message older than 4 months

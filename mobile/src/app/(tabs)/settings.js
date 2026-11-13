@@ -203,6 +203,7 @@ export default function Settings() {
           <Section title="WORKSPACE" delay={80}>
             <Row icon="home" title="Smart home" subtitle="TV, tablet, family locations, camera, scenes and insights" onPress={() => router.push("/home")} />
             <Row icon="note" title="Money" subtitle="UPI and bank payments from your SMS, by category, in your Google Sheet" onPress={() => router.push("/money")} />
+            {profile?.features?.smartHome !== false ? <Row icon="mail" title="WhatsApp sender" subtitle="Turn sending on, see when the next message goes, sheets, pictures and every step of each message" onPress={() => router.push("/whatsapp")} /> : null}
             <Row icon="user" title="Shared with me" subtitle="Photo folders other people shared with you" onPress={() => router.push("/shared")} />
             {profile?.features?.projects !== false ? <Row icon="folder" title="Projects" subtitle="Notes, variables and deploy status for each project" onPress={() => router.push("/projects")} /> : null}
             {profile?.features?.servers !== false ? <Row icon="globe" title="Servers" subtitle="Render services: status, deploys, restart" onPress={() => router.push("/servers")} /> : null}
@@ -212,6 +213,9 @@ export default function Settings() {
             {profile?.features?.photos !== false ? <Row icon="user" title="People" subtitle="Photos grouped by face, on this phone only" onPress={() => router.push("/people")} /> : null}
             {profile?.features?.photos !== false ? <Row icon="grid" title="Photo folders" subtitle="Folders mirrored in Google Drive" onPress={() => router.push("/photo-folders")} /> : null}
             {profile?.features?.photos !== false ? <Row icon="image" title="Albums" subtitle="Collections across your accounts" onPress={() => router.push("/albums")} /> : null}
+            {profile?.isAdmin ? <Row icon="download" title="App updates" subtitle="Which devices are offered each new app version" onPress={() => router.push("/app-updates")} /> : null}
+            {profile?.features?.adminPanel ? <Row icon="user" title="Admin" subtitle="Users and which features each person sees" onPress={() => router.push("/admin")} /> : null}
+            <Row icon="download" title="Apps" subtitle="Download or update Stashr Hub, TV, Location and Cast" onPress={() => router.push("/apps")} />
             {profile?.isAdmin ? <Row icon="settings" title="Server URLs" subtitle="Backend addresses and environment sync" onPress={() => router.push("/server-urls")} /> : null}
           </Section>
 

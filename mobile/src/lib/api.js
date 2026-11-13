@@ -161,11 +161,11 @@ export async function request(path, options = {}) {
   throw err;
 }
 
-async function onceBytes(base, path, bytes, timeout) {
+async function onceBytes(base, path, bytes, timeout, extra = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
   try {
-    const headers = { Accept: "application/json", "X-Client": "mobile", "Content-Type": "application/octet-stream" };
+    const headers = { Accept: "application/json", "X-Client": "mobile", "Content-Type": "application/octet-stream", ...extra };
     if (token) headers.Authorization = `Bearer ${token}`;
     const res = await fetch(`${base}${path}`, { method: "POST", headers, body: bytes, credentials: "include", signal: controller.signal });
     const text = await res.text();
@@ -180,11 +180,11 @@ async function onceBytes(base, path, bytes, timeout) {
 }
 
 /** POST raw bytes (a bank statement) with the same server fail-over as request(). */
-export async function requestBytes(path, bytes, { timeout = 90000 } = {}) {
+export async function requestBytes(path, bytes, { timeout = 90000, headers } = {}) {
   let last = null;
   for (let tries = 0; tries < SERVERS.length; tries += 1) {
     const index = (active + tries) % SERVERS.length;
-    const res = await onceBytes(SERVERS[index], path, bytes, timeout);
+    const res = await onceBytes(SERVERS[index], path, bytes, timeout, headers);
     last = res;
     if (!isDown(res.status)) {
       active = index;

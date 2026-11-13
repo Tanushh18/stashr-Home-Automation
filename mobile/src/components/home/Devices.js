@@ -12,6 +12,29 @@ const APPS = [["Netflix", "com.netflix.ninja"], ["Prime Video", "com.amazon.amaz
 const tone = (state) => (state === "on" ? "ok" : state === "standby" || state === "idle" ? "warn" : "mute");
 
 /** Rename or remove a device. */
+/** Merge a device that was linked again under another name into the one you keep: its history, places and trail move over, then it is removed. */
+function MergeInto({ device, reload }) {
+  const act = useAct();
+  const [open, setOpen] = useState(false);
+  const [others, setOthers] = useState(null);
+  const show = async () => {
+    setOpen(true);
+    try { const r = await home.devices(); setOthers((r.devices || []).filter((d) => d.id !== device.id && d.kind === device.kind && !d.viaHub)); } catch (e) { setOthers([]); }
+  };
+  if (!open) return <Btn label="Merge into…" onPress={show} />;
+  return (
+    <View style={{ gap: 6 }}>
+      <Dim>{`Keep which one? "${device.name}" is removed and everything recorded for it moves to the one you pick (it keeps its own name).`}</Dim>
+      {others === null ? <Dim>Loading…</Dim> : others.length === 0 ? <Dim>There is no other {device.kind === "phone" ? "phone" : device.kind === "tv" ? "TV" : "tablet"} to merge into.</Dim> : others.map((o) => (
+        <Btn key={o.id} label={`${o.name} (${o.online ? "online" : "offline"})`} onPress={async () => {
+          if (await ask(`Merge "${device.name}" into "${o.name}"?`, `Everything recorded for "${device.name}" (history, places, trail, room samples) moves to "${o.name}". Then "${device.name}" is removed. This cannot be undone.`, "Merge", true) && await act(() => home.mergeDevice(device.id, o.id), "Merged.")) { setOpen(false); reload(); }
+        }} />
+      ))}
+      <Btn label="Cancel" onPress={() => setOpen(false)} />
+    </View>
+  );
+}
+
 function DeviceMenu({ device, reload }) {
   const act = useAct();
   const [open, setOpen] = useState(false);
@@ -25,6 +48,7 @@ function DeviceMenu({ device, reload }) {
         <Btn label="Remove device" kind="danger" onPress={async () => { if (await ask(`Remove ${device.name}?`, "It stops reporting. Link it again with the code to bring it back.", "Remove", true) && await act(() => home.removeDevice(device.id), "Removed.")) reload(); }} />
         <Btn label="Close" onPress={() => setOpen(false)} />
       </Row>
+      <MergeInto device={device} reload={reload} />
     </View>
   );
 }
@@ -185,6 +209,7 @@ function PhonesCard({ phones, reload }) {
               <Btn label="Save" onPress={async () => { if (await act(() => home.setPerson(p.id, (who[p.id] ?? p.person ?? "").trim()), "Saved.")) reload(); }} />
               <Btn label="Remove" kind="danger" onPress={async () => { if (await ask(`Remove ${p.name}?`, "The phone stops reporting.", "Remove", true) && await act(() => home.removeDevice(p.id), "Removed.")) reload(); }} />
             </Row>
+            <MergeInto device={p} reload={reload} />
           </View>
         );
       })}
@@ -229,6 +254,7 @@ function LocationsCard({ settings, save }) {
           <Txt bold>{p.state === "coming" ? "🚗" : p.state === "home" ? "🏠" : "📍"} {p.name}</Txt>
           <Dim>{whereText(p)}{p.battery?.pct != null ? ` · battery ${p.battery.pct}%${p.battery.charging ? " (charging)" : ""}` : ""}{p.lastSeen ? ` · updated ${ago(p.lastSeen)}` : ""}{p.app === "Stashr Hub" ? " · via Stashr Hub" : ""}</Dim>
           <Btn label="Disconnect" kind="danger" onPress={async () => { if (await ask(`Disconnect ${p.name}?`, "Their phone stops being tracked here. They can link again with the code.", "Disconnect", true) && await act(() => home.removeDevice(p.id), "Disconnected.")) reload(); }} />
+          <MergeInto device={{ id: p.id, name: p.name, kind: "phone" }} reload={reload} />
         </View>
       )) : <Dim>No phone is linked yet.</Dim>}
     </Box>

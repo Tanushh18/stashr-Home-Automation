@@ -10,7 +10,7 @@ const ex = require("./expenses");
  * truth), write the changes in small batches and add what the messages missed. `progress({ stage, text, pct })` says how far it is.
  * Throws an Error with .status 400 and a plain message when the file is not usable.
  */
-async function processStatement({ s, st, copy, bytes, rules = [], cutoff = "", saveSummary = async () => {}, progress = () => {} }) {
+async function processStatement({ s, st, copy, bytes, rules = [], cutoff = "", month = "", saveSummary = async () => {}, saveLines = async () => {}, progress = () => {} }) {
     const bad = (message) => Object.assign(new Error(message), { status: 400 });
     progress({ stage: "reading", text: "Reading the statement…", pct: 8 });
     let table;
@@ -18,6 +18,13 @@ async function processStatement({ s, st, copy, bytes, rules = [], cutoff = "", s
     catch (e) { throw bad(e.message || "Could not read that file."); }
     let stmt;
     try { stmt = ex.statementRows(table); } catch (e) { throw bad(e.message); }
+    // the month the owner chose to match: only that month's lines are used (and saved), so only that month's entries are checked and corrected
+    if (month) {
+        const all = stmt;
+        stmt = stmt.filter((x) => x.date.slice(0, 7) === month);
+        if (!stmt.length) throw bad(`This statement has no transactions in ${month}` + (all.length ? ` (it covers ${all[0].date} to ${all[all.length - 1].date}). Pick another month, or choose the whole statement.` : "."));
+    }
+    const everyLine = stmt;                                   // what is kept for searching later, before the start date and the 4-month rule cut it
     // only as much of the statement as the limits allow: the start date, and (Stashr storage) the 4-month rule
     const limited = ex.limitStatement(stmt, { startDate: s.startDate, cutoff, keepsOld: st.keepsOld });
     stmt = limited.kept;
@@ -53,6 +60,8 @@ async function processStatement({ s, st, copy, bytes, rules = [], cutoff = "", s
     report.skipped = { beforeStart: limited.beforeStart, tooOld: limited.tooOld, startDate: s.startDate || "", cutoff: st.keepsOld ? "" : cutoff };
         const summary = { at: new Date().toISOString(), skipped: report.skipped, from: report.from, to: report.to, lines: report.lines, verified: report.verified, mismatched: report.mismatched, added: report.added, renamed: report.renamed, notInStatement: report.notInStatement, months: report.months, allMonthsMatch: report.allMonthsMatch, closingBalance: report.closingBalance, balanceBreakCount: report.balanceBreakCount };
     await saveSummary(summary);
+    try { await saveLines({ lines: everyLine, month }); report.saved = everyLine.length; }
+    catch (e) { console.error("[expenses] could not keep the statement lines for searching:", e && e.message); report.saved = 0; }
     return { report };
 }
 
