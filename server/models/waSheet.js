@@ -5,6 +5,7 @@ const waSheetSchema = new mongoose.Schema({
     owner: { type: mongoose.Schema.Types.ObjectId, required: true, index: true },
     name: { type: String, required: true, trim: true, maxlength: 80 },
     source: { type: String, enum: ["leads", "contacts", "manual"], default: "manual" },
+    weThree: { type: Boolean, default: false },                    // the sheet also lives in We Three: people and "sent" marks are kept the same in both
     enabled: { type: Boolean, default: false },                   // a new or imported sheet sends nothing until it is switched on here
     dailyLimit: { type: Number, default: 0, min: 0, max: 60 },    // 0: only the account limit applies
     texts: { type: [String], default: [] },                        // one is picked at random for each message

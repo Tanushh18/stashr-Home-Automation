@@ -130,7 +130,10 @@ router.post("/wa/sheets", authenticate, writeLimiter, async (req, res) => {
         const doc = { owner, name, source: ["leads", "contacts", "manual"].includes(b.source) ? b.source : "manual", dailyLimit: clamp(b.dailyLimit, 0, 60, 0), texts: cleanTexts(b.texts) };
         if (b.image) { const c = cleanImage(b.image); doc.images = [{ data: c.image, mime: c.imageType }]; }
         const sheet = await WaSheet.create(doc);
-        res.status(201).json({ id: sheet._id });
+        // "Also create it in We Three": the sheet's name becomes a We Three list. A failure there does not undo the Stashr sheet.
+        let weThree = null, weThreeError = "";
+        if (b.weThree === true) { try { weThree = await waLeads.pushSheet(owner, sheet._id); } catch (e) { weThreeError = e.message; } }
+        res.status(201).json(b.weThree === true ? { id: sheet._id, weThree, weThreeError } : { id: sheet._id });
     } catch (e) { if (e && e.code === 11000) return res.status(409).json({ error: "A sheet with that name already exists." }); fail(res, e, "Could not create the sheet."); }
 });
 
@@ -216,7 +219,7 @@ router.post("/wa/sheets/:id/recipients", authenticate, writeLimiter, async (req,
     try {
         if (!validId(req.params.id)) return res.status(404).json({ error: "Sheet not found." });
         const owner = req.rootUser._id;
-        const sheet = await WaSheet.findOne({ _id: req.params.id, owner }).select("_id").lean();
+        const sheet = await WaSheet.findOne({ _id: req.params.id, owner }).select("_id weThree").lean();
         if (!sheet) return res.status(404).json({ error: "Sheet not found." });
         const list = Array.isArray(req.body && req.body.recipients) ? req.body.recipients.slice(0, MAX_IMPORT) : [];
         let invalid = 0;
@@ -235,8 +238,19 @@ router.post("/wa/sheets/:id/recipients", authenticate, writeLimiter, async (req,
             try { const out = await WaRecipient.insertMany(rows, { ordered: false }); added = out.length; }
             catch (e) { added = (e.insertedDocs || []).length || (e.result && e.result.insertedCount) || 0; if (!(e && (e.code === 11000 || e.writeErrors))) throw e; }
         }
-        res.json({ added, duplicates: rows.length - added, invalid, total: list.length });
+        // A sheet that lives in We Three too gets the new people there right away (the sweep retries if that fails).
+        let weThree = null, weThreeError = "";
+        if (sheet.weThree && added) { try { weThree = await waLeads.pushSheet(owner, sheet._id); } catch (e) { weThreeError = e.message; } }
+        res.json({ added, duplicates: rows.length - added, invalid, total: list.length, ...(sheet.weThree ? { weThree, weThreeError } : {}) });
     } catch (e) { fail(res, e, "Could not add the people."); }
+});
+
+// Puts an existing sheet in We Three as well (its name becomes a list there) and keeps the two the same from now on.
+router.post("/wa/sheets/:id/we-three", authenticate, writeLimiter, async (req, res) => {
+    try {
+        if (!validId(req.params.id)) return res.status(404).json({ error: "Sheet not found." });
+        res.json(await waLeads.pushSheet(req.rootUser._id, req.params.id));
+    } catch (e) { fail(res, e, "Could not send the sheet to We Three."); }
 });
 
 // For testing: puts every person of a sheet back in line (sent, failed and skipped become pending) so the same test number can be messaged again.

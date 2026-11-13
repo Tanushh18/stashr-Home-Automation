@@ -23,7 +23,7 @@ const WaLink = require("../models/waLink");
 const sender = require("../utils/waSender");
 
 /* A tiny stand-in for the We Three server. */
-let fake, fakeUrl, valid, marks, patchStatus, refreshes, leadsOverride = null;
+let fake, fakeUrl, valid, marks, patchStatus, refreshes, leadsOverride = null, weLists = [], weLeads = [];
 const leadsFor = () => [
     { id: "l1", name: "Ravi Kumar", phone: "+919810000001", archived: false, whatsappSentAt: null },
     { id: "l2", name: "Done Already", phone: "9810000002", archived: false, whatsappSentAt: "2026-11-01T00:00:00Z" },
@@ -50,6 +50,21 @@ beforeAll(async () => {
         const token = (req.headers.authorization || "").replace("Bearer ", "");
         if (!valid.has(token)) return send(res, 401, { error: "Unauthorized" });
         if (req.method === "GET" && url.pathname === "/leads/origins") return send(res, 200, { origins: [{ name: "Test", count: 5, sent: 1 }, { name: "Calling data", count: 1993, sent: 153 }] });
+        if (req.method === "POST" && url.pathname === "/leads/lists") { weLists.push(body.name); return send(res, weLists.filter((n) => n === body.name).length > 1 ? 200 : 201, { name: body.name, created: true }); }
+        if (req.method === "POST" && url.pathname === "/leads/import") {
+            let added = 0, existing = 0, invalid = 0;
+            for (const c of body.contacts || []) {
+                const ph = String(c.phone || "").replace(/\D/g, "").slice(-10);
+                if (ph.length !== 10) { invalid++; continue; }
+                if (weLeads.some((l) => l.phone === ph)) { existing++; continue; }
+                weLeads.push({ id: "n" + (weLeads.length + 1), name: c.name, phone: ph, origin: body.list, archived: false, whatsappSentAt: null }); added++;
+            }
+            return send(res, 201, { added, existing, invalid });
+        }
+        if (req.method === "GET" && url.pathname === "/leads" && weLeads.some((l) => l.origin === url.searchParams.get("origin"))) {
+            const mine = weLeads.filter((l) => l.origin === url.searchParams.get("origin")), page = Number(url.searchParams.get("page"));
+            return send(res, 200, { leads: mine.slice((page - 1) * 2, page * 2), totalPages: Math.max(1, Math.ceil(mine.length / 2)) });
+        }
         if (req.method === "GET" && url.pathname === "/leads") {
             if (url.searchParams.get("origin") !== "Test") return send(res, 200, { leads: [], totalPages: 1 });
             const page = Number(url.searchParams.get("page")), all = leadsOverride || leadsFor();
@@ -67,7 +82,7 @@ beforeAll(async () => {
 });
 afterAll(async () => { fake.close(); await mongoose.disconnect(); await mongo.stop(); });
 beforeEach(async () => {
-    valid = new Set(); marks = []; patchStatus = 200; refreshes = 0;
+    valid = new Set(); marks = []; patchStatus = 200; refreshes = 0; weLists = []; weLeads = [];
     for (const M of [User, HomeDevice, HomeClaim, WaSettings, WaSheet, WaRecipient, WaSend, WaLink]) await M.deleteMany({});
 });
 
@@ -204,5 +219,79 @@ describe("the We Three link", () => {
         await request(app).delete("/wa/threads").set(auth);
         expect(await WaLink.countDocuments({})).toBe(0);
         expect((await request(app).get("/wa/threads/origins").set(auth)).status).toBe(409);
+    });
+});
+
+describe("sheets that live in Stashr and We Three both", () => {
+    const people = (...nums) => nums.map((n, i) => ({ name: "P" + (i + 1), phone: n }));
+
+    test("a new sheet made with 'also in We Three' becomes a We Three list; its people go there and are linked by number", async () => {
+        const { auth } = await linked();
+        const made = await request(app).post("/wa/sheets").set(auth).send({ name: "Mine", weThree: true });
+        expect(made.status).toBe(201);
+        expect(weLists).toEqual(["Mine"]);
+        expect(made.body.weThree).toMatchObject({ sent: 0 });
+        const add = await request(app).post(`/wa/sheets/${made.body.id}/recipients`).set(auth).send({ recipients: people("9810000011", "9810000012", "9810000013") });
+        expect(add.body).toMatchObject({ added: 3 });
+        expect(add.body.weThree).toMatchObject({ sent: 3, added: 3, linked: 3, notLinked: 0 });
+        expect(weLeads.map((l) => [l.origin, l.phone])).toEqual([["Mine", "9810000011"], ["Mine", "9810000012"], ["Mine", "9810000013"]]);
+        const rows = await WaRecipient.find({ sheet: made.body.id }).sort({ order: 1 }).lean();
+        expect(rows.map((r) => r.externalId)).toEqual(["n1", "n2", "n3"]);
+        expect((await WaSheet.findById(made.body.id).lean()).weThree).toBe(true);
+    });
+
+    test("a person messaged from Stashr gets the mark on the right We Three lead", async () => {
+        const { auth, o } = await linked();
+        const made = await request(app).post("/wa/sheets").set(auth).send({ name: "Mine", weThree: true });
+        await request(app).post(`/wa/sheets/${made.body.id}/recipients`).set(auth).send({ recipients: people("9810000011", "9810000012") });
+        await WaRecipient.updateOne({ sheet: made.body.id, phone: "919810000012" }, { $set: { status: "sent" } });
+        expect(await require("../utils/waLeads").writeBack(o, 10)).toBe(1);
+        expect(marks.map((m) => m.id)).toEqual(["n2"]);
+    });
+
+    test("adding more people later sends only the new ones, and a number We Three already has elsewhere is reported, not duplicated", async () => {
+        const { auth } = await linked();
+        weLeads.push({ id: "x1", name: "Elsewhere", phone: "9810000099", origin: "Other list", archived: false, whatsappSentAt: null });
+        const made = await request(app).post("/wa/sheets").set(auth).send({ name: "Mine", weThree: true });
+        await request(app).post(`/wa/sheets/${made.body.id}/recipients`).set(auth).send({ recipients: people("9810000011") });
+        const more = await request(app).post(`/wa/sheets/${made.body.id}/recipients`).set(auth).send({ recipients: people("9810000012", "9810000099") });
+        expect(more.body.weThree).toMatchObject({ sent: 2, added: 1, existing: 1, linked: 1, notLinked: 1 });
+        expect(weLeads.filter((l) => l.origin === "Mine").length).toBe(2);
+    });
+
+    test("an old sheet can be sent to We Three with one call, and a sheet without the link says so", async () => {
+        const auth = await signUp();
+        const sheet = await request(app).post("/wa/sheets").set(auth).send({ name: "Old" });
+        expect((await request(app).post(`/wa/sheets/${sheet.body.id}/we-three`).set(auth)).status).toBe(409);
+        const { auth: a2 } = await linked();
+        const s2 = await request(app).post("/wa/sheets").set(a2).send({ name: "Old2" });
+        await request(app).post(`/wa/sheets/${s2.body.id}/recipients`).set(a2).send({ recipients: people("9810000021") });
+        expect(weLists).toEqual([]);
+        const r = await request(app).post(`/wa/sheets/${s2.body.id}/we-three`).set(a2);
+        expect(r.status).toBe(200);
+        expect(r.body).toMatchObject({ sent: 1, linked: 1 });
+        expect(weLists).toEqual(["Old2"]);
+    });
+
+    test("a failing We Three does not stop the Stashr sheet or its people from being saved", async () => {
+        const auth = await signUp();
+        const made = await request(app).post("/wa/sheets").set(auth).send({ name: "Mine", weThree: true });    // not linked: the push fails
+        expect(made.status).toBe(201);
+        expect(made.body.weThreeError).toMatch(/Connect We Three/);
+        const add = await request(app).post(`/wa/sheets/${made.body.id}/recipients`).set(auth).send({ recipients: people("9810000011") });
+        expect(add.body.added).toBe(1);
+    });
+
+    test("the sweep sends new people to We Three and brings new We Three leads of the same list to Stashr", async () => {
+        const { auth, o } = await linked();
+        const made = await request(app).post("/wa/sheets").set(auth).send({ name: "Mine", weThree: true });
+        await request(app).post(`/wa/sheets/${made.body.id}/recipients`).set(auth).send({ recipients: people("9810000011") });
+        weLeads.push({ id: "n9", name: "Added in We Three", phone: "9810000055", origin: "Mine", archived: false, whatsappSentAt: null });
+        await WaRecipient.create({ owner: o, sheet: made.body.id, name: "Late", phone: "919810000066", order: 99 });     // e.g. added when We Three was down
+        const out = await require("../utils/waLeads").syncLinked(o, sender.normalizePhone, Date.now(), true);
+        expect(out).toMatchObject({ pushed: 1, pulled: 1, errors: 0 });
+        expect((await WaRecipient.find({ sheet: made.body.id }).lean()).map((r) => r.phone).sort()).toEqual(["919810000011", "919810000055", "919810000066"]);
+        expect(weLeads.some((l) => l.phone === "9810000066" && l.origin === "Mine")).toBe(true);
+        expect((await require("../utils/waLeads").syncLinked(o, sender.normalizePhone)).skipped).toBe(true);           // not again within 10 minutes
     });
 });

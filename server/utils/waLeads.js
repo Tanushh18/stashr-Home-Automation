@@ -106,7 +106,8 @@ async function importSheet(owner, origin, normalizePhone) {
     const name = String(origin || "").trim().slice(0, 80);
     if (!name) { const e = new Error("Choose a sheet."); e.status = 400; throw e; }
     let sheet = await WaSheet.findOne({ owner, name });
-    if (!sheet) sheet = await WaSheet.create({ owner, name, source: "leads" });
+    if (!sheet) sheet = await WaSheet.create({ owner, name, source: "leads", weThree: true });
+    else if (!sheet.weThree) await WaSheet.updateOne({ _id: sheet._id }, { $set: { weThree: true } });
     const last = await WaRecipient.findOne({ owner, sheet: sheet._id }).sort({ order: -1 }).select("order").lean();
     let order = (last && last.order) || 0, seen = 0, skippedSent = 0, invalid = 0, added = 0, dup = 0;
     const doneInThree = [];                                       // leads already marked in We Three: never messaged from here
@@ -139,6 +140,79 @@ async function importSheet(owner, origin, normalizePhone) {
     return { sheetId: sheet._id, name, seen, added, duplicates: dup, alreadySent: skippedSent, invalid, closed };
 }
 
+const CHUNK = 2000;                                           // We Three takes up to 2000 contacts per import
+const last10 = (p) => String(p || "").replace(/\D/g, "").slice(-10);
+const cleanFail = (r, what) => { const e = new Error((r.json && r.json.error) || `We Three answered HTTP ${r.status} (${what})`); e.status = 502; return e; };
+
+/**
+ * Makes a Stashr sheet exist in We Three too. The sheet's name becomes a We Three list; the people who are not there yet are added
+ * to it; then each person is matched to its We Three lead by number, so the "sent" marks go back to the right lead (the same way a
+ * sheet imported from We Three works). A number We Three already has under another list stays there: it is counted in `notLinked`.
+ * Safe to run again: only the people without a We Three lead are sent.
+ */
+async function pushSheet(owner, sheetId) {
+    const sheet = await WaSheet.findOne({ _id: sheetId, owner });
+    if (!sheet) { const e = new Error("Sheet not found."); e.status = 404; throw e; }
+    if (!(await WaLink.exists({ owner }))) { const e = new Error("Connect We Three first."); e.status = 409; throw e; }
+    const made = await call(owner, "POST", "/leads/lists", { name: sheet.name });
+    if (made.status !== 200 && made.status !== 201) throw cleanFail(made, "list");
+    const todo = await WaRecipient.find({ owner, sheet: sheet._id, externalId: "" }).sort({ order: 1 }).select("name phone").lean();
+    let added = 0, existing = 0, invalid = 0;
+    for (let i = 0; i < todo.length; i += CHUNK) {
+        const r = await call(owner, "POST", "/leads/import", { list: sheet.name, contacts: todo.slice(i, i + CHUNK).map((p) => ({ name: p.name, phone: p.phone })) });
+        if (r.status !== 200 && r.status !== 201) throw cleanFail(r, "import");
+        added += Number(r.json.added) || 0; existing += Number(r.json.existing) || 0; invalid += Number(r.json.invalid) || 0;
+    }
+    const linked = await linkLeads(owner, sheet);
+    if (!sheet.weThree) await WaSheet.updateOne({ _id: sheet._id }, { $set: { weThree: true } });
+    const notLinked = await WaRecipient.countDocuments({ owner, sheet: sheet._id, externalId: "" });
+    // People who were already messaged in Stashr get their mark in We Three now (done before answering, so it cannot overlap another sweep).
+    if (linked && await WaRecipient.exists({ owner, sheet: sheet._id, externalId: { $ne: "" }, markedAt: { $exists: false }, status: { $in: ["sent", "skipped"] } })) await writeBack(owner, 50);
+    return { sheetId: sheet._id, name: sheet.name, sent: todo.length, added, existing, invalid, linked, notLinked };
+}
+
+/** Gives every person of the sheet who has no We Three lead yet the id of the lead with the same number (the last 10 digits). */
+async function linkLeads(owner, sheet) {
+    const open = await WaRecipient.find({ owner, sheet: sheet._id, externalId: "" }).select("phone status").lean();
+    if (!open.length) return 0;
+    const byPhone = new Map(open.map((p) => [last10(p.phone), p]));
+    const ops = [];
+    for (let page = 1; page <= MAX_PAGES; page++) {
+        const r = await call(owner, "GET", `/leads?page=${page}&limit=${PAGE}&status=all&origin=${encodeURIComponent(sheet.name)}`);
+        if (r.status !== 200) throw cleanFail(r, "leads");
+        for (const l of r.json.leads || []) {
+            const p = byPhone.get(last10(l.phone));
+            if (!p) continue;
+            const set = { externalId: String(l.id) };
+            if (l.whatsappSentAt && p.status === "pending") Object.assign(set, { status: "skipped", error: "Already messaged in We Three", markedAt: new Date(0) });
+            ops.push({ updateOne: { filter: { _id: p._id }, update: { $set: set } } });
+            byPhone.delete(last10(l.phone));
+        }
+        if (!(r.json.leads || []).length || page >= (r.json.totalPages || 1)) break;
+    }
+    if (ops.length) await WaRecipient.bulkWrite(ops, { ordered: false });
+    return ops.length;
+}
+
+const lastSync = new Map();                                    // owner -> time of the last two-way sweep
+/**
+ * Keeps the sheets that live in both places the same: people added in Stashr go to We Three, and leads added to the same list in
+ * We Three come to Stashr. Runs at most every 10 minutes per account; one failing sheet does not stop the others.
+ */
+async function syncLinked(owner, normalizePhone, now = Date.now(), force = false) {
+    if (!force && now - (lastSync.get(String(owner)) || 0) < 10 * 60 * 1000) return { skipped: true };
+    lastSync.set(String(owner), now);
+    if (!(await WaLink.exists({ owner }))) return { skipped: true };
+    const out = { pushed: 0, pulled: 0, errors: 0 };
+    for (const sheet of await WaSheet.find({ owner, weThree: true }).select("_id name").lean()) {
+        try {
+            if (await WaRecipient.exists({ owner, sheet: sheet._id, externalId: "" })) out.pushed += (await pushSheet(owner, sheet._id)).sent;
+            out.pulled += (await importSheet(owner, sheet.name, normalizePhone)).added;
+        } catch (e) { out.errors++; console.log("[wa] We Three sync failed for", sheet.name + ":", e.message); }
+    }
+    return out;
+}
+
 /** Writes one lead's WhatsApp mark to We Three. Returns true when We Three accepted it. */
 async function markLead(owner, externalId, templateName) {
     const r = await call(owner, "PATCH", `/leads/${encodeURIComponent(externalId)}`, { whatsappSent: true, whatsappTemplateName: String(templateName || "Stashr").slice(0, 80) });
@@ -164,4 +238,4 @@ async function writeBack(owner, limit = 10) {
     return done;
 }
 
-module.exports = { seal, unseal, connect, disconnect, statusOf, origins, importSheet, markLead, writeBack, call, NO_WHATSAPP_NOTE };
+module.exports = { seal, unseal, connect, disconnect, statusOf, origins, importSheet, pushSheet, syncLinked, markLead, writeBack, call, NO_WHATSAPP_NOTE };

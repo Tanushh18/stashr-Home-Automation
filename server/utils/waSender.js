@@ -281,6 +281,7 @@ async function tickAll(now = Date.now()) {
     // Marks that did not reach We Three yet are tried again, whether or not the sender is on.
     for (const owner of await WaLink.distinct("owner")) {
         try { await waLeads.writeBack(owner); } catch (e) { console.log("[wa] write-back failed:", e.message); }
+        try { await waLeads.syncLinked(owner, normalizePhone); } catch (e) { console.log("[wa] We Three sync failed:", e.message); }
     }
 }
 
