@@ -233,3 +233,53 @@ export function healthReport(devices, now = Date.now()) {
   }
   return lines.join("\n");
 }
+
+/** "4.2 MB/s" or "380 KB/s"; "" when there is no speed to show. */
+export function fmtSpeed(bps) {
+  const v = Number(bps);
+  if (!Number.isFinite(v) || v <= 0) return "";
+  return v >= 1e6 ? (v / 1e6).toFixed(1) + " MB/s" : Math.max(1, Math.round(v / 1e3)) + " KB/s";
+}
+
+/** "2 h 5 min", "12 min", "40 s" from milliseconds; "" for nothing usable. */
+export function fmtDuration(ms) {
+  const v = Number(ms);
+  if (!Number.isFinite(v) || v <= 0) return "";
+  const s = Math.round(v / 1000);
+  if (s < 60) return s + " s";
+  const m = Math.round(s / 60);
+  if (m < 60) return m + " min";
+  const h = Math.floor(m / 60);
+  return h + " h" + (m % 60 ? " " + (m % 60) + " min" : "");
+}
+
+/** "13 Nov, 21:37" in the viewer's time zone; "" when there is no time. */
+export function fmtClock(ms) {
+  const v = Number(ms);
+  if (!Number.isFinite(v) || v <= 0) return "";
+  const d = new Date(v);
+  return d.toLocaleDateString(undefined, { day: "numeric", month: "short" }) + ", " + d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
+export const DOWNLOAD_LABEL = { waiting: "Waiting", downloading: "Downloading", done: "Done", failed: "Failed" };
+
+/**
+ * The TV's movie downloads for the website, newest first: how much is here, the status, when it started, the speed,
+ * and for a running one the time left. `status.sync.items` is what the TV reports.
+ */
+export function downloadRows(status, now = Date.now()) {
+  const items = status && status.sync && Array.isArray(status.sync.items) ? status.sync.items : [];
+  const rank = { downloading: 0, waiting: 1, failed: 2, done: 2 };
+  return items
+    .filter((t) => t && typeof t.name === "string")
+    .map((t) => {
+      const size = Number(t.size) || 0, done = Math.min(Number(t.done) || 0, size || Infinity);
+      const pct = size > 0 ? Math.min(100, Math.round((100 * done) / size)) : Number(t.pct) || 0;
+      const speed = Number(t.speedBps) || 0;
+      const running = t.status === "downloading";
+      const left = running && speed > 0 && size > done ? ((size - done) / speed) * 1000 : 0;
+      const took = t.status === "done" && t.startedAt && t.finishedAt ? t.finishedAt - t.startedAt : 0;
+      return { name: t.name, status: DOWNLOAD_LABEL[t.status] ? t.status : "waiting", size, done, pct, speed, startedAt: Number(t.startedAt) || 0, finishedAt: Number(t.finishedAt) || 0, left, took, error: String(t.error || "") };
+    })
+    .sort((a, b) => (rank[a.status] - rank[b.status]) || ((b.finishedAt || b.startedAt) - (a.finishedAt || a.startedAt)));
+}

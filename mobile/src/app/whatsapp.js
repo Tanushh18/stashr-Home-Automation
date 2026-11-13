@@ -5,7 +5,7 @@ import * as DocumentPicker from "expo-document-picker";
 import { Page, Loading, Note, Heading } from "../components/kit";
 import { Box, Btn, Dim, Good, Bad, Txt, Row, Input, Toggle, Boundary, ask, usePoll, useAct } from "../components/home/h";
 import { wa, peopleFromLines, textsToBox, boxToTexts, nextText, STEP_MARK, WHO } from "../lib/waApi";
-import { contactsFromFile } from "../lib/waContacts";
+import { contactsFromFile, filterContacts } from "../lib/waContacts";
 import { STARTER_QUOTES } from "../lib/waStarter";
 import { useTheme } from "../lib/theme";
 
@@ -121,10 +121,48 @@ function TestSend({ sheets, reload }) {
   );
 }
 
+/** The people found in a contacts file: a search box, tick / untick what the search shows, one switch per person. */
+function ContactsList({ rows, picked, setPicked }) {
+  const [q, setQ] = useState("");
+  const shown = filterContacts(rows, q);
+  const searching = Boolean(q.trim());
+  const ticked = rows.filter((r) => picked[r.phone]).length;
+  const setShown = (v) => setPicked(searching ? { ...picked, ...Object.fromEntries(shown.map((r) => [r.phone, v])) } : v ? Object.fromEntries(rows.map((r) => [r.phone, true])) : {});
+  return (
+    <>
+      <Input value={q} onChangeText={setQ} placeholder="Search name or number" autoCapitalize="none" autoCorrect={false} />
+      <Row>
+        <Btn label={searching ? "Tick these" : "Tick all"} onPress={() => setShown(true)} />
+        <Btn label={searching ? "Untick these" : "Untick all"} onPress={() => setShown(false)} />
+        <Dim>{ticked} of {rows.length} ticked{searching ? ` · ${shown.length} shown` : ""}</Dim>
+      </Row>
+      {shown.length === 0 ? <Dim>Nobody matches “{q}”.</Dim> : null}
+      {shown.slice(0, 200).map((r) => <Toggle key={r.phone} label={r.name || "No name"} hint={`+${r.phone}`} value={Boolean(picked[r.phone])} onChange={(v) => setPicked({ ...picked, [r.phone]: v })} />)}
+      {shown.length > 200 ? <Dim>Showing the first 200 of {shown.length}. Search to narrow it down; Tick all still includes everyone shown.</Dim> : null}
+    </>
+  );
+}
+
+/** Picks a contacts file (CSV or vCard) and returns its people, or null (the error is shown by `act`). */
+async function pickContacts(act) {
+  try {
+    const res = await DocumentPicker.getDocumentAsync({ type: ["text/csv", "text/comma-separated-values", "text/vcard", "text/x-vcard", "*/*"], copyToCacheDirectory: true });
+    if (res.canceled || !res.assets || !res.assets[0]) return null;
+    const a = res.assets[0];
+    const { File } = require("expo-file-system");
+    const list = contactsFromFile(await new File(a.uri).text(), a.name || "");
+    if (!list.length) { await act(async () => { throw new Error("No phone numbers found. Export from Google Contacts as Google CSV or vCard (.vcf)."); }); return null; }
+    return { list, fileName: a.name || "" };
+  } catch (e) { await act(async () => { throw e; }); return null; }
+}
+
 function SheetCard({ sheet, all, reload }) {
   const [texts, setTexts] = useState(textsToBox(sheet.texts));
   const [people, setPeople] = useState("");
   const [picking, setPicking] = useState(false);
+  const [editing, setEditing] = useState(false);          // "Edit sheet": add numbers by typing or from a contacts file
+  const [found, setFound] = useState([]);
+  const [foundPicked, setFoundPicked] = useState({});
   const act = useAct();
   const c = sheet.counts || {};
   const savedCount = (sheet.texts || []).length;
@@ -169,10 +207,25 @@ function SheetCard({ sheet, all, reload }) {
       </Row>
       {picking ? <PicturePicker sheetId={sheet._id} onPick={(p) => run(() => wa.saveSheet(sheet._id, { copyImage: { sheet: p.sheet, index: p.index } }), `Picture added from ${p.sheetName}.`)} /> : null}
 
-      <Dim>Add people, one per line: Name, 98100 12345</Dim>
-      <Input value={people} onChangeText={setPeople} multiline style={{ minHeight: 70, textAlignVertical: "top" }} />
+      {editing ? (
+        <>
+          <Dim>Add new numbers, one per line: Name, 98100 12345</Dim>
+          <Input value={people} onChangeText={setPeople} multiline style={{ minHeight: 70, textAlignVertical: "top" }} />
+          <Row>
+            <Btn label="Add these numbers" disabled={!peopleFromLines(people).length} onPress={() => run(() => wa.addPeople(sheet._id, peopleFromLines(people)).then((r) => { setPeople(""); return r; }), "People added.")} />
+            <Btn label="Add from a contacts file" onPress={async () => { const r = await pickContacts(act); if (r) { setFound(r.list); setFoundPicked(Object.fromEntries(r.list.map((x) => [x.phone, true]))); } }} />
+          </Row>
+          {found.length > 0 ? (
+            <>
+              <ContactsList rows={found} picked={foundPicked} setPicked={setFoundPicked} />
+              <Btn kind="primary" label={`Add ${found.filter((x) => foundPicked[x.phone]).length} people to this sheet`} disabled={!found.some((x) => foundPicked[x.phone])}
+                onPress={() => run(() => wa.addPeople(sheet._id, found.filter((x) => foundPicked[x.phone])).then((r) => { setFound([]); setFoundPicked({}); return r; }), "People added.")} />
+            </>
+          ) : null}
+        </>
+      ) : null}
       <Row>
-        <Btn label="Add people" disabled={!peopleFromLines(people).length} onPress={() => run(() => wa.addPeople(sheet._id, peopleFromLines(people)).then((r) => { setPeople(""); return r; }), "People added.")} />
+        <Btn label={editing ? "Close editor" : "Edit sheet"} onPress={() => setEditing((v) => !v)} />
         {c.failed > 0 ? <Btn label={`Retry the ${c.failed} failed`} onPress={() => run(() => wa.retrySheet(sheet._id), "Back in line.")} /> : null}
         <Btn kind="danger" label="Delete sheet" onPress={async () => { if (await ask(`Delete "${sheet.name}"?`, "Its people are removed. Messages already sent stay in the log.", "Delete", true)) run(() => wa.deleteSheet(sheet._id), "Deleted."); }} />
       </Row>
@@ -333,16 +386,10 @@ function ContactsGroup({ reload }) {
   const [busy, setBusy] = useState(false);
   const act = useAct();
   const pick = async () => {
-    try {
-      const res = await DocumentPicker.getDocumentAsync({ type: ["text/csv", "text/comma-separated-values", "text/vcard", "text/x-vcard", "*/*"], copyToCacheDirectory: true });
-      if (res.canceled || !res.assets || !res.assets[0]) return;
-      const a = res.assets[0];
-      const { File } = require("expo-file-system");
-      const list = contactsFromFile(await new File(a.uri).text(), a.name || "");
-      if (!list.length) { await act(async () => { throw new Error("No phone numbers found. Export from Google Contacts as Google CSV or vCard (.vcf)."); }); return; }
-      setRows(list); setPicked(Object.fromEntries(list.map((r) => [r.phone, true])));
-      if (!name) setName((a.name || "Contacts").replace(/\.(csv|vcf|vcard)$/i, "").slice(0, 60));
-    } catch (e) { await act(async () => { throw e; }); }
+    const r = await pickContacts(act);
+    if (!r) return;
+    setRows(r.list); setPicked(Object.fromEntries(r.list.map((x) => [x.phone, true])));
+    if (!name) setName((r.fileName || "Contacts").replace(/\.(csv|vcf|vcard)$/i, "").slice(0, 60));
   };
   const chosen = rows.filter((r) => picked[r.phone]);
   const create = async () => {
@@ -358,12 +405,10 @@ function ContactsGroup({ reload }) {
     <Box title="Group from Google contacts" subtitle="Export your contacts from Google Contacts as CSV or vCard (.vcf), pick the people, and they become their own sheet.">
       <Row>
         <Btn label="Choose the contacts file" onPress={pick} />
-        {rows.length > 0 ? <><Btn label="Tick all" onPress={() => setPicked(Object.fromEntries(rows.map((r) => [r.phone, true])))} /><Btn label="Untick all" onPress={() => setPicked({})} /><Dim>{chosen.length} of {rows.length} ticked</Dim></> : null}
       </Row>
       {rows.length > 0 ? (
         <>
-          {rows.slice(0, 200).map((r) => <Toggle key={r.phone} label={r.name || "No name"} hint={`+${r.phone}`} value={Boolean(picked[r.phone])} onChange={(v) => setPicked({ ...picked, [r.phone]: v })} />)}
-          {rows.length > 200 ? <Dim>Showing the first 200 of {rows.length}. Tick all still includes everyone.</Dim> : null}
+          <ContactsList rows={rows} picked={picked} setPicked={setPicked} />
           <Input value={name} onChangeText={setName} placeholder="Group name" autoCapitalize="words" maxLength={80} />
           <Btn kind="primary" label={`Create group with ${chosen.length} people`} onPress={create} loading={busy} disabled={!name.trim() || !chosen.length} />
         </>

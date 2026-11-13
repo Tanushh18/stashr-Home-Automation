@@ -7,7 +7,7 @@ import {
 import { Section, Skeleton, Empty, useConfirm } from "../Render/RenderUi";
 import { usePolling } from "../Render/renderHooks";
 import { errorMessage } from "../Render/renderUtils";
-import { stateOf, STATE_LABEL, fmtBytes, ago, nowPlaying, signalWord, groupByRoom, lanName, splitStale, TAG_LABEL, batteryOf } from "../../lib/smartHome";
+import { stateOf, STATE_LABEL, fmtBytes, ago, fmtSpeed, fmtDuration, fmtClock, downloadRows, DOWNLOAD_LABEL, nowPlaying, signalWord, groupByRoom, lanName, splitStale, TAG_LABEL, batteryOf } from "../../lib/smartHome";
 import { LiveMapCard } from "./HomeMap";
 import { HouseMapCard } from "./HouseMap";
 import { RoomLabCard } from "./RoomLab";
@@ -270,7 +270,38 @@ function DeviceMenu({ device, onChanged }) {
 }
 
 /** Movies from a Google Drive folder to the TV's USB drive, through a Google account connected right here (Photo Cloud is not needed). */
-function MoviesCard() {
+/** Every movie the TV is downloading or has downloaded lately: how much is here, the status, when it started, the speed, the time left. */
+function DownloadsList({ tvs }) {
+  const withRows = (tvs || []).map((tv) => ({ tv, rows: downloadRows(tv.status) })).filter((x) => x.rows.length);
+  if (!withRows.length) return null;
+  return withRows.map(({ tv, rows }) => (
+    <div key={tv.id} className="sh-dl">
+      <h4 className="sh-dl__title">Downloads on {tv.name} <span className="sh-dim">· TV seen {ago(tv.lastSeen)}</span></h4>
+      <ul className="sh-movies">
+        {rows.map((r) => (
+          <li key={r.name} className={"sh-dl__row is-" + r.status}>
+            <div className="sh-dl__main">
+              <b>{r.name}</b>
+              <span className={"sh-dl__state is-" + r.status}>{DOWNLOAD_LABEL[r.status]}{r.status === "downloading" || r.status === "failed" ? ` · ${r.pct}%` : ""}</span>
+              {r.status !== "waiting" ? <div className="sh-bar" role="progressbar" aria-valuenow={r.pct} aria-valuemin={0} aria-valuemax={100} aria-label={`${r.name} ${r.pct}%`}><i style={{ width: r.pct + "%" }} /></div> : null}
+              <span>
+                {r.size ? `${fmtBytes(r.done)} of ${fmtBytes(r.size)}` : "Size unknown"}
+                {r.startedAt ? ` · started ${fmtClock(r.startedAt)}` : ""}
+                {r.speed ? ` · ${r.status === "done" ? "average " : ""}${fmtSpeed(r.speed)}` : ""}
+                {r.left ? ` · about ${fmtDuration(r.left)} left` : ""}
+                {r.took ? ` · took ${fmtDuration(r.took)}` : ""}
+                {r.status === "done" && r.finishedAt ? ` · finished ${fmtClock(r.finishedAt)}` : ""}
+              </span>
+              {r.error ? <span className="sh-bad">{r.error}</span> : null}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  ));
+}
+
+function MoviesCard({ tvs }) {
   const [data, setData] = useState(null);
   const [folder, setFolder] = useState("");
   const [account, setAccount] = useState("");
@@ -350,6 +381,7 @@ function MoviesCard() {
         </div>
       ) : null}
       {data.lastDelete?.error ? <p className="sh-bad">Could not remove “{data.lastDelete.name}” from Drive: {data.lastDelete.error}</p> : null}
+      <DownloadsList tvs={tvs} />
       {data.waiting ? (
         data.waiting.length ? (
           <ul className="sh-movies">{data.waiting.map((m) => <li key={m.name}><div><b>{m.name}</b><span>{fmtBytes(m.size)} · waiting in Drive for the TV</span></div></li>)}</ul>
@@ -498,7 +530,7 @@ export default function SmartHome() {
       </></CardBoundary>) : null}
       {tab === "media" ? (<CardBoundary key="media"><>
         <SpeedCard hasSmartHub={Boolean(smartHub)} send={send} hubId={smartHub?.id} />
-        <MoviesCard />
+        <MoviesCard tvs={list.filter((d) => d.kind === "tv")} />
         <SlideshowCard home={home} hub={smartHub} send={send} />
       </></CardBoundary>) : null}
     </main>

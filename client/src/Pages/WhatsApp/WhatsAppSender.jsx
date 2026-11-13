@@ -7,7 +7,7 @@ import {
 import { Section, Skeleton } from "../Render/RenderUi";
 import { errorMessage } from "../Render/renderUtils";
 import { ago } from "../../lib/smartHome";
-import { contactsFromFile, peopleFromLines } from "../../lib/waContacts";
+import { contactsFromFile, filterContacts, peopleFromLines } from "../../lib/waContacts";
 import { STARTER_QUOTES, textsToBox, boxToTexts } from "../../lib/waStarter";
 import "../Render/RenderDashboard.css";
 import "./WhatsAppSender.css";
@@ -97,13 +97,40 @@ function PicturePicker({ sheetId, onPick, onClose, disabled }) {
 }
 
 /** One sheet: its on/off, limit, messages, picture, people and counts. */
+/** The people found in a contacts file: a search box, tick all / untick all for what the search shows, and one tick per person. */
+function ContactsList({ rows, picked, setPicked }) {
+  const [q, setQ] = useState("");
+  const shown = filterContacts(rows, q);
+  const ticked = rows.filter((r) => picked[r.phone]).length;
+  return (
+    <>
+      <div className="wa-row">
+        <input className="wa-input" type="search" placeholder="Search name or number" aria-label="Search contacts" value={q} onChange={(e) => setQ(e.target.value)} />
+        <button className="rd-btn is-quiet" onClick={() => setPicked({ ...picked, ...Object.fromEntries(shown.map((r) => [r.phone, true])) })}>Tick {q.trim() ? "these" : "all"}</button>
+        <button className="rd-btn is-quiet" onClick={() => setPicked(q.trim() ? { ...picked, ...Object.fromEntries(shown.map((r) => [r.phone, false])) } : {})}>Untick {q.trim() ? "these" : "all"}</button>
+        <span className="wa-muted">{ticked} of {rows.length} ticked{q.trim() ? ` · ${shown.length} shown` : ""}</span>
+      </div>
+      <div className="wa-contacts" role="group" aria-label="Contacts">
+        {shown.length === 0 ? <p className="wa-muted" style={{ padding: "8px 10px" }}>Nobody matches “{q}”.</p> : null}
+        {shown.map((r) => (
+          <label key={r.phone} className="wa-contact"><input type="checkbox" checked={Boolean(picked[r.phone])} onChange={(e) => setPicked({ ...picked, [r.phone]: e.target.checked })} /><span>{r.name || "No name"}</span><em>+{r.phone}</em></label>
+        ))}
+      </div>
+    </>
+  );
+}
+
 function SheetCard({ sheet, onChanged }) {
   const [texts, setTexts] = useState(textsToBox(sheet.texts));
   const [limit, setLimit] = useState(String(sheet.dailyLimit || 0));
   const [people, setPeople] = useState("");
   const [busy, setBusy] = useState(false);
   const fileRef = useRef(null);
+  const contactsRef = useRef(null);
   const [picking, setPicking] = useState(false);
+  const [editing, setEditing] = useState(false);          // the "Edit sheet" panel: add numbers by typing or from a contacts file
+  const [found, setFound] = useState([]);
+  const [foundPicked, setFoundPicked] = useState({});
   const c = sheet.counts || {};
   const savedCount = (sheet.texts || []).length;
   const unsaved = JSON.stringify(boxToTexts(texts)) !== JSON.stringify(sheet.texts || []);
@@ -129,6 +156,21 @@ function SheetCard({ sheet, onChanged }) {
     if (!/^image\/(png|jpeg|webp)$/.test(f.type)) return toast.error("Choose a PNG, JPEG or WebP picture.");
     if (f.size > MAX_IMAGE) return toast.error("That picture is over 2 MB.");
     run(async () => saveWaSheet(sheet._id, { addImage: await readFile(f, "url") }), "Picture added.");
+  };
+  const loadContacts = async (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!f) return;
+    try {
+      const list = contactsFromFile(await readFile(f, "text"), f.name);
+      if (!list.length) return toast.error("No phone numbers found. Use a Google Contacts CSV or vCard (.vcf) file.");
+      setFound(list); setFoundPicked(Object.fromEntries(list.map((r) => [r.phone, true])));
+    } catch (err) { toast.error(errorMessage(err)); }
+  };
+  const addFound = () => {
+    const chosen = found.filter((r) => foundPicked[r.phone]);
+    if (!chosen.length) return toast.error("Tick at least one person.");
+    run(() => addWaPeople(sheet._id, chosen), (r) => `Added ${r.added}. ${r.duplicates} already there, ${r.invalid} not valid.`).then(() => { setFound([]); setFoundPicked({}); });
   };
   const addPeople = () => {
     const list = peopleFromLines(people);
@@ -173,10 +215,23 @@ function SheetCard({ sheet, onChanged }) {
           <div className="wa-row"><input id={"l" + sheet._id} className="wa-input is-short" type="number" min="0" max="60" value={limit} onChange={(e) => setLimit(e.target.value)} /><button className="rd-btn" disabled={busy} onClick={saveLimit}>Save limit</button></div>
         </div>
       </div>
-      <label className="wa-label" htmlFor={"p" + sheet._id}>Add people, one per line: Name, 98100 12345</label>
-      <textarea id={"p" + sheet._id} className="wa-input" rows={3} value={people} onChange={(e) => setPeople(e.target.value)} />
+      {editing && (
+        <div className="wa-edit" role="group" aria-label={`Edit ${sheet.name}`}>
+          <label className="wa-label" htmlFor={"p" + sheet._id}>Add new numbers, one per line: Name, 98100 12345</label>
+          <textarea id={"p" + sheet._id} className="wa-input" rows={3} value={people} onChange={(e) => setPeople(e.target.value)} />
+          <div className="wa-row">
+            <button className="rd-btn" disabled={busy || !people.trim()} onClick={addPeople}>Add these numbers</button>
+            <input ref={contactsRef} type="file" accept=".csv,.vcf,.vcard,text/csv,text/vcard,text/x-vcard" hidden onChange={loadContacts} />
+            <button className="rd-btn is-quiet" disabled={busy} onClick={() => contactsRef.current && contactsRef.current.click()}>Add from a contacts file (CSV or .vcf)</button>
+          </div>
+          {found.length > 0 && <>
+            <ContactsList rows={found} picked={foundPicked} setPicked={setFoundPicked} />
+            <div className="wa-row"><button className="rd-btn is-primary" disabled={busy} onClick={addFound}>Add {found.filter((r) => foundPicked[r.phone]).length} people to this sheet</button></div>
+          </>}
+        </div>
+      )}
       <div className="wa-row">
-        <button className="rd-btn" disabled={busy || !people.trim()} onClick={addPeople}>Add people</button>
+        <button className="rd-btn" aria-expanded={editing} onClick={() => setEditing((v) => !v)}>{editing ? "Close editor" : "Edit sheet"}</button>
         {c.failed > 0 && <button className="rd-btn" disabled={busy} onClick={() => run(() => retryWaSheet(sheet._id), (r) => `${r.requeued} back in line.`)}>Retry the {c.failed} failed</button>}
         <button className="rd-btn is-quiet" disabled={busy} title="For testing: everyone on this sheet goes back in line, so the same test number can be messaged again" onClick={() => { if (window.confirm(`Put everyone on "${sheet.name}" back in line? Use this only for a test sheet.`)) run(() => resetWaSheet(sheet._id), (r) => `${r.reset} people back in line.`); }}>Reset for testing</button>
         <button className="rd-btn is-danger" disabled={busy} onClick={() => { if (window.confirm(`Delete "${sheet.name}" and its ${total} people? Messages already sent stay in the log.`)) run(() => deleteWaSheet(sheet._id), "Sheet deleted."); }}>Delete sheet</button>
@@ -280,18 +335,9 @@ function ContactsGroup({ onChanged }) {
       <div className="wa-row">
         <input ref={fileRef} type="file" accept=".csv,.vcf,.vcard,text/csv,text/vcard,text/x-vcard" hidden onChange={load} />
         <button className="rd-btn" onClick={() => fileRef.current && fileRef.current.click()}>Choose the contacts file</button>
-        {rows.length > 0 && <>
-          <button className="rd-btn is-quiet" onClick={() => setPicked(Object.fromEntries(rows.map((r) => [r.phone, true])))}>Tick all</button>
-          <button className="rd-btn is-quiet" onClick={() => setPicked({})}>Untick all</button>
-          <span className="wa-muted">{chosen.length} of {rows.length} ticked</span>
-        </>}
       </div>
       {rows.length > 0 && <>
-        <div className="wa-contacts" role="group" aria-label="Contacts">
-          {rows.map((r) => (
-            <label key={r.phone} className="wa-contact"><input type="checkbox" checked={Boolean(picked[r.phone])} onChange={(e) => setPicked({ ...picked, [r.phone]: e.target.checked })} /><span>{r.name || "No name"}</span><em>+{r.phone}</em></label>
-          ))}
-        </div>
+        <ContactsList rows={rows} picked={picked} setPicked={setPicked} />
         <div className="wa-row">
           <input className="wa-input is-short" placeholder="Group name" value={name} maxLength={80} onChange={(e) => setName(e.target.value)} />
           <button className="rd-btn is-primary" disabled={busy} onClick={create}>Create group with {chosen.length} people</button>

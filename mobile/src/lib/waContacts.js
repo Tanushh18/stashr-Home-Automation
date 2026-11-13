@@ -131,6 +131,14 @@ export function contactsFromFile(text, fileName = "") {
   return isVcf ? contactsFromVcf(src) : contactsFromCsv(src);
 }
 
+/** The contacts that match a search: part of the name (any case) or part of the number (digits only, so "98100 12" finds 919810012345). */
+export function filterContacts(rows, query) {
+  const q = String(query || "").trim().toLowerCase();
+  if (!q) return rows;
+  const digits = q.replace(/\D/g, "");
+  return rows.filter((r) => (r.name || "").toLowerCase().includes(q) || (digits.length >= 2 && r.phone.includes(digits)));
+}
+
 /** People typed or pasted as lines: "Name, 98100 12345" or just "98100 12345". */
 export function peopleFromLines(text) {
   const out = [], seen = new Set();

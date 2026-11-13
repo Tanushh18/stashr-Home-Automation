@@ -54,3 +54,5 @@
 .wa-steps time { opacity: .6; font-variant-numeric: tabular-nums; }
 .wa-step-where { display: block !important; padding-top: 4px; }
 .wa-steps-row td { padding-top: 0; }
+
+.wa-edit { border: 1px solid rgba(127,127,127,.3); border-radius: 10px; padding: 10px; margin: 10px 0; display: grid; gap: 8px; }

@@ -219,3 +219,11 @@
 .sh-linked__merge select { min-width: 0; max-width: 100%; padding: .45rem .6rem; border: 1px solid var(--line-strong); border-radius: var(--r-md); background: var(--surface); color: inherit; }
 .sh-people li { min-width: 0; }
 .sh-people .rd-btn { white-space: normal; }
+
+.sh-dl { margin: .75rem 0 .25rem; }
+.sh-dl__title { margin: 0 0 .25rem; font-size: .9rem; }
+.sh-dl__main { display: grid; gap: .1rem; min-width: 0; flex: 1 1 100%; }
+.sh-dl__state { font-weight: 600; }
+.sh-dl__state.is-downloading { color: var(--accent); }
+.sh-dl__state.is-done { color: var(--ok, #2e9d5b); }
+.sh-dl__state.is-failed { color: var(--danger, #d1495b); }

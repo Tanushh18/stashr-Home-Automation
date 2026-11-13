@@ -153,6 +153,13 @@ Adb access gives only a terminal on your computer. The app still talks to the St
 - [ ] Stashr app 2.4.0 (update via Settings → Check for updates): Settings → Smart home opens; go through all seven sections; compare a few values with the website (devices, family locations, health).
 - [ ] In the app: TV volume/pause buttons, camera start/stop, a scene run, home location by pasting a Google Maps link, the live map.
 
+## 7n. Movie download details and contacts import (added 2026-11-13)
+- [ ] Put a movie in the Drive folder; website → Smart home → Media & network → "Downloads on <TV>" shows it as Waiting, then Downloading with percent, "x MB of y MB", the start time, the speed and the time left (needs Stashr TV 1.3.2).
+- [ ] When it finishes the row says Done with the average speed, "took …" and the finish time; unplug the USB drive during a download: the row says Failed with the reason; it resumes on the next sync.
+- [ ] After a TV restart the last finished/failed downloads are still listed (a download that was running shows as stopped).
+- [ ] WhatsApp sender → Group from Google contacts: a `.vcf` file loads (names with accents, several numbers per person); the Search box filters by name or number; "Tick these" only affects what the search shows.
+- [ ] A group's "Edit sheet" button opens an editor: type new numbers, or add from a contacts file (CSV or .vcf) with search; duplicates are reported, not added twice. Same in the Android app.
+
 ## 8. Updates (OTA)
 - [ ] Push a change under `hub-app/` to `main`; the GitHub Release is created and is **not** "latest".
 - [ ] The app (or "check_update") finds it, verifies it and Android asks for one tap to install.

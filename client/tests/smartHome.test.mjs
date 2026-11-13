@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { stateOf, fmtBytes, ago, nowPlaying, signalWord, groupByRoom, lanName, parseCoords, batteryOf } from "../src/lib/smartHome.js";
+import { stateOf, fmtBytes, ago, nowPlaying, signalWord, groupByRoom, lanName, parseCoords, batteryOf, fmtSpeed, fmtDuration, downloadRows } from "../src/lib/smartHome.js";
 
 test("a TV is off, in standby or on", () => {
   assert.equal(stateOf({ kind: "tv", online: false }), "off");
@@ -131,4 +131,30 @@ test("phone health: location age, wake-up push, app version and the maker's own 
   assert.match(vendorTip({ model: "SM-X710" }), /Samsung/);
   assert.match(vendorTip({ brand: "Xiaomi" }), /Autostart/);
   assert.match(vendorTip({}), /Unrestricted/);
+});
+
+test("fmtSpeed and fmtDuration", () => {
+  assert.equal(fmtSpeed(4_200_000), "4.2 MB/s");
+  assert.equal(fmtSpeed(380_000), "380 KB/s");
+  assert.equal(fmtSpeed(0), "");
+  assert.equal(fmtDuration(40_000), "40 s");
+  assert.equal(fmtDuration(12 * 60_000), "12 min");
+  assert.equal(fmtDuration(125 * 60_000), "2 h 5 min");
+  assert.equal(fmtDuration(0), "");
+});
+
+test("downloadRows lists the TV's downloads: running first, with percent, speed and time left", () => {
+  const status = { sync: { items: [
+    { name: "old.mkv", size: 1000, status: "done", done: 1000, startedAt: 1000, finishedAt: 11_000, speedBps: 100 },
+    { name: "now.mkv", size: 1000, status: "downloading", done: 250, startedAt: 5000, speedBps: 50 },
+    { name: "next.mkv", size: 500, status: "waiting" },
+    { name: "bad.mkv", size: 500, status: "failed", done: 100, error: "Network is unreachable", finishedAt: 20_000, startedAt: 15_000 },
+  ] } };
+  const rows = downloadRows(status);
+  assert.deepEqual(rows.map((r) => r.name), ["now.mkv", "next.mkv", "bad.mkv", "old.mkv"]);
+  assert.equal(rows[0].pct, 25);
+  assert.equal(rows[0].left, 15_000);            // 750 bytes at 50 B/s
+  assert.equal(rows[3].took, 10_000);
+  assert.equal(rows[2].error, "Network is unreachable");
+  assert.deepEqual(downloadRows({}), []);
 });

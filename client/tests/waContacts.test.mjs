@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseCsv, cleanPhone, contactsFromCsv, contactsFromVcf, contactsFromFile, peopleFromLines } from "../src/lib/waContacts.js";
+import { parseCsv, cleanPhone, contactsFromCsv, contactsFromVcf, contactsFromFile, filterContacts, peopleFromLines } from "../src/lib/waContacts.js";
 
 test("cleanPhone", () => {
   assert.equal(cleanPhone("98100 12345"), "919810012345");
@@ -87,4 +87,15 @@ test("contactsFromFile picks vCard or CSV by the file name or the first line", (
   assert.equal(contactsFromFile("\ufeff" + card, "").length, 1);
   assert.equal(contactsFromFile(csv, "contacts.csv").length, 1);
   assert.deepEqual(contactsFromFile("", "x.vcf"), []);
+});
+
+test("filterContacts searches by name or number", () => {
+  const rows = [{ name: "Ravi Kumar", phone: "919810012345" }, { name: "Anne Élise", phone: "919876543210" }, { name: "", phone: "919988776655" }];
+  assert.equal(filterContacts(rows, "").length, 3);
+  assert.deepEqual(filterContacts(rows, "RAVI").map((r) => r.name), ["Ravi Kumar"]);
+  assert.deepEqual(filterContacts(rows, "élise").map((r) => r.name), ["Anne Élise"]);
+  assert.deepEqual(filterContacts(rows, "98100 12").map((r) => r.phone), ["919810012345"]);
+  assert.deepEqual(filterContacts(rows, "+91 99887").map((r) => r.phone), ["919988776655"]);
+  assert.equal(filterContacts(rows, "zzz").length, 0);
+  assert.equal(filterContacts(rows, "9").length, 0);        // a single digit is too little to match numbers by
 });

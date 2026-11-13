@@ -32,6 +32,7 @@ import com.tanush.stashr.tv.overlay.NoticeOverlay
 import com.tanush.stashr.tv.sync.MovieStore
 import com.tanush.stashr.tv.sync.MovieSync
 import com.tanush.stashr.tv.sync.movieJson
+import com.tanush.stashr.tv.sync.transfersJson
 import com.tanush.stashr.tv.ui.HomeActivity
 import com.tanush.stashr.tv.ui.LiveMapActivity
 import com.tanush.stashr.tv.ui.PlayerActivity
@@ -203,7 +204,8 @@ class TvService : Service() {
         if (prefs.lastUploadAt > 0) st.put("upload", JSONObject().put("lastAt", prefs.lastUploadAt).put("lastName", prefs.lastUploadName))
         if (CastHub.active()) st.put("cast", JSONObject().put("active", true).put("from", CastHub.from()))
         val s = movies.state
-        if (s.active) st.put("sync", JSONObject().put("active", true).put("name", s.name).put("pct", s.pct))
+        val tr = transfersJson(movies.transfers.snapshot())
+        if (s.active || tr.length() > 0) st.put("sync", JSONObject().put("active", s.active).put("name", s.name).put("pct", s.pct).put("items", tr))
         return st
     }
 
