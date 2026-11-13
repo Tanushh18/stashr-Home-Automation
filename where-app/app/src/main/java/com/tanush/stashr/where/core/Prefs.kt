@@ -42,6 +42,9 @@ class Prefs(ctx: Context) {
     /** The always-there "Hello, connected to your home" notification (on unless the person turns it off). */
     var statusOn: Boolean get() = p.getBoolean("statusOn", true); set(v) = p.edit().putBoolean("statusOn", v).apply()
 
+    /** Always-on mode: a foreground service keeps location working in the background. On by default for every phone; the person can switch it off on this phone only. */
+    var alwaysOn: Boolean get() = p.getBoolean("alwaysOn", true); set(v) = p.edit().putBoolean("alwaysOn", v).apply()
+
     /** Room location: the checks also carry what this phone hears (Wi-Fi networks, optionally Bluetooth), so Stashr can say which room it is in. */
     var roomOn: Boolean get() = p.getBoolean("roomOn", false); set(v) = p.edit().putBoolean("roomOn", v).apply()
     var roomBle: Boolean get() = p.getBoolean("roomBle", true); set(v) = p.edit().putBoolean("roomBle", v).apply()

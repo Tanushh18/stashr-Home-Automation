@@ -18,6 +18,10 @@
     <!-- The quiet "connected to your home" notification. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- Always-on mode: a location foreground service keeps Stashr Location alive in the background, and the battery-saver exemption stops the phone from pausing it. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <uses-feature android:name="android.hardware.location" android:required="false" />
@@ -48,11 +52,13 @@
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.tanush.stashr.where.WATCHDOG" />
             </intent-filter>
         </receiver>
         <receiver android:name=".update.InstallResultReceiver" android:exported="false" />
         <!-- Firebase push: the Stashr server asks this phone to report its location when it has gone quiet. -->
-        <service android:name=".work.StatusService" android:exported="false" android:foregroundServiceType="specialUse">
+        <service android:name=".work.StatusService" android:exported="false" android:foregroundServiceType="location|specialUse">
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="Shows that Stashr Location is connected to the family's own home server" />
         </service>
         <service android:name=".work.FcmService" android:exported="false">
