@@ -7,7 +7,7 @@ import {
 import { Section, Skeleton } from "../Render/RenderUi";
 import { errorMessage } from "../Render/renderUtils";
 import { ago } from "../../lib/smartHome";
-import { contactsFromCsv, peopleFromLines } from "../../lib/waContacts";
+import { contactsFromFile, peopleFromLines } from "../../lib/waContacts";
 import { STARTER_QUOTES, textsToBox, boxToTexts } from "../../lib/waStarter";
 import "../Render/RenderDashboard.css";
 import "./WhatsAppSender.css";
@@ -241,7 +241,7 @@ function ThreeLink({ onChanged }) {
   );
 }
 
-/** Google Contacts export (CSV) in, the people to keep ticked, a new group out. */
+/** Google Contacts export (CSV or vCard) in, the people to keep ticked, a new group out. */
 function ContactsGroup({ onChanged }) {
   const [name, setName] = useState("");
   const [rows, setRows] = useState([]);
@@ -254,11 +254,11 @@ function ContactsGroup({ onChanged }) {
     e.target.value = "";
     if (!f) return;
     try {
-      const list = contactsFromCsv(await readFile(f, "text"));
-      if (!list.length) return toast.error("No phone numbers found. Export from Google Contacts as Google CSV.");
+      const list = contactsFromFile(await readFile(f, "text"), f.name);
+      if (!list.length) return toast.error("No phone numbers found. Export from Google Contacts as Google CSV or vCard (.vcf).");
       setRows(list);
       setPicked(Object.fromEntries(list.map((r) => [r.phone, true])));
-      if (!name) setName(f.name.replace(/\.csv$/i, "").slice(0, 60));
+      if (!name) setName(f.name.replace(/\.(csv|vcf|vcard)$/i, "").slice(0, 60));
     } catch (err) { toast.error(errorMessage(err)); }
   };
   const chosen = rows.filter((r) => picked[r.phone]);
@@ -276,9 +276,9 @@ function ContactsGroup({ onChanged }) {
   };
 
   return (
-    <Section title="Group from Google contacts" subtitle="Export your contacts from Google Contacts as CSV, pick the people, and they become their own sheet.">
+    <Section title="Group from Google contacts" subtitle="Export your contacts from Google Contacts as CSV or vCard (.vcf), pick the people, and they become their own sheet.">
       <div className="wa-row">
-        <input ref={fileRef} type="file" accept=".csv,text/csv" hidden onChange={load} />
+        <input ref={fileRef} type="file" accept=".csv,.vcf,.vcard,text/csv,text/vcard,text/x-vcard" hidden onChange={load} />
         <button className="rd-btn" onClick={() => fileRef.current && fileRef.current.click()}>Choose the contacts file</button>
         {rows.length > 0 && <>
           <button className="rd-btn is-quiet" onClick={() => setPicked(Object.fromEntries(rows.map((r) => [r.phone, true])))}>Tick all</button>

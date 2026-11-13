@@ -5,7 +5,7 @@ import * as DocumentPicker from "expo-document-picker";
 import { Page, Loading, Note, Heading } from "../components/kit";
 import { Box, Btn, Dim, Good, Bad, Txt, Row, Input, Toggle, Boundary, ask, usePoll, useAct } from "../components/home/h";
 import { wa, peopleFromLines, textsToBox, boxToTexts, nextText, STEP_MARK, WHO } from "../lib/waApi";
-import { contactsFromCsv } from "../lib/waContacts";
+import { contactsFromFile } from "../lib/waContacts";
 import { STARTER_QUOTES } from "../lib/waStarter";
 import { useTheme } from "../lib/theme";
 
@@ -325,7 +325,7 @@ function ThreeLink({ reload }) {
   );
 }
 
-/** A Google Contacts export (CSV) in, the people to keep ticked, a new group (sheet) out. */
+/** A Google Contacts export (CSV or vCard) in, the people to keep ticked, a new group (sheet) out. */
 function ContactsGroup({ reload }) {
   const [name, setName] = useState("");
   const [rows, setRows] = useState([]);
@@ -334,14 +334,14 @@ function ContactsGroup({ reload }) {
   const act = useAct();
   const pick = async () => {
     try {
-      const res = await DocumentPicker.getDocumentAsync({ type: ["text/csv", "text/comma-separated-values", "*/*"], copyToCacheDirectory: true });
+      const res = await DocumentPicker.getDocumentAsync({ type: ["text/csv", "text/comma-separated-values", "text/vcard", "text/x-vcard", "*/*"], copyToCacheDirectory: true });
       if (res.canceled || !res.assets || !res.assets[0]) return;
       const a = res.assets[0];
       const { File } = require("expo-file-system");
-      const list = contactsFromCsv(await new File(a.uri).text());
-      if (!list.length) { await act(async () => { throw new Error("No phone numbers found. Export from Google Contacts as Google CSV."); }); return; }
+      const list = contactsFromFile(await new File(a.uri).text(), a.name || "");
+      if (!list.length) { await act(async () => { throw new Error("No phone numbers found. Export from Google Contacts as Google CSV or vCard (.vcf)."); }); return; }
       setRows(list); setPicked(Object.fromEntries(list.map((r) => [r.phone, true])));
-      if (!name) setName((a.name || "Contacts").replace(/\.csv$/i, "").slice(0, 60));
+      if (!name) setName((a.name || "Contacts").replace(/\.(csv|vcf|vcard)$/i, "").slice(0, 60));
     } catch (e) { await act(async () => { throw e; }); }
   };
   const chosen = rows.filter((r) => picked[r.phone]);
@@ -355,7 +355,7 @@ function ContactsGroup({ reload }) {
     setBusy(false);
   };
   return (
-    <Box title="Group from Google contacts" subtitle="Export your contacts from Google Contacts as CSV, pick the people, and they become their own sheet.">
+    <Box title="Group from Google contacts" subtitle="Export your contacts from Google Contacts as CSV or vCard (.vcf), pick the people, and they become their own sheet.">
       <Row>
         <Btn label="Choose the contacts file" onPress={pick} />
         {rows.length > 0 ? <><Btn label="Tick all" onPress={() => setPicked(Object.fromEntries(rows.map((r) => [r.phone, true])))} /><Btn label="Untick all" onPress={() => setPicked({})} /><Dim>{chosen.length} of {rows.length} ticked</Dim></> : null}
