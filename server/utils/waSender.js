@@ -13,6 +13,7 @@ const automation = require("./homeAutomation");
 const waLeads = require("./waLeads");
 const WaLink = require("../models/waLink");
 const home = require("./home");
+const steps = require("./waSteps");
 
 const QUEUED_GIVE_UP_MS = 6 * 60 * 1000;     // a message the tablet never answered is marked failed after this
 const MAX_ATTEMPTS = 2;                      // tries per person for a failure that is not "not on WhatsApp"
@@ -84,7 +85,7 @@ async function expireQueued(owner, now = Date.now()) {
             const d = await HomeDevice.findOne({ _id: s.device, "commands.id": s.commandId }, { "commands.$": 1 }).lean();
             picked = Boolean(d && d.commands && d.commands[0] && d.commands[0].status !== "pending");
         }
-        await finishSend(s._id, false, picked ? "No answer from the tablet after it took the message (it may have been sent: check WhatsApp)" : "The tablet never picked the message up. Before pressing Send", now);
+        await finishSend(s._id, false, picked ? "No answer from the tablet after it took the message (it may have been sent: check WhatsApp)" : "The tablet never picked the message up. Before pressing Send", now, picked ? null : "never");
     }
 }
 
@@ -92,10 +93,15 @@ async function expireQueued(owner, now = Date.now()) {
  * Records the tablet's answer for one message. A number that is not on WhatsApp is skipped for good; any other failure
  * puts the person back in line once, then marks them failed. Returns the updated send, or null when it was already done.
  */
-async function finishSend(sendId, ok, message, now = Date.now()) {
+async function finishSend(sendId, ok, message, now = Date.now(), special = null) {
     const send = await WaSend.findOneAndUpdate({ _id: sendId, status: "queued" },
         { $set: { status: ok ? "sent" : "failed", result: String(message || "").slice(0, 200), doneAt: new Date(now) } }, { new: true });
     if (!send) return null;
+    const withImage = Boolean(send.imageIndex > 0 || (send.steps || []).some((x) => x.key === "picked" && /picture \d/.test(x.note || "")));
+    const got = special === "never" ? steps.neverDelivered(withImage) : steps.fromAnswer(Boolean(ok), message, { withImage });
+    // An answer means the tablet did receive it, even when its report and its answer came together.
+    const delivered = (send.steps || []).some((x) => x.key === "delivered") || special === "never" ? [] : [steps.step("delivered", "ok")];
+    await addSteps(send._id, [...delivered, ...got.steps], now, ok ? "" : got.where);
     if (!send.recipient) return send;                               // a test to a number: no list entry to update
     if (ok) {
         await WaRecipient.updateOne({ _id: send.recipient }, { $set: { status: "sent", sentAt: new Date(now), error: "" } });
@@ -151,18 +157,37 @@ function textFor(sheet, recipient, random = Math.random) {
     return raw.replace(/\{name\}/gi, first).replace(/[ \t]+([,.!?])/g, "$1").replace(/[ \t]{2,}/g, " ").replace(/ +\n/g, "\n").trim().slice(0, 900);
 }
 
+/** Adds steps to a send's timeline (each stamped with the time). */
+async function addSteps(sendId, list, now = Date.now(), where = "") {
+    if (!list.length) return;
+    const at = new Date(now);
+    const set = where ? { failedWhere: where } : {};
+    await WaSend.updateOne({ _id: sendId }, { $push: { steps: { $each: list.map((x) => ({ ...x, at })) } }, ...(where ? { $set: set } : {}) });
+}
+
+/** The tablet fetched these commands: the "delivered" step of every WhatsApp message among them. */
+async function onDelivered(commandIds, now = Date.now()) {
+    const ids = (commandIds || []).filter(Boolean);
+    if (!ids.length) return;
+    await WaSend.updateMany({ commandId: { $in: ids }, status: "queued", "steps.key": { $ne: "delivered" } },
+        { $push: { steps: { key: "delivered", label: steps.LABELS.delivered, state: "ok", note: "", at: new Date(now) } } });
+}
+
 /** Queues one message on the tablet and records it. Returns the send, or null when the tablet queue refused it. */
 async function dispatch({ owner, tablet, sheet, recipient, phone, name, text, kind, day, now, random = Math.random }) {
     const pictures = imagesOf(sheet);
     const imageIndex = pictures.length ? Math.min(pictures.length - 1, Math.floor(random() * pictures.length)) : 0;
     const send = await WaSend.create({ owner, sheet: sheet && sheet._id, recipient: recipient && recipient._id, phone, name: name || "", text, kind, day, device: tablet._id, queuedAt: new Date(now), imageIndex });
+    await addSteps(send._id, [steps.step("picked", "ok", `${name || phone}${pictures.length ? `, picture ${imageIndex + 1} of ${pictures.length}` : ", no picture"}`)], now);
     const entry = await automation.queue(tablet, "send_wa", { phone, text, sendId: String(send._id), image: pictures.length > 0 });
     if (!entry) {
+        await addSteps(send._id, [steps.step("queued", "failed", "The tablet's queue is full.")], now, "server");
         await WaSend.updateOne({ _id: send._id }, { $set: { status: "failed", result: "The tablet queue is full", doneAt: new Date(now) } });
         if (recipient) await WaRecipient.updateOne({ _id: recipient._id }, { $set: { status: "pending" }, $inc: { attempts: -1 } });
         return null;
     }
     await WaSend.updateOne({ _id: send._id }, { $set: { commandId: entry.id } });
+    await addSteps(send._id, [steps.step("queued", "ok", `Tablet "${tablet.name || "Hub"}"`)], now);
     return send;
 }
 
@@ -203,6 +228,49 @@ async function tickOwner(owner, now = Date.now(), random = Math.random) {
     const gap = s.testMode ? 0.25 : nextGapMinutes(s, random);
     await WaSettings.updateOne({ owner }, { $set: { nextDueAt: new Date(now + gap * 60000), status: `Sent to the tablet: ${picked.recipient.name || picked.recipient.phone}`, lastTickAt: new Date(now) } });
     return { did: "queued", send, sheet: picked.sheet.name };
+}
+
+/**
+ * When each sheet's next message goes out, for the website. Mirrors tickOwner and pickRecipient without changing anything:
+ * the account-wide gate first (off, tablet offline, outside the window, done for today, waiting for the gap), then the order the
+ * sheets are served in (the one with the fewest sends today first). Returns { next, sheets: { [id]: plan } } with plan { state, at, reason }.
+ * state: "next" (this sheet is next), "later" (in turn, `at` is an estimate), "blocked" (reason says why).
+ */
+function schedulePlan({ settings: s, local, now, tablet, sentToday, waiting, sheets, today, pendingBy }) {
+    const gateAt = (() => {
+        if (s.testMode) return { at: now, why: "" };
+        const from = minutesOf(s.from), to = minutesOf(s.to);
+        if (from != null && to != null && local.minutes < from) return { at: now + (from - local.minutes) * 60000, why: `Opens at ${s.from}` };
+        if (from != null && to != null && local.minutes >= to) return { at: now + (1440 - local.minutes + from) * 60000, why: `Today's window is over; opens tomorrow at ${s.from}` };
+        if (sentToday >= s.dailyLimit && s.dailyLimit > 0) return { at: now + (1440 - local.minutes + (from || 0)) * 60000, why: `Done for today (${sentToday} of ${s.dailyLimit}); starts again tomorrow at ${s.from}` };
+        return { at: Math.max(now, s.nextDueAt ? new Date(s.nextDueAt).getTime() : now), why: "" };
+    })();
+    let blocked = "";
+    if (!s.enabled) blocked = "Sending is switched off";
+    else if (!tablet) blocked = "The tablet is offline";
+    else if (waiting) blocked = "Waiting for the tablet to finish a message";
+    const avgGapMs = ((Number(s.gapMin) + Number(s.gapMax)) / 2) * 60000;
+    const eligible = [];
+    const plan = {};
+    for (const sh of sheets) {
+        const id = String(sh._id), n = today[id] || 0;
+        const hasContent = (sh.texts || []).some((t) => String(t || "").trim()) || imagesOf(sh).length > 0 || Boolean(sh.image);
+        if (!sh.enabled) plan[id] = { state: "blocked", reason: "This sheet is switched off, so it sends nothing" };
+        else if (!hasContent) plan[id] = { state: "blocked", reason: "No message or picture yet" };
+        else if (!(pendingBy[id] > 0)) plan[id] = { state: "blocked", reason: "Nobody left to message" };
+        else if (sh.dailyLimit > 0 && n >= sh.dailyLimit) plan[id] = { state: "blocked", reason: `Its own daily limit is reached (${n} of ${sh.dailyLimit})` };
+        else eligible.push({ id, n });
+    }
+    eligible.sort((a, b) => a.n - b.n);
+    eligible.forEach(({ id }, i) => {
+        const reason = blocked || gateAt.why;
+        const at = gateAt.at + i * avgGapMs;
+        plan[id] = i === 0 ? { state: "next", at, reason } : { state: "later", at, reason, after: i };
+    });
+    const first = eligible[0];
+    const next = !first ? { state: "blocked", reason: blocked || "No sheet has anyone left to message", at: null }
+        : { state: blocked ? "blocked" : "next", reason: blocked || gateAt.why, at: gateAt.at, sheet: first.id };
+    return { next, sheets: plan };
 }
 
 async function tickAll(now = Date.now()) {
@@ -304,4 +372,4 @@ async function reportTick(owner, s, local, now, tablet) {
     return null;
 }
 
-module.exports = { buildReport, reportTick, safeToRetry, waLeads, imagesOf, normalizePhone, windowMinutes, inWindow, nextGapMinutes, settingsOf, tabletOf, finishSend, pickRecipient, textFor, tickOwner, tickAll, onAck, sendTest, expireQueued };
+module.exports = { schedulePlan, onDelivered, addSteps, buildReport, reportTick, safeToRetry, waLeads, imagesOf, normalizePhone, windowMinutes, inWindow, nextGapMinutes, settingsOf, tabletOf, finishSend, pickRecipient, textFor, tickOwner, tickAll, onAck, sendTest, expireQueued };

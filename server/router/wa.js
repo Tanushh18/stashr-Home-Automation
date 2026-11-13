@@ -80,13 +80,17 @@ router.get("/wa/overview", authenticate, async (req, res) => {
         const tablet = await sender.tabletOf(owner);
         const recent = await WaSend.find({ owner }).sort({ createdAt: -1 }).limit(30).lean();
         const sentToday = await WaSend.countDocuments({ owner, day: local.date, kind: "scheduled", status: { $in: ["queued", "sent"] } });
+        const pendingBy = {};
+        for (const id of Object.keys(bySheet)) pendingBy[id] = (bySheet[id] || {}).pending || 0;
+        const waiting = Boolean(await WaSend.exists({ owner, status: "queued" }));
+        const schedule = sender.schedulePlan({ settings, local, now: Date.now(), tablet, sentToday, waiting, sheets, today, pendingBy });
         res.json({
-            settings, today: local.date, sentToday, tablet: tablet ? { id: tablet._id, name: tablet.name } : null,
+            settings, today: local.date, sentToday, tablet: tablet ? { id: tablet._id, name: tablet.name } : null, next: schedule.next,
             sheets: sheets.map((s) => {
                 const c = bySheet[String(s._id)] || {};
-                return { ...s, hasImage: withImage.has(String(s._id)), imageCount: imageCounts[String(s._id)] || 0, counts: { pending: c.pending || 0, queued: c.queued || 0, sent: c.sent || 0, failed: c.failed || 0, skipped: c.skipped || 0 }, sentToday: today[String(s._id)] || 0 };
+                return { ...s, hasImage: withImage.has(String(s._id)), imageCount: imageCounts[String(s._id)] || 0, counts: { pending: c.pending || 0, queued: c.queued || 0, sent: c.sent || 0, failed: c.failed || 0, skipped: c.skipped || 0 }, sentToday: today[String(s._id)] || 0, plan: schedule.sheets[String(s._id)] || null };
             }),
-            recent: recent.map((r) => ({ id: r._id, phone: r.phone, name: r.name, status: r.status, kind: r.kind, result: r.result, at: r.createdAt, doneAt: r.doneAt }))
+            recent: recent.map((r) => ({ id: r._id, phone: r.phone, name: r.name, status: r.status, kind: r.kind, result: r.result, at: r.createdAt, doneAt: r.doneAt, steps: r.steps || [], failedWhere: r.failedWhere || "" }))
         });
     } catch (e) { fail(res, e, "Could not load the sender."); }
 });
@@ -282,7 +286,7 @@ router.get("/wa/sends/:id", authenticate, async (req, res) => {
         if (!validId(req.params.id)) return res.status(404).json({ error: "Not found." });
         const s = await WaSend.findOne({ _id: req.params.id, owner: req.rootUser._id }).lean();
         if (!s) return res.status(404).json({ error: "Not found." });
-        res.json({ id: s._id, phone: s.phone, name: s.name, status: s.status, result: s.result, kind: s.kind, queuedAt: s.queuedAt, doneAt: s.doneAt });
+        res.json({ id: s._id, phone: s.phone, name: s.name, status: s.status, result: s.result, kind: s.kind, queuedAt: s.queuedAt, doneAt: s.doneAt, steps: s.steps || [], failedWhere: s.failedWhere || "" });
     } catch (e) { fail(res, e, "Could not load that message."); }
 });
 

@@ -38,3 +38,19 @@
 .wa-picker-item:disabled { opacity: .5; cursor: default; }
 .wa-picker-item img { width: 100%; height: 80px; object-fit: cover; border-radius: 6px; }
 .wa-picker-item small { font-size: 11px; opacity: .7; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* When the next message goes out, and the steps of each message */
+.wa-next { margin: 8px 0 0; font-size: 14px; }
+.wa-next.is-next b { color: var(--ok, #2e9e5b); }
+.wa-next.is-blocked { opacity: .85; }
+.wa-steps { list-style: none; margin: 0; padding: 4px 0; display: flex; flex-direction: column; gap: 6px; }
+.wa-steps li { display: grid; grid-template-columns: 22px 1fr auto; gap: 8px; align-items: start; font-size: 13px; }
+.wa-step-mark { font-weight: 700; text-align: center; }
+.wa-steps .is-ok .wa-step-mark { color: var(--ok, #2e9e5b); }
+.wa-steps .is-failed .wa-step-mark, .wa-steps .is-failed b { color: var(--danger, #d64545); }
+.wa-steps .is-skipped { opacity: .5; }
+.wa-step-body { display: flex; flex-direction: column; }
+.wa-step-body small { opacity: .8; }
+.wa-steps time { opacity: .6; font-variant-numeric: tabular-nums; }
+.wa-step-where { display: block !important; padding-top: 4px; }
+.wa-steps-row td { padding-top: 0; }

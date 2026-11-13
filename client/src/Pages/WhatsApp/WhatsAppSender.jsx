@@ -27,6 +27,41 @@ function Count({ label, n, tone }) {
   return <div className={"wa-count" + (tone ? " is-" + tone : "")}><b>{n}</b><span>{label}</span></div>;
 }
 
+const clock = (at) => new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+const dayWord = (at) => { const d = new Date(at), n = new Date(); return d.toDateString() === n.toDateString() ? "" : d.toDateString() === new Date(n.getTime() + 864e5).toDateString() ? " tomorrow" : " on " + d.toLocaleDateString([], { day: "numeric", month: "short" }); };
+const inWhen = (at) => { const m = Math.round((new Date(at).getTime() - Date.now()) / 60000); return m <= 0 ? "any moment now" : m < 60 ? `in about ${m} min` : ""; };
+
+/** When the next message goes out (or why it will not): for the whole sender and for each sheet. */
+function NextLine({ plan, label = "Next message" }) {
+  if (!plan) return null;
+  if (plan.state === "blocked" && !plan.at) return <p className="wa-next is-blocked"><b>{label}:</b> none. {plan.reason}.</p>;
+  const when = plan.at ? `${clock(plan.at)}${dayWord(plan.at)}${inWhen(plan.at) ? " (" + inWhen(plan.at) + ")" : ""}` : "";
+  if (plan.state === "blocked") return <p className="wa-next is-blocked"><b>{label}:</b> {plan.reason}. {when && <>It will go at {when} once that is fixed.</>}</p>;
+  if (plan.state === "later") return <p className="wa-next"><b>{label}:</b> after {plan.after} other sheet{plan.after === 1 ? "" : "s"} have had their turn, about {when}.{plan.reason ? " " + plan.reason + "." : ""}</p>;
+  return <p className="wa-next is-next"><b>{label}:</b> {when}.{plan.reason ? " " + plan.reason + "." : ""}</p>;
+}
+
+const WHO = { server: "The server", tablet: "The tablet", whatsapp: "WhatsApp" };
+const MARK = { ok: "✓", failed: "✗", skipped: "–" };
+
+/** Every step of one message, in order; a failed one says which side stopped it (server, tablet or WhatsApp). */
+function StepList({ steps, failedWhere, status }) {
+  if (!steps || steps.length === 0) return <p className="wa-muted">No step details were recorded for this message (it was sent before steps were tracked).</p>;
+  return (
+    <ol className="wa-steps">
+      {steps.map((x, i) => (
+        <li key={i} className={"is-" + x.state}>
+          <span className="wa-step-mark">{MARK[x.state] || "•"}</span>
+          <span className="wa-step-body"><b>{x.label}</b>{x.note ? <small>{x.note}</small> : null}</span>
+          <time>{x.at && x.state !== "skipped" ? new Date(x.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : ""}</time>
+        </li>
+      ))}
+      {status === "queued" && <li className="is-wait"><span className="wa-step-mark">…</span><span className="wa-step-body"><b>Waiting for the tablet's answer</b></span><time /></li>}
+      {failedWhere && <li className="wa-step-where">Stopped by: <b>{WHO[failedWhere] || failedWhere}</b></li>}
+    </ol>
+  );
+}
+
 /** Pictures other sheets already hold: pick one to use on this sheet too (no need to upload it again). */
 function PicturePicker({ sheetId, onPick, onClose, disabled }) {
   const [list, setList] = useState(null);
@@ -109,6 +144,7 @@ function SheetCard({ sheet, onChanged }) {
         <Count label="to send" n={c.pending || 0} /><Count label="on the tablet" n={c.queued || 0} />
         <Count label="sent" n={c.sent || 0} tone="ok" /><Count label="failed" n={c.failed || 0} tone="bad" /><Count label="skipped" n={c.skipped || 0} />
       </div>
+      <NextLine plan={sheet.plan} label="Next message from this sheet" />
       <div className="wa-grid">
         <div>
           <label className="wa-label" htmlFor={"t" + sheet._id}>Messages. Put a line with only --- between two messages (a message can have many lines). One is picked at random for each person. Use {"{name}"} for the first name.</label>
@@ -267,6 +303,7 @@ export default function WhatsAppSender() {
   const [testSheet, setTestSheet] = useState("");
   const [reportNums, setReportNums] = useState(null);
   const [testNote, setTestNote] = useState("");
+  const [openRow, setOpenRow] = useState("");
   const editing = useRef(false);
 
   const load = useCallback(async () => {
@@ -319,6 +356,7 @@ export default function WhatsAppSender() {
           <Count label="tablet" n={data.tablet ? "online" : "offline"} tone={data.tablet ? "ok" : "bad"} />
         </div>
         {!data.tablet && <p className="wa-error">The tablet is offline, so nothing can be sent. Check that Stashr Hub is open, on charge and on Wi-Fi.</p>}
+        <NextLine plan={data.next} label={data.next && data.next.sheet ? "Next message (from " + ((data.sheets.find((x) => x._id === data.next.sheet) || {}).name || "a sheet") + ")" : "Next message"} />
         {s.testMode && <p className="wa-warn">Test mode is on: the time window, the gap and the daily limit are ignored. Turn it off before real sending.</p>}
       </Section>
 
@@ -373,9 +411,14 @@ export default function WhatsAppSender() {
 
       <Section title="Latest messages" subtitle="Every message the server handed to the tablet, and what the tablet answered.">
         {data.recent.length === 0 ? <p className="wa-muted">Nothing yet.</p> : (
-          <table className="wa-table"><thead><tr><th>When</th><th>To</th><th>Result</th></tr></thead><tbody>
+          <table className="wa-table"><thead><tr><th>When</th><th>To</th><th>Result</th><th /></tr></thead><tbody>
             {data.recent.map((r) => (
-              <tr key={r.id}><td>{ago(r.at)}</td><td>{r.name || "+" + r.phone}{r.kind === "test" ? " (test)" : ""}</td><td className={"wa-status is-" + r.status}>{r.status === "sent" ? "Sent" : r.status === "failed" ? "Failed: " + (r.result || "") : "On the tablet..."}</td></tr>
+              <React.Fragment key={r.id}>
+                <tr><td>{ago(r.at)}</td><td>{r.name || "+" + r.phone}{r.kind === "test" ? " (test)" : r.kind === "report" ? " (report)" : ""}</td>
+                  <td className={"wa-status is-" + r.status}>{r.status === "sent" ? "Sent" : r.status === "failed" ? "Failed" + (r.failedWhere ? " at " + (WHO[r.failedWhere] || r.failedWhere).toLowerCase() : "") + ": " + (r.result || "") : "On the tablet..."}</td>
+                  <td><button className="rd-btn is-quiet" onClick={() => setOpenRow(openRow === r.id ? "" : r.id)}>{openRow === r.id ? "Hide steps" : "Steps"}</button></td></tr>
+                {openRow === r.id && <tr className="wa-steps-row"><td colSpan={4}><StepList steps={r.steps} failedWhere={r.failedWhere} status={r.status} /></td></tr>}
+              </React.Fragment>
             ))}
           </tbody></table>
         )}

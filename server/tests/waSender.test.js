@@ -441,6 +441,74 @@ describe("the website API", () => {
         expect((await request(app).get(`/wa/pictures/${sheet.id}/0`).set(other)).status).toBe(404);
     });
 
+    test("every message keeps its steps: picked, queued, delivered, then where it stopped", async () => {
+        const { auth, hub, o } = await setup({ people: 2 });
+        const pic = "data:image/png;base64," + Buffer.from("one").toString("base64");
+        const sheetId = (await request(app).get("/wa/overview").set(auth)).body.sheets[0]._id;
+        await request(app).patch(`/wa/sheets/${sheetId}`).set(auth).send({ addImage: pic });
+        await sender.tickOwner(o, NOON, () => 0);
+        let send = await WaSend.findOne({});
+        expect(send.steps.map((x) => x.key)).toEqual(["picked", "queued"]);
+        const cmd = (await hubReport(hub.token)).body.commands.find((c) => c.type === "send_wa");
+        send = await WaSend.findOne({});
+        expect(send.steps.map((x) => x.key)).toEqual(["picked", "queued", "delivered"]);
+        await hubReport(hub.token, [{ id: cmd.id, ok: false, message: "Timed out before pressing Send (step 1)" }]);
+        send = await WaSend.findOne({});
+        expect(send.status).toBe("failed");
+        expect(send.failedWhere).toBe("tablet");
+        const failed = send.steps.find((x) => x.state === "failed");
+        expect(failed.key).toBe("picture");
+        expect(failed.note).toMatch(/Gallery/);
+        expect(send.steps.filter((x) => x.state === "skipped").map((x) => x.key)).toEqual(["opened", "send", "confirmed"]);
+        // The website gets them too.
+        const row = (await request(app).get("/wa/overview").set(auth)).body.recent[0];
+        expect(row.failedWhere).toBe("tablet");
+        expect(row.steps.length).toBe(send.steps.length);
+        expect((await request(app).get(`/wa/sends/${send._id}`).set(auth)).body.steps.length).toBe(send.steps.length);
+    });
+
+    test("a message the tablet never picked up fails at 'received', and a sent one has every step ok", async () => {
+        const { hub, o } = await setup({ people: 2 });
+        await sender.tickOwner(o, NOON, () => 0);
+        await sender.tickOwner(o, NOON + 7 * 60000, () => 0);              // six minutes later the tablet still has not asked
+        let send = await WaSend.findOne({});
+        expect(send.status).toBe("failed");
+        expect(send.failedWhere).toBe("tablet");
+        expect(send.steps.find((x) => x.state === "failed").key).toBe("delivered");
+        await WaSend.deleteMany({});
+        await WaSettings.updateMany({}, { $set: { nextDueAt: null } });
+        await sender.tickOwner(o, NOON + 20 * 60000, () => 0);
+        const cmd = (await hubReport(hub.token)).body.commands.filter((c) => c.type === "send_wa").pop();
+        await hubReport(hub.token, [{ id: cmd.id, ok: true, message: "Sent to +91" }]);
+        send = await WaSend.findOne({});
+        expect(send.status).toBe("sent");
+        expect(send.failedWhere).toBe("");
+        expect(send.steps.every((x) => x.state === "ok")).toBe(true);
+        expect(send.steps.map((x) => x.key)).toEqual(["picked", "queued", "delivered", "checks", "opened", "send", "confirmed"]);
+    });
+
+    test("each sheet says when its next message goes out, or why it will not", async () => {
+        const { auth } = await setup({ people: 2 });
+        const b = (await request(app).post("/wa/sheets").set(auth).send({ name: "Second", texts: ["Hi"] })).body;
+        await request(app).post(`/wa/sheets/${b.id}/recipients`).set(auth).send({ recipients: [{ name: "Z", phone: "9810000099" }] });
+        const ov = (await request(app).get("/wa/overview").set(auth)).body;
+        expect(ov.next.sheet).toBeTruthy();
+        const plans = Object.fromEntries(ov.sheets.map((s) => [s.name, s.plan]));
+        expect(plans.Second.state).toBe("blocked");                         // a new sheet is switched off
+        expect(plans.Second.reason).toMatch(/switched off/);
+        expect(["next", "blocked"]).toContain(plans.Test.state);
+        // The pure rule: outside the window it points at the next opening.
+        const mk = (minutes) => sender.schedulePlan({ settings: { enabled: true, from: "10:00", to: "19:00", gapMin: 6, gapMax: 12, dailyLimit: 5, nextDueAt: null }, local: { minutes },
+            now: 1e12, tablet: { _id: 1 }, sentToday: 0, waiting: false, sheets: [{ _id: "a", enabled: true, texts: ["x"], dailyLimit: 0 }, { _id: "b", enabled: true, texts: ["y"], dailyLimit: 0 }],
+            today: { a: 2, b: 1 }, pendingBy: { a: 3, b: 3 } });
+        const early = mk(9 * 60);
+        expect(early.next.sheet).toBe("b");                                 // the sheet with the fewest sends goes first
+        expect(early.next.at).toBe(1e12 + 60 * 60000);
+        expect(early.sheets.a).toMatchObject({ state: "later", after: 1 });
+        expect(mk(12 * 60).next.reason).toBe("");
+        expect(mk(20 * 60).next.reason).toMatch(/opens tomorrow/);
+    });
+
     test("a sheet keeps up to five pictures and each message uses one of them at random", async () => {
         const { auth, hub, sheet, o } = await setup();
         const pic = (t) => "data:image/png;base64," + Buffer.from(t).toString("base64");

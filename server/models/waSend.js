@@ -13,6 +13,8 @@ const waSendSchema = new mongoose.Schema({
     imageIndex: { type: Number, default: 0 },                      // which of the sheet's pictures this message uses
     status: { type: String, enum: ["queued", "sent", "failed"], default: "queued", index: true },
     result: { type: String, default: "" },
+    steps: { type: [{ key: String, label: String, state: String, note: String, at: Date, _id: false }], default: [] },   // what happened, in order (see utils/waSteps.js)
+    failedWhere: { type: String, default: "" },                    // "server", "tablet" or "whatsapp" when it failed
     device: { type: mongoose.Schema.Types.ObjectId },
     commandId: { type: String, default: "", index: true },
     day: { type: String, default: "", index: true },               // the account's local date, "2026-11-12"

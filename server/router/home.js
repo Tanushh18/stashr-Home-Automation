@@ -384,6 +384,8 @@ async function ingest(d, body, seenAt = new Date()) {
     const fresh = await HomeDevice.findById(d._id).select("commands").lean();
     const out = (fresh.commands || []).filter((c) => c.status === "pending").map((c) => ({ id: c.id, type: c.type, args: c.args }));
     if (out.length) await HomeDevice.updateOne({ _id: d._id }, { $set: { "commands.$[c].status": "sent" } }, { arrayFilters: [{ "c.status": "pending" }] });
+    // The WhatsApp messages among them now count as "received by the tablet" on the sender's timeline.
+    if (d.kind === "hub") await waSender.onDelivered(out.filter((c) => c.type === "send_wa").map((c) => c.id)).catch(() => {});
     return { commands: out };
 }
 
