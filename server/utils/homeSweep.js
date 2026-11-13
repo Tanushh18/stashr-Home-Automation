@@ -1,5 +1,5 @@
 const HomeDevice = require("../models/homeDevice");
-const { ONLINE_MS } = require("./home");
+const { ONLINE_MS, isOnline } = require("./home");
 const { record } = require("./homeEvents");
 const automation = require("./homeAutomation");
 const phonePush = require("./phonePush");
@@ -8,7 +8,8 @@ const COMMAND_WAIT_MS = 10 * 60 * 1000;
 
 /** Marks devices that stopped reporting as offline, and gives up on commands nobody answered. */
 async function sweepOnce(now = Date.now()) {
-    const stale = await HomeDevice.find({ online: true, kind: { $ne: "phone" }, lastSeen: { $lt: new Date(now - ONLINE_MS) } });
+    const quiet = await HomeDevice.find({ online: true, kind: { $ne: "phone" }, lastSeen: { $lt: new Date(now - ONLINE_MS) } });
+    const stale = quiet.filter((d) => !isOnline(d, now));            // a tablet on its battery (above 20%) is given longer
     for (const d of stale) {
         const res = await HomeDevice.updateOne({ _id: d._id, online: true }, { $set: { online: false } });
         if (res.modifiedCount) {

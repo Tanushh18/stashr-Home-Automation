@@ -33,6 +33,15 @@ object Power {
         else -> 3 * 60_000L
     }
 
-    /** How long the tablet waits between two reports (they also fetch the commands from the website, so this is how fast a tap there arrives). */
-    fun reportEveryMs(ctx: Context): Long = if (charging(ctx)) 10_000L else 60_000L
+    /**
+     * How long the tablet waits between two reports (they also fetch the commands from the website, so this is how fast a tap there arrives).
+     * On the charger 10 s. Unplugged with more than 20% left 30 s, so the tablet stays online (and keeps sending WhatsApp messages) with a
+     * wide margin; at 20% or less 60 s to save the last of the battery.
+     */
+    fun reportEveryMs(ctx: Context): Long = reportEveryMs(charging(ctx), percent(ctx))
+    fun reportEveryMs(charging: Boolean, percent: Int): Long = when {
+        charging -> 10_000L
+        percent > 20 -> 30_000L
+        else -> 60_000L
+    }
 }

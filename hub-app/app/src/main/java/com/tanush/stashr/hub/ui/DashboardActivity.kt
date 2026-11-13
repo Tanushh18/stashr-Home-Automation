@@ -762,8 +762,11 @@ class DashboardActivity : Activity() {
         val pm = getSystemService(PowerManager::class.java) ?: return
         if (pm.isIgnoringBatteryOptimizations(packageName)) { askOverlay(); return }
         val p = getSharedPreferences("dashboard", MODE_PRIVATE)
-        if (p.getBoolean("askedBattery", false)) return
-        p.edit().putBoolean("askedBattery", true).apply()
+        // Without this exemption Android may cut the tablet's network while it is unplugged and the screen is off, so Stashr shows it offline.
+        // So the question comes back once a day until it is allowed.
+        val now = System.currentTimeMillis()
+        if (now - p.getLong("askedBatteryAt", 0L) < 24 * 3600_000L) return
+        p.edit().putLong("askedBatteryAt", now).apply()
         try { startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName"))) } catch (e: Exception) { }
     }
 

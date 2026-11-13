@@ -153,7 +153,19 @@ function batteryOf(status) {
     return Number.isFinite(Number(b)) && b !== null ? { pct: Math.round(Number(b)), charging: Boolean(status.charging) } : null;
 }
 
-const isOnline = (device, now = Date.now()) => Boolean(device.lastSeen) && now - new Date(device.lastSeen).getTime() < ONLINE_MS;
+const ONLINE_ON_BATTERY_MS = 6 * 60 * 1000;
+/**
+ * How long a device may stay silent before it counts as offline. A home tablet running on its battery (above 20%) reports
+ * less often and Android may delay it, so it gets longer than one on the charger; it is still online and sends WhatsApp messages.
+ */
+function onlineWindowMs(device) {
+    if (device && device.kind === "hub") {
+        const b = batteryOf(device.status);
+        if (b && !b.charging && b.pct > 20) return ONLINE_ON_BATTERY_MS;
+    }
+    return ONLINE_MS;
+}
+const isOnline = (device, now = Date.now()) => Boolean(device.lastSeen) && now - new Date(device.lastSeen).getTime() < onlineWindowMs(device);
 
 const slug = (v) => String(v || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
 /** Names that many devices share, so they cannot tell one device from another. */
@@ -338,5 +350,5 @@ function inWindow(minutes, from, to) {
 
 module.exports = {
     ONLINE_MS, LAN_GONE_MS, MAX_COMMANDS, COMMANDS, KINDS, TAGS, RISKY_PORTS, hashToken, newToken, cleanCommand, cleanStatus,
-    cleanHealth, batteryOf, isOnline, lanKey, mergeLan, diffMovies, risksOf, presence, distM, FIX_FRESH_MS, PHONE_WIFI_MS, inWindow, okMac, normMac, slug
+    cleanHealth, batteryOf, isOnline, onlineWindowMs, ONLINE_ON_BATTERY_MS, lanKey, mergeLan, diffMovies, risksOf, presence, distM, FIX_FRESH_MS, PHONE_WIFI_MS, inWindow, okMac, normMac, slug
 };

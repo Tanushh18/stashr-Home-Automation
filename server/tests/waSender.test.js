@@ -388,6 +388,16 @@ describe("the website API", () => {
         expect(r.body).toEqual({ added: 1, duplicates: 1, invalid: 1, total: 4 });
     });
 
+    test("a tablet on its battery above 20% still counts as online and gets the message; at 20% or less it does not once it is quiet", async () => {
+        const { hub, o } = await setup();
+        const quiet = Date.now() - 4 * 60 * 1000;
+        await HomeDevice.updateMany({}, { $set: { lastSeen: new Date(quiet), online: true, "status.battery": { pct: 64, charging: false } } });
+        expect((await sender.tabletOf(o, Date.now()) || {})._id).toBeTruthy();
+        await HomeDevice.updateMany({}, { $set: { "status.battery": { pct: 15, charging: false } } });
+        expect(await sender.tabletOf(o, Date.now())).toBe(null);
+        expect(hub).toBeTruthy();
+    });
+
     test("a test message goes to the tablet and one to a number does not touch any list", async () => {
         const { auth, hub, o } = await setup();
         const t = await request(app).post("/wa/test").set(auth).send({ phone: "9899334123" });
