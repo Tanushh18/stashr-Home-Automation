@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import {
   getWaLink, connectWaLink, disconnectWaLink, getWaOrigins, importWaOrigin,
-  getWaOverview, saveWaSettings, resetWaSheet, sendWaReportNow, createWaSheet, saveWaSheet, deleteWaSheet, addWaPeople, addWaPeopleInBatches, sendWaSheetToWeThree, retryWaSheet, sendWaTest, getWaSend, getWaPictures, getWaPicture
+  getWaOverview, saveWaSettings, resetWaSheet, sendWaReportNow, createWaSheet, saveWaSheet, deleteWaSheet, addWaPeople, addWaPeopleInBatches, getWaPeople, editWaPerson, sendWaSheetToWeThree, retryWaSheet, sendWaTest, getWaSend, getWaPictures, getWaPicture
 } from "../../api/client";
 import { Section, Skeleton } from "../Render/RenderUi";
 import { errorMessage } from "../Render/renderUtils";
@@ -120,6 +120,99 @@ function ContactsList({ rows, picked, setPicked }) {
   );
 }
 
+const STAGE_LABEL = { none: "No stage yet" };
+const dateShort = (v) => (v ? new Date(v).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }) : "");
+const SEND_LABEL = { pending: "Not sent", queued: "Sending", sent: "Sent", failed: "Failed", skipped: "Skipped" };
+
+/** The people of one sheet: the stage each has in We Three (as in the Tasks app), a search, one stage at a time, paging, and editing of the name and number. */
+function PeopleView({ sheet, onChanged }) {
+  const [data, setData] = useState(null);
+  const [q, setQ] = useState("");
+  const [stage, setStage] = useState("");
+  const [page, setPage] = useState(1);
+  const [edit, setEdit] = useState(null);                     // { id, name, phone }
+  const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [bump, setBump] = useState(0);                        // changes to reload
+  const fresh = useRef(false);                                // Refresh: read the stages from We Three again, not from the one-minute cache
+
+  useEffect(() => {
+    let live = true;
+    const t = setTimeout(async () => {
+      setLoading(true);
+      try { const d = await getWaPeople(sheet._id, { q: q.trim() || undefined, stage: stage || undefined, page, limit: 50, refresh: fresh.current ? 1 : undefined }); fresh.current = false; if (live) setData(d); }
+      catch (e) { if (live) toast.error(errorMessage(e)); }
+      finally { if (live) setLoading(false); }
+    }, q ? 250 : 0);
+    return () => { live = false; clearTimeout(t); };
+  }, [sheet._id, q, stage, page, bump]);
+
+  const pages = data ? Math.max(1, Math.ceil(data.total / data.limit)) : 1;
+  const save = async () => {
+    setBusy(true);
+    try {
+      const r = await editWaPerson(sheet._id, edit.id, { name: edit.name, phone: edit.phone });
+      toast.success(r.changed ? (r.weThree === false ? "Saved here. We Three could not be reached, so the lead there still has the old details." : r.weThree ? "Saved here and in We Three." : "Saved.") : "Nothing changed.");
+      setEdit(null); setBump((n) => n + 1); await onChanged();
+    } catch (e) { toast.error(errorMessage(e)); } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="wa-edit" role="group" aria-label={`People in ${sheet.name}`}>
+      <div className="wa-row">
+        <input className="wa-input" type="search" placeholder="Search name or number" aria-label="Search this sheet" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} />
+        <button className="rd-btn is-quiet" disabled={loading} title="Read the stages from We Three again" onClick={() => { fresh.current = true; setBump((n) => n + 1); }}>Refresh</button>
+        <span className="wa-muted">{data ? `${data.total} of ${data.all} people` : "Loading…"}</span>
+      </div>
+      {data && data.stageError ? <p className="wa-muted">Could not read the stages from We Three: {data.stageError}</p> : null}
+      {data && data.weThree ? (
+        <div className="wa-chips" role="group" aria-label="Stage">
+          <button className={"wa-chip" + (!stage ? " is-on" : "")} onClick={() => { setStage(""); setPage(1); }}>All <b>{data.all}</b></button>
+          {data.stages.map((st) => <button key={st.name} className={"wa-chip" + (stage === st.name ? " is-on" : "")} onClick={() => { setStage(st.name); setPage(1); }}>{st.name} <b>{st.count}</b></button>)}
+          {data.noStage > 0 && <button className={"wa-chip" + (stage === "none" ? " is-on" : "")} onClick={() => { setStage("none"); setPage(1); }}>{STAGE_LABEL.none} <b>{data.noStage}</b></button>}
+          {data.unlinked > 0 && <button className={"wa-chip" + (stage === "unlinked" ? " is-on" : "")} title="Not matched to a We Three lead yet" onClick={() => { setStage("unlinked"); setPage(1); }}>Not in We Three <b>{data.unlinked}</b></button>}
+        </div>
+      ) : data ? <p className="wa-muted">This sheet is only in Stashr, so there are no stages. Use “Send to We Three” to see them here.</p> : null}
+      <ul className="wa-people">
+        {(data ? data.people : []).map((p) => (
+          <li key={p.id} className="wa-person">
+            {edit && edit.id === p.id ? (
+              <div className="wa-row">
+                <input className="wa-input" aria-label="Name" placeholder="Name" value={edit.name} maxLength={120} onChange={(e) => setEdit({ ...edit, name: e.target.value })} />
+                <input className="wa-input is-short" aria-label="Number" placeholder="Number" value={edit.phone} onChange={(e) => setEdit({ ...edit, phone: e.target.value })} />
+                <button className="rd-btn is-primary" disabled={busy} onClick={save}>Save</button>
+                <button className="rd-btn is-quiet" disabled={busy} onClick={() => setEdit(null)}>Cancel</button>
+              </div>
+            ) : (
+              <>
+                <div className="wa-person__main">
+                  <span><b>{p.name || "No name"}</b> <em>+{p.phone}</em></span>
+                  <span className="wa-muted">
+                    {SEND_LABEL[p.status] || p.status}{p.sentAt ? ` ${dateShort(p.sentAt)}` : ""}{p.error ? ` · ${p.error}` : ""}
+                    {p.linked && p.stage !== null ? ` · We Three: ${p.stage || "no stage yet"}${p.updatedBy ? ` (by ${p.updatedBy}${p.stageAt ? ", " + dateShort(p.stageAt) : ""})` : ""}` : ""}
+                    {p.weThreeSentAt ? ` · sent there ${dateShort(p.weThreeSentAt)}` : ""}
+                  </span>
+                  {p.notes ? <span className="wa-muted">Notes: {p.notes}</span> : null}
+                </div>
+                {p.linked && p.stage !== null ? <span className={"wa-stage" + (p.stage ? "" : " is-none")}>{p.stage || "No stage"}</span> : null}
+                <button className="rd-btn is-quiet" disabled={busy || p.status === "queued"} onClick={() => setEdit({ id: p.id, name: p.name || "", phone: p.phone })}>Edit</button>
+              </>
+            )}
+          </li>
+        ))}
+        {data && data.people.length === 0 ? <li className="wa-muted">Nobody matches.</li> : null}
+      </ul>
+      {data && pages > 1 ? (
+        <div className="wa-row">
+          <button className="rd-btn is-quiet" disabled={page <= 1 || loading} onClick={() => setPage(page - 1)}>Previous</button>
+          <span className="wa-muted">Page {page} of {pages}</span>
+          <button className="rd-btn is-quiet" disabled={page >= pages || loading} onClick={() => setPage(page + 1)}>Next</button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function SheetCard({ sheet, onChanged }) {
   const [texts, setTexts] = useState(textsToBox(sheet.texts));
   const [limit, setLimit] = useState(String(sheet.dailyLimit || 0));
@@ -128,6 +221,7 @@ function SheetCard({ sheet, onChanged }) {
   const fileRef = useRef(null);
   const contactsRef = useRef(null);
   const [picking, setPicking] = useState(false);
+  const [viewing, setViewing] = useState(false);          // "View people": the list with stages, search and editing
   const [editing, setEditing] = useState(false);          // the "Edit sheet" panel: add numbers by typing or from a contacts file
   const [found, setFound] = useState([]);
   const [foundPicked, setFoundPicked] = useState({});
@@ -215,6 +309,7 @@ function SheetCard({ sheet, onChanged }) {
           <div className="wa-row"><input id={"l" + sheet._id} className="wa-input is-short" type="number" min="0" max="60" value={limit} onChange={(e) => setLimit(e.target.value)} /><button className="rd-btn" disabled={busy} onClick={saveLimit}>Save limit</button></div>
         </div>
       </div>
+      {viewing && <PeopleView sheet={sheet} onChanged={onChanged} />}
       {editing && (
         <div className="wa-edit" role="group" aria-label={`Edit ${sheet.name}`}>
           <label className="wa-label" htmlFor={"p" + sheet._id}>Add new numbers, one per line: Name, 98100 12345</label>
@@ -233,10 +328,17 @@ function SheetCard({ sheet, onChanged }) {
       <div className="wa-row">
         {sheet.weThree ? <span className="wa-muted" title="People and sent marks are kept the same in We Three">Synced with We Three</span>
           : <button className="rd-btn is-quiet" disabled={busy} title="Makes this sheet a list in We Three and keeps the two the same" onClick={() => run(() => sendWaSheetToWeThree(sheet._id), (r) => `Sent to We Three: ${r.added} new, ${r.existing} already there, ${r.linked} linked.`)}>Send to We Three</button>}
+        <button className="rd-btn" aria-expanded={viewing} onClick={() => setViewing((v) => !v)}>{viewing ? "Hide people" : "View people"}</button>
         <button className="rd-btn" aria-expanded={editing} onClick={() => setEditing((v) => !v)}>{editing ? "Close editor" : "Edit sheet"}</button>
         {c.failed > 0 && <button className="rd-btn" disabled={busy} onClick={() => run(() => retryWaSheet(sheet._id), (r) => `${r.requeued} back in line.`)}>Retry the {c.failed} failed</button>}
         <button className="rd-btn is-quiet" disabled={busy} title="For testing: everyone on this sheet goes back in line, so the same test number can be messaged again" onClick={() => { if (window.confirm(`Put everyone on "${sheet.name}" back in line? Use this only for a test sheet.`)) run(() => resetWaSheet(sheet._id), (r) => `${r.reset} people back in line.`); }}>Reset for testing</button>
         <button className="rd-btn is-danger" disabled={busy} onClick={() => { if (window.confirm(`Delete "${sheet.name}" and its ${total} people? Messages already sent stay in the log.`)) run(() => deleteWaSheet(sheet._id), "Sheet deleted."); }}>Delete sheet</button>
+        {sheet.weThree ? <button className="rd-btn is-danger" disabled={busy} title="Deletes the sheet here AND its leads in We Three (their stages and notes there are lost)" onClick={() => {
+          const typed = window.prompt(`This deletes "${sheet.name}" here and ${total} leads in We Three, with their stages and notes. It cannot be undone.\n\nType the sheet name to confirm:`);
+          if (typed === null) return;
+          if (typed.trim() !== sheet.name) return toast.error("The name did not match. Nothing was deleted.");
+          run(() => deleteWaSheet(sheet._id, { alsoWeThree: true }), (r) => `Sheet deleted. ${r && r.weThree ? r.weThree.queued : 0} leads are being removed from We Three.`);
+        }}>Delete here and in We Three</button> : null}
       </div>
     </Section>
   );

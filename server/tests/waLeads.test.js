@@ -23,7 +23,7 @@ const WaLink = require("../models/waLink");
 const sender = require("../utils/waSender");
 
 /* A tiny stand-in for the We Three server. */
-let fake, fakeUrl, valid, marks, patchStatus, refreshes, leadsOverride = null, weLists = [], weLeads = [];
+let fake, fakeUrl, valid, marks, patchStatus, refreshes, leadsOverride = null, weLists = [], weLeads = [], weDeleted = [], weDroppedLists = [], failDelete = new Set();
 const leadsFor = () => [
     { id: "l1", name: "Ravi Kumar", phone: "+919810000001", archived: false, whatsappSentAt: null },
     { id: "l2", name: "Done Already", phone: "9810000002", archived: false, whatsappSentAt: "2026-11-01T00:00:00Z" },
@@ -50,6 +50,14 @@ beforeAll(async () => {
         const token = (req.headers.authorization || "").replace("Bearer ", "");
         if (!valid.has(token)) return send(res, 401, { error: "Unauthorized" });
         if (req.method === "GET" && url.pathname === "/leads/origins") return send(res, 200, { origins: [{ name: "Test", count: 5, sent: 1 }, { name: "Calling data", count: 1993, sent: 153 }] });
+        if (req.method === "DELETE" && url.pathname.startsWith("/leads/lists/")) { weDroppedLists.push(decodeURIComponent(url.pathname.split("/")[3])); return send(res, 200, {}); }
+        if (req.method === "DELETE" && url.pathname.startsWith("/leads/")) {
+            const id = url.pathname.split("/")[2];
+            if (failDelete.has(id)) { failDelete.delete(id); return send(res, 500, { error: "boom" }); }
+            const at = weLeads.findIndex((l) => l.id === id);
+            if (at < 0) return send(res, 404, {});
+            weLeads.splice(at, 1); weDeleted.push(id); return send(res, 204, {});
+        }
         if (req.method === "POST" && url.pathname === "/leads/lists") { weLists.push(body.name); return send(res, weLists.filter((n) => n === body.name).length > 1 ? 200 : 201, { name: body.name, created: true }); }
         if (req.method === "POST" && url.pathname === "/leads/import") {
             let added = 0, existing = 0, invalid = 0;
@@ -70,9 +78,14 @@ beforeAll(async () => {
             const page = Number(url.searchParams.get("page")), all = leadsOverride || leadsFor();
             return send(res, 200, { leads: all.slice((page - 1) * 3, page * 3), totalPages: 2 });     // pages of 3 to exercise paging
         }
+        if (req.method === "GET" && url.pathname === "/leads/meta") return send(res, 200, { statusSuggestions: ["New", "Interested", "Follow up", "Not interested"] });
         if (req.method === "PATCH" && url.pathname.startsWith("/leads/")) {
             if (patchStatus !== 200) return send(res, patchStatus, { error: "boom" });
-            marks.push({ id: url.pathname.split("/")[2], ...body }); return send(res, 200, { lead: {} });
+            const pid = url.pathname.split("/")[2];
+            if (body.phone && weLeads.some((l) => l.id !== pid && l.phone === body.phone)) return send(res, 409, { error: { code: "CONFLICT", message: "Another lead already has this number" } });
+            const mine = weLeads.find((l) => l.id === pid);
+            if (mine) { if (body.name !== undefined) mine.name = body.name; if (body.phone) mine.phone = body.phone; }
+            marks.push({ id: pid, ...body }); return send(res, 200, { lead: {} });
         }
         send(res, 404, {});
     });
@@ -82,8 +95,8 @@ beforeAll(async () => {
 });
 afterAll(async () => { fake.close(); await mongoose.disconnect(); await mongo.stop(); });
 beforeEach(async () => {
-    valid = new Set(); marks = []; patchStatus = 200; refreshes = 0; weLists = []; weLeads = [];
-    for (const M of [User, HomeDevice, HomeClaim, WaSettings, WaSheet, WaRecipient, WaSend, WaLink]) await M.deleteMany({});
+    valid = new Set(); marks = []; patchStatus = 200; refreshes = 0; weLists = []; weLeads = []; weDeleted = []; weDroppedLists = []; failDelete = new Set();
+    for (const M of [User, HomeDevice, HomeClaim, WaSettings, WaSheet, WaRecipient, WaSend, WaLink, require("../models/waLeadDelete")]) await M.deleteMany({});
 });
 
 const signUp = async (email = "ana@example.com") => {
@@ -306,5 +319,145 @@ describe("sheets that live in Stashr and We Three both", () => {
         expect(await WaRecipient.countDocuments({ sheet: made.body.id })).toBe(2016);
         expect(add.body.weThree).toMatchObject({ sent: 2016, added: 2016, linked: 2016, notLinked: 0 });
         expect(Date.now() - t0 < 20000).toBe(true);
+    });
+
+    describe("deleting a sheet here and in We Three", () => {
+        const WaLeadDelete = require("../models/waLeadDelete");
+        const waLeads = () => require("../utils/waLeads");
+        async function withPeople(auth, n = 3) {
+            const made = await request(app).post("/wa/sheets").set(auth).send({ name: "Mine", weThree: true });
+            await request(app).post(`/wa/sheets/${made.body.id}/recipients`).set(auth).send({ recipients: people(...Array.from({ length: n }, (_, i) => String(9810000011 + i))) });
+            return made.body.id;
+        }
+
+        test("the sheet's leads are deleted in We Three, then its list; the sheet and its people are gone here", async () => {
+            const { auth, o } = await linked();
+            const id = await withPeople(auth);
+            const del = await request(app).delete(`/wa/sheets/${id}?alsoWeThree=1`).set(auth);
+            expect(del.status).toBe(200);
+            expect(del.body.weThree).toMatchObject({ queued: 3, list: "Mine" });
+            expect(await WaSheet.countDocuments({})).toBe(0);
+            expect(await WaRecipient.countDocuments({})).toBe(0);
+            await new Promise((r) => setTimeout(r, 400));                      // the route's own first sweep runs in the background
+            await waLeads().deleteSweep(o);                                    // running it again is harmless
+            expect(weLeads.length).toBe(0);
+            expect(weDeleted.sort()).toEqual(["n1", "n2", "n3"]);
+            expect(weDroppedLists).toContain("Mine");
+            expect(await WaLeadDelete.countDocuments({})).toBe(0);
+        });
+
+        test("a plain delete leaves We Three alone", async () => {
+            const { auth } = await linked();
+            const id = await withPeople(auth);
+            expect((await request(app).delete(`/wa/sheets/${id}`).set(auth)).body).toEqual({ ok: true });
+            expect(weLeads.length).toBe(3);
+            expect(await WaLeadDelete.countDocuments({})).toBe(0);
+        });
+
+        test("a lead We Three could not delete is tried again by the next sweep; one it no longer has counts as done", async () => {
+            const { auth, o } = await linked();
+            const id = await withPeople(auth);
+            failDelete.add("n2");
+            weLeads.splice(weLeads.findIndex((l) => l.id === "n3"), 1);        // already gone in We Three
+            await request(app).delete(`/wa/sheets/${id}?alsoWeThree=1`).set(auth);
+            await new Promise((r) => setTimeout(r, 400));                      // the route's own first sweep runs in the background
+            const left = await WaLeadDelete.find({}).lean();
+            expect(left.map((x) => x.externalId)).toEqual(["n2"]);
+            expect(left[0].tries).toBe(1);
+            expect(weDroppedLists).toEqual([]);                                // the list stays until its last lead is gone
+            await waLeads().deleteSweep(o);
+            expect(await WaLeadDelete.countDocuments({})).toBe(0);
+            expect(weDroppedLists).toEqual(["Mine"]);
+            expect((await request(app).get("/wa/threads").set(auth)).body.pendingDeletes).toBe(0);
+        });
+
+        test("without the We Three link the sheet is not deleted at all, so nothing is half done", async () => {
+            const auth = await signUp();
+            const made = await request(app).post("/wa/sheets").set(auth).send({ name: "Mine" });
+            const del = await request(app).delete(`/wa/sheets/${made.body.id}?alsoWeThree=1`).set(auth);
+            expect(del.status).toBe(409);
+            expect(await WaSheet.countDocuments({})).toBe(1);
+        });
+    });
+
+    describe("looking at a sheet's people and editing them", () => {
+        async function sheetWith(auth, n = 5) {
+            const made = await request(app).post("/wa/sheets").set(auth).send({ name: "Mine", weThree: true });
+            await request(app).post(`/wa/sheets/${made.body.id}/recipients`).set(auth).send({ recipients: people(...Array.from({ length: n }, (_, i) => String(9810000011 + i))) });
+            return made.body.id;
+        }
+
+        test("the list shows each person with the stage they have in We Three, the stages with counts in the order the Tasks app suggests", async () => {
+            const { auth } = await linked();
+            const id = await sheetWith(auth);
+            Object.assign(weLeads[0], { status: "Interested" }); Object.assign(weLeads[1], { status: "Follow up" }); Object.assign(weLeads[2], { status: "Interested" });
+            const r = await request(app).get(`/wa/sheets/${id}/people`).set(auth);
+            expect(r.status).toBe(200);
+            expect(r.body).toMatchObject({ total: 5, all: 5, weThree: true, noStage: 2, unlinked: 0 });
+            expect(r.body.stages).toEqual([{ name: "Interested", count: 2 }, { name: "Follow up", count: 1 }]);
+            expect(r.body.people.map((p) => [p.name, p.phone, p.stage])).toEqual([["P1", "919810000011", "Interested"], ["P2", "919810000012", "Follow up"], ["P3", "919810000013", "Interested"], ["P4", "919810000014", ""], ["P5", "919810000015", ""]]);
+        });
+
+        test("it can be filtered by stage, searched by name or number, and paged", async () => {
+            const { auth } = await linked();
+            const id = await sheetWith(auth);
+            Object.assign(weLeads[0], { status: "Interested" }); Object.assign(weLeads[2], { status: "Interested" });
+            const by = async (qs) => (await request(app).get(`/wa/sheets/${id}/people?${qs}`).set(auth)).body;
+            expect((await by("stage=Interested")).people.map((p) => p.name)).toEqual(["P1", "P3"]);
+            expect((await by("stage=none")).people.map((p) => p.name)).toEqual(["P2", "P4", "P5"]);
+            expect((await by("q=p4")).people.map((p) => p.name)).toEqual(["P4"]);
+            expect((await by("q=98100 00013")).people.map((p) => p.name)).toEqual(["P3"]);
+            const page2 = await by("limit=2&page=2");
+            expect(page2).toMatchObject({ total: 5, page: 2, limit: 2 });
+            expect(page2.people.map((p) => p.name)).toEqual(["P3", "P4"]);
+        });
+
+        test("a sheet that is only in Stashr lists its people without stages", async () => {
+            const auth = await signUp();
+            const made = await request(app).post("/wa/sheets").set(auth).send({ name: "Local" });
+            await request(app).post(`/wa/sheets/${made.body.id}/recipients`).set(auth).send({ recipients: people("9810000011") });
+            const r = await request(app).get(`/wa/sheets/${made.body.id}/people`).set(auth);
+            expect(r.body).toMatchObject({ weThree: false, all: 1, stages: [], unlinked: 1 });
+            expect(r.body.people[0]).toMatchObject({ name: "P1", stage: null, linked: false });
+        });
+
+        test("editing a name and number changes it here and on the We Three lead; a number already used is refused", async () => {
+            const { auth } = await linked();
+            const id = await sheetWith(auth, 2);
+            const list = (await request(app).get(`/wa/sheets/${id}/people`).set(auth)).body.people;
+            const ok = await request(app).patch(`/wa/sheets/${id}/people/${list[0].id}`).set(auth).send({ name: "Ravi Kumar", phone: "98100 99999" });
+            expect(ok.status).toBe(200);
+            expect(ok.body).toMatchObject({ changed: true, weThree: true });
+            expect((await WaRecipient.findById(list[0].id).lean())).toMatchObject({ name: "Ravi Kumar", phone: "919810099999" });
+            expect(marks.at(-1)).toMatchObject({ id: "n1", name: "Ravi Kumar", phone: "9810099999" });
+            expect(weLeads[0]).toMatchObject({ name: "Ravi Kumar", phone: "9810099999" });
+            const dup = await request(app).patch(`/wa/sheets/${id}/people/${list[1].id}`).set(auth).send({ phone: "9810099999" });
+            expect(dup.status).toBe(409);
+            expect((await request(app).patch(`/wa/sheets/${id}/people/${list[1].id}`).set(auth).send({ phone: "123" })).status).toBe(400);
+            expect((await request(app).patch(`/wa/sheets/${id}/people/${list[1].id}`).set(auth).send({})).body).toEqual({ ok: true, changed: false });
+        });
+
+        test("when We Three says the number is taken, nothing changes here either; when it is down the change is kept and says so", async () => {
+            const { auth } = await linked();
+            const id = await sheetWith(auth, 2);
+            weLeads.push({ id: "z1", name: "Other", phone: "9810088888", origin: "Else", archived: false, whatsappSentAt: null });
+            const list = (await request(app).get(`/wa/sheets/${id}/people`).set(auth)).body.people;
+            const clash = await request(app).patch(`/wa/sheets/${id}/people/${list[0].id}`).set(auth).send({ phone: "9810088888" });
+            expect(clash.status).toBe(409);
+            expect((await WaRecipient.findById(list[0].id).lean()).phone).toBe("919810000011");
+            patchStatus = 500;
+            const down = await request(app).patch(`/wa/sheets/${id}/people/${list[0].id}`).set(auth).send({ name: "Renamed" });
+            expect(down.body).toMatchObject({ changed: true, weThree: false });
+            expect((await WaRecipient.findById(list[0].id).lean()).name).toBe("Renamed");
+        });
+
+        test("another account cannot read or edit these people", async () => {
+            const { auth } = await linked();
+            const id = await sheetWith(auth, 1);
+            const pid = (await request(app).get(`/wa/sheets/${id}/people`).set(auth)).body.people[0].id;
+            const other = await signUp("bob@example.com");
+            expect((await request(app).get(`/wa/sheets/${id}/people`).set(other)).status).toBe(404);
+            expect((await request(app).patch(`/wa/sheets/${id}/people/${pid}`).set(other).send({ name: "x" })).status).toBe(404);
+        });
     });
 });

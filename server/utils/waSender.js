@@ -282,6 +282,7 @@ async function tickAll(now = Date.now()) {
     for (const owner of await WaLink.distinct("owner")) {
         try { await waLeads.writeBack(owner); } catch (e) { console.log("[wa] write-back failed:", e.message); }
         try { await waLeads.syncLinked(owner, normalizePhone); } catch (e) { console.log("[wa] We Three sync failed:", e.message); }
+        try { await waLeads.deleteSweep(owner); } catch (e) { console.log("[wa] We Three delete failed:", e.message); }
     }
 }
 

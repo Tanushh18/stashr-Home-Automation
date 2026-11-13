@@ -596,7 +596,9 @@ export const saveWaSettings = (body) => instance.put("/wa/settings", body).then(
 export const sendWaSheetToWeThree = (id) => instance.post(`/wa/sheets/${id}/we-three`, {}, { timeout: 120000 }).then((r) => r.data);
 export const createWaSheet = (body) => instance.post("/wa/sheets", body).then((r) => r.data);
 export const saveWaSheet = (id, body) => instance.patch(`/wa/sheets/${id}`, body).then((r) => r.data);
-export const deleteWaSheet = (id) => instance.delete(`/wa/sheets/${id}`).then((r) => r.data);
+export const deleteWaSheet = (id, { alsoWeThree = false } = {}) => instance.delete(`/wa/sheets/${id}`, { params: alsoWeThree ? { alsoWeThree: 1 } : undefined, timeout: 60000 }).then((r) => r.data);
+export const getWaPeople = (id, params) => instance.get(`/wa/sheets/${id}/people`, { params, timeout: 120000 }).then((r) => r.data);
+export const editWaPerson = (id, pid, body) => instance.patch(`/wa/sheets/${id}/people/${pid}`, body).then((r) => r.data);
 export const addWaPeople = (id, recipients) => instance.post(`/wa/sheets/${id}/recipients`, { recipients }, { timeout: 60000 }).then((r) => r.data);
 /** Adds many people in requests of 500, so a big sheet never goes over the request size limit; returns the totals. */
 export async function addWaPeopleInBatches(id, recipients, size = 500, onProgress) {

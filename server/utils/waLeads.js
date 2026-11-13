@@ -9,6 +9,7 @@ const WaLink = require("../models/waLink");
 const WaSheet = require("../models/waSheet");
 const WaRecipient = require("../models/waRecipient");
 const WaSend = require("../models/waSend");
+const WaLeadDelete = require("../models/waLeadDelete");
 
 const TIMEOUT_MS = 20000;
 const PAGE = 100;
@@ -90,7 +91,7 @@ async function connect(owner, mobile, mpin) {
 }
 
 async function disconnect(owner) { access.delete(String(owner)); await WaLink.deleteOne({ owner }); }
-const statusOf = async (owner) => { const l = await WaLink.findOne({ owner }).lean(); return l ? { connected: true, mobile: l.mobile, name: l.name, since: l.connectedAt } : { connected: false }; };
+const statusOf = async (owner) => { const l = await WaLink.findOne({ owner }).lean(); return l ? { connected: true, mobile: l.mobile, name: l.name, since: l.connectedAt, pendingDeletes: await WaLeadDelete.countDocuments({ owner }) } : { connected: false }; };
 
 async function origins(owner) {
     const r = await call(owner, "GET", "/leads/origins");
@@ -194,6 +195,90 @@ async function linkLeads(owner, sheet) {
     return ops.length;
 }
 
+/**
+ * Deletes the sheet's leads in We Three as well: each lead id is put in a queue and the sweep deletes them a few at a time (We Three
+ * deletes one lead per call). Once the last lead of a list is gone the empty list is removed too, when We Three can do that.
+ * Returns how many leads are waiting. Only leads Stashr is linked to (they have a We Three id) are touched.
+ */
+async function queueDeleteSheet(owner, sheetId) {
+    if (!(await WaLink.exists({ owner }))) { const e = new Error("Connect We Three first."); e.status = 409; throw e; }
+    const sheet = await WaSheet.findOne({ _id: sheetId, owner }).select("name").lean();
+    if (!sheet) { const e = new Error("Sheet not found."); e.status = 404; throw e; }
+    const people = await WaRecipient.find({ owner, sheet: sheet._id, externalId: { $ne: "" } }).select("externalId").lean();
+    if (people.length) {
+        try { await WaLeadDelete.insertMany(people.map((p) => ({ owner, externalId: p.externalId, list: sheet.name })), { ordered: false }); }
+        catch (e) { if (!(e && (e.code === 11000 || e.writeErrors))) throw e; }
+    }
+    // The list is only removed when it never had linked leads either (an empty list made by Stashr).
+    if (!people.length) await dropList(owner, sheet.name);
+    return { queued: people.length, list: sheet.name };
+}
+
+/** Asks We Three to remove an (empty) list name. A We Three without that call just keeps the empty name; nothing breaks. */
+async function dropList(owner, name) {
+    try { const r = await call(owner, "DELETE", `/leads/lists/${encodeURIComponent(name)}`); return r.status === 200 || r.status === 204; }
+    catch (e) { return false; }
+}
+
+/**
+ * Works through the queue: up to `limit` leads per call, 8 at a time. A lead We Three already does not have (404) counts as done;
+ * any other failure is tried again on the next sweep, up to 5 times. When a list has no leads left in the queue, its name is dropped.
+ */
+async function deleteSweep(owner, limit = 40) {
+    if (!(await WaLink.exists({ owner }))) return 0;
+    const batch = await WaLeadDelete.find({ owner }).sort({ createdAt: 1 }).limit(limit).lean();
+    let done = 0;
+    const lists = new Set(batch.map((b) => b.list).filter(Boolean));
+    for (let i = 0; i < batch.length; i += 8) {
+        await Promise.all(batch.slice(i, i + 8).map(async (b) => {
+            try {
+                const r = await call(owner, "DELETE", `/leads/${encodeURIComponent(b.externalId)}`);
+                if (r.status === 200 || r.status === 204 || r.status === 404) { await WaLeadDelete.deleteOne({ _id: b._id }); done++; }
+                else if (b.tries + 1 >= 5) await WaLeadDelete.deleteOne({ _id: b._id });
+                else await WaLeadDelete.updateOne({ _id: b._id }, { $inc: { tries: 1 } });
+            } catch (e) {
+                if (b.tries + 1 >= 5) await WaLeadDelete.deleteOne({ _id: b._id });
+                else await WaLeadDelete.updateOne({ _id: b._id }, { $inc: { tries: 1 } });
+            }
+        }));
+    }
+    for (const list of lists) if (!(await WaLeadDelete.exists({ owner, list }))) await dropList(owner, list);
+    return done;
+}
+
+const stageCache = new Map();                                   // "owner:sheet" -> { at, byId, order }
+const STAGE_TTL_MS = 60 * 1000;
+/**
+ * What We Three shows for each lead of a sheet, by lead id: its stage (`status`), when WhatsApp was sent there, and its notes.
+ * Read page by page and kept for a minute, so opening the sheet again does not read everything again. `stages` lists the stages
+ * in the order the We Three app suggests them (then any other stage found on a lead).
+ */
+async function leadStages(owner, sheet, force = false) {
+    const key = `${owner}:${sheet._id}`, hit = stageCache.get(key);
+    if (!force && hit && Date.now() - hit.at < STAGE_TTL_MS) return hit;
+    const byId = new Map();
+    for (let page = 1; page <= MAX_PAGES; page++) {
+        const r = await call(owner, "GET", `/leads?page=${page}&limit=${PAGE}&status=all&origin=${encodeURIComponent(sheet.name)}`);
+        if (r.status !== 200) throw cleanFail(r, "leads");
+        for (const l of r.json.leads || []) byId.set(String(l.id), { stage: String(l.status || ""), whatsappSentAt: l.whatsappSentAt || null, notes: String(l.notes || "").slice(0, 300), updatedBy: String(l.updatedByName || ""), stageAt: l.statusUpdatedAt || null });
+        if (!(r.json.leads || []).length || page >= (r.json.totalPages || 1)) break;
+    }
+    let order = [];
+    try { const m = await call(owner, "GET", "/leads/meta"); if (m.status === 200) order = (m.json.statusSuggestions || []).map(String); } catch (e) { /* the order is a nicety */ }
+    const out = { at: Date.now(), byId, order };
+    stageCache.set(key, out);
+    return out;
+}
+
+/** Changes a person's name and/or number in We Three too (the lead keeps its stage and notes). Returns true when We Three accepted it. */
+async function editLead(owner, externalId, fields) {
+    const r = await call(owner, "PATCH", `/leads/${encodeURIComponent(externalId)}`, fields);
+    stageCache.clear();
+    if (r.status === 409) { const e = new Error("Another lead in We Three already has this number."); e.status = 409; throw e; }
+    if (r.status !== 200) throw cleanFail(r, "lead");
+    return true;
+}
+
 const lastSync = new Map();                                    // owner -> time of the last two-way sweep
 /**
  * Keeps the sheets that live in both places the same: people added in Stashr go to We Three, and leads added to the same list in
@@ -238,4 +323,4 @@ async function writeBack(owner, limit = 10) {
     return done;
 }
 
-module.exports = { seal, unseal, connect, disconnect, statusOf, origins, importSheet, pushSheet, syncLinked, markLead, writeBack, call, NO_WHATSAPP_NOTE };
+module.exports = { seal, unseal, connect, disconnect, statusOf, origins, importSheet, pushSheet, syncLinked, leadStages, editLead, queueDeleteSheet, deleteSweep, markLead, writeBack, call, NO_WHATSAPP_NOTE };

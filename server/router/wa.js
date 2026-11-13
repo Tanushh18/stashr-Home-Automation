@@ -20,6 +20,7 @@ const WaSettings = require("../models/waSettings");
 const WaSheet = require("../models/waSheet");
 const WaRecipient = require("../models/waRecipient");
 const WaSend = require("../models/waSend");
+const WaLink = require("../models/waLink");
 const sender = require("../utils/waSender");
 const waLeads = require("../utils/waLeads");
 const automation = require("../utils/homeAutomation");
@@ -208,10 +209,14 @@ router.delete("/wa/sheets/:id", authenticate, writeLimiter, async (req, res) => 
         if (!validId(req.params.id)) return res.status(404).json({ error: "Sheet not found." });
         const owner = req.rootUser._id;
         if (await WaRecipient.exists({ owner, sheet: req.params.id, status: "queued" })) return res.status(409).json({ error: "A message from this sheet is being sent. Try again in a minute." });
+        // "Delete here and in We Three": the sheet's linked leads are queued for deletion there before they are forgotten here.
+        let weThree = null;
+        if (req.query.alsoWeThree === "1" || req.query.alsoWeThree === "true") weThree = await waLeads.queueDeleteSheet(owner, req.params.id);
         const gone = await WaSheet.deleteOne({ _id: req.params.id, owner });
         if (!gone.deletedCount) return res.status(404).json({ error: "Sheet not found." });
         await WaRecipient.deleteMany({ owner, sheet: req.params.id });
-        res.json({ ok: true });
+        if (weThree && weThree.queued) waLeads.deleteSweep(owner, 40).catch(() => {});        // the first leads go at once, the rest with the next sweeps
+        res.json(weThree ? { ok: true, weThree } : { ok: true });
     } catch (e) { fail(res, e, "Could not delete the sheet."); }
 });
 
@@ -243,6 +248,67 @@ router.post("/wa/sheets/:id/recipients", authenticate, writeLimiter, async (req,
         if (sheet.weThree && added) { try { weThree = await waLeads.pushSheet(owner, sheet._id); } catch (e) { weThreeError = e.message; } }
         res.json({ added, duplicates: rows.length - added, invalid, total: list.length, ...(sheet.weThree ? { weThree, weThreeError } : {}) });
     } catch (e) { fail(res, e, "Could not add the people."); }
+});
+
+// The people of one sheet, a page at a time, with each person's stage in We Three (the same stages the Tasks app shows).
+// ?q= searches name and number, ?stage= keeps one stage ("none" = no stage yet), ?page= and ?limit= (up to 100).
+router.get("/wa/sheets/:id/people", authenticate, async (req, res) => {
+    try {
+        if (!validId(req.params.id)) return res.status(404).json({ error: "Sheet not found." });
+        const owner = req.rootUser._id;
+        const sheet = await WaSheet.findOne({ _id: req.params.id, owner }).select("name weThree").lean();
+        if (!sheet) return res.status(404).json({ error: "Sheet not found." });
+        const limit = clamp(req.query.limit, 1, 100, 50), page = clamp(req.query.page, 1, 100000, 1);
+        let stages = null, stageError = "";
+        if (sheet.weThree && await WaLink.exists({ owner })) { try { stages = await waLeads.leadStages(owner, { _id: sheet._id, name: sheet.name }, req.query.refresh === "1"); } catch (e) { stageError = e.message; } }
+        const all = await WaRecipient.find({ owner, sheet: sheet._id }).sort({ order: 1 }).select("name phone status error sentAt externalId").lean();
+        const stageOf = (p) => (stages && p.externalId && stages.byId.get(p.externalId)) || null;
+        const counts = {}, countsOf = (p) => { const st = stageOf(p); return st ? (st.stage || "none") : "unlinked"; };
+        for (const p of all) { const k = countsOf(p); counts[k] = (counts[k] || 0) + 1; }
+        const q = String(req.query.q || "").trim().toLowerCase(), digits = q.replace(/\D/g, ""), stage = String(req.query.stage || "");
+        const rows = all.filter((p) => (!q || (p.name || "").toLowerCase().includes(q) || (digits.length >= 2 && p.phone.includes(digits))) && (!stage || countsOf(p) === stage));
+        const order = stages ? stages.order : [];
+        const names = Object.keys(counts).filter((k) => k !== "none" && k !== "unlinked");
+        const stageList = [...order.filter((n) => counts[n]), ...names.filter((n) => !order.includes(n)).sort()].map((n) => ({ name: n, count: counts[n] }));
+        res.json({
+            total: rows.length, all: all.length, page, limit, weThree: Boolean(sheet.weThree), stageError,
+            stages: stageList, noStage: counts.none || 0, unlinked: counts.unlinked || 0,
+            people: rows.slice((page - 1) * limit, page * limit).map((p) => {
+                const st = stageOf(p);
+                return { id: p._id, name: p.name, phone: p.phone, status: p.status, error: p.error || "", sentAt: p.sentAt || null, linked: Boolean(p.externalId), stage: st ? st.stage : null, weThreeSentAt: st ? st.whatsappSentAt : null, notes: st ? st.notes : "", updatedBy: st ? st.updatedBy : "", stageAt: st ? st.stageAt : null };
+            })
+        });
+    } catch (e) { fail(res, e, "Could not load the sheet's people."); }
+});
+
+// Edits one person: the name and/or the number. A person who is also a We Three lead is changed there too.
+router.patch("/wa/sheets/:id/people/:pid", authenticate, writeLimiter, async (req, res) => {
+    try {
+        if (!validId(req.params.id) || !validId(req.params.pid)) return res.status(404).json({ error: "Person not found." });
+        const owner = req.rootUser._id, b = req.body || {};
+        const person = await WaRecipient.findOne({ _id: req.params.pid, sheet: req.params.id, owner });
+        if (!person) return res.status(404).json({ error: "Person not found." });
+        if (person.status === "queued") return res.status(409).json({ error: "A message to this person is being sent. Try again in a minute." });
+        const set = {};
+        if (b.name !== undefined) set.name = String(b.name || "").trim().slice(0, 120);
+        if (b.phone !== undefined) {
+            const phone = sender.normalizePhone(b.phone);
+            if (!phone) return res.status(400).json({ error: "Enter a valid mobile number." });
+            if (phone !== person.phone) {
+                if (await WaRecipient.exists({ owner, sheet: person.sheet, phone, _id: { $ne: person._id } })) return res.status(409).json({ error: "Someone on this sheet already has that number." });
+                set.phone = phone;
+            }
+        }
+        if (!Object.keys(set).length) return res.json({ ok: true, changed: false });
+        let weThree = null;
+        if (person.externalId && await WaLink.exists({ owner })) {
+            const lead = {}; if (set.name !== undefined) lead.name = set.name; if (set.phone) lead.phone = set.phone.slice(-10);
+            try { await waLeads.editLead(owner, person.externalId, lead); weThree = true; }
+            catch (e) { if (e.status === 409) return res.status(409).json({ error: e.message }); weThree = false; }      // We Three down: the change is kept here and says so
+        }
+        await WaRecipient.updateOne({ _id: person._id }, { $set: set });
+        res.json({ ok: true, changed: true, weThree });
+    } catch (e) { if (e && e.code === 11000) return res.status(409).json({ error: "Someone on this sheet already has that number." }); fail(res, e, "Could not save the person."); }
 });
 
 // Puts an existing sheet in We Three as well (its name becomes a list there) and keeps the two the same from now on.
