@@ -50,6 +50,14 @@ class WhatsAppAccessibility : AccessibilityService() {
         catch (e: Throwable) { Log.w(TAG, "keyboard mode failed: ${e.message}") }
     }
 
+    /** The view ids on a window, in tree order (only ids, never any text): what a failure reports so the steps can be tuned. */
+    private fun idsOn(n: AccessibilityNodeInfo?, out: MutableList<String?> = ArrayList(), depth: Int = 0): List<String?> {
+        if (n == null || depth > 40 || out.size > 200) return out
+        out.add(n.viewIdResourceName)
+        for (i in 0 until n.childCount) idsOn(n.getChild(i), out, depth + 1)
+        return out
+    }
+
     /** True when any text or description on the screen matches the pattern. */
     private fun hasText(n: AccessibilityNodeInfo?, re: Regex, depth: Int = 0): Boolean {
         if (n == null || depth > 30) return false
@@ -86,7 +94,8 @@ class WhatsAppAccessibility : AccessibilityService() {
             perm.findAccessibilityNodeInfosByText("Allow").orEmpty().firstOrNull()?.let { if (clickUp(it)) j.stageAt = now }
             return
         }
-        val root = windowRoot(WaLeadSender.PACKAGE) ?: return
+        val root = windowRoot(WaLeadSender.PACKAGE) ?: run { j.seen = ""; return }
+        j.seen = WaImage.shortIds(idsOn(root)).joinToString(",")
         if (j.clicks == 0 && j.stage == 0) {
             // "The phone number +91 ... isn't on WhatsApp." (WhatsApp may use a curly apostrophe, so match any character there).
             // Only when no chat is open: the typed message itself (the composer) can contain those words, e.g. a report.

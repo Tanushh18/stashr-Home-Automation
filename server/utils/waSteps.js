@@ -55,9 +55,17 @@ function fromAnswer(ok, message, { withImage = false } = {}) {
     if (/not a valid number/i.test(m)) return build("checks", "server", "The number is not a valid mobile number.");
     if (/picture/i.test(m) && /save|available|gallery|attach/i.test(m)) return build("picture", "tablet", m);
     if (/not on whatsapp|isn't on whatsapp|invalid/i.test(m)) return build("opened", "whatsapp", "WhatsApp says this number is not on WhatsApp.");
-    const t = /before pressing send.*step (\d+)/i.exec(m);
+    // "Timed out before pressing Send (step 3, picture shared; screen: send_media_btn,caption,...)": the newer tablet app says where the
+    // picture flow stopped and which view ids WhatsApp showed, so a flow that needs tuning can be fixed without the tablet in hand.
+    const t = /before pressing send \(step (\d+)(?:, (picture shared))?(?:; screen: ([^)]*))?\)/i.exec(m);
     if (t) {
         const n = Number(t[1]);
+        if (t[3] !== undefined) {
+            const seen = ` On WhatsApp's screen: ${t[3].trim() || "nothing"}.`;
+            if (withImage && n === 0) return build("opened", "tablet", `The tablet could not see the chat open in WhatsApp (it never found the attach button).${seen}`);
+            if (withImage && n === 3) return build("picture", "tablet", (t[2] ? "The picture was shared into the chat, but the tablet could not find Send on its preview." : "The chat opened, but the picture could not be shared into it.") + seen);
+            return build("send", "tablet", `The tablet opened WhatsApp but could not press Send (step ${n}).${seen}`);
+        }
         if (withImage && n <= 3) return build("picture", "tablet", `Stopped at step ${n}: ${STAGE_TEXT[Math.max(0, Math.min(3, n))]}.`);
         return build("send", "tablet", `The tablet opened WhatsApp but could not press Send (step ${n}).`);
     }

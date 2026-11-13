@@ -31,6 +31,7 @@ object WaLeadSender {
         @Volatile var stage = 0            // 0 wait for the chat (then share the picture), 3 the picture preview's Send, 4 wait for the chat to come back
         @Volatile var shareWanted = false  // the chat is open: the picture file can be shared into it now
         @Volatile var shared = false       // the share was started
+        @Volatile var seen = ""            // the view ids last seen on WhatsApp's screen (shown in a failure, so the steps can be tuned from afar)
         @Volatile var stageAt = 0L
         @Volatile var done = false
         @Volatile var error: String? = null
@@ -86,7 +87,7 @@ object WaLeadSender {
                 WhatsAppAccessibility.instance?.poke()
                 delay(500)
             }
-            throw IllegalStateException(if (j.clicks > 0) "Pressed Send but WhatsApp did not confirm" else "Timed out before pressing Send (step ${j.stage})")
+            throw IllegalStateException(if (j.clicks > 0) "Pressed Send but WhatsApp did not confirm" else "Timed out before pressing Send (step ${j.stage}${if (j.shared) ", picture shared" else ""}; screen: ${j.seen.ifEmpty { "nothing from WhatsApp" }})")
         } finally {
             j.done = true
             if (job === j) job = null
@@ -97,24 +98,21 @@ object WaLeadSender {
         }
     }
 
-    /** The picture as a private file in this app's cache, named for this message (nothing else can overwrite it or be picked instead). */
+    /** The picture as a private file in this app's own folder (cache/wa-share), named for this message. */
     private fun writeShareFile(ctx: Context, bytes: ByteArray, sendId: String): File {
-        val dir = File(ctx.cacheDir, "wa-share").apply { mkdirs() }
-        dir.listFiles()?.forEach { if (System.currentTimeMillis() - it.lastModified() > 3_600_000L) it.delete() }   // leftovers of a crashed send
-        val ext = when (mimeOf(bytes)) { "image/png" -> "png"; "image/webp" -> "webp"; else -> "jpg" }
-        val f = File(dir, "wa-" + sendId.filter { it.isLetterOrDigit() }.take(24).ifEmpty { System.currentTimeMillis().toString() } + "." + ext)
+        val dir = File(ctx.cacheDir, WaImage.FOLDER).apply { mkdirs() }
+        val now = System.currentTimeMillis()
+        dir.listFiles()?.forEach { if (WaImage.isStale(it.lastModified(), now)) it.delete() }          // leftovers of a crashed send
+        val f = File(dir, WaImage.fileName(sendId, WaImage.mimeOf(bytes), now))
         try { f.writeBytes(bytes) } catch (e: Exception) { throw IllegalStateException("Could not save the picture: " + (e.message ?: "no space")) }
+        if (!f.isFile || f.length() == 0L) throw IllegalStateException("Could not save the picture")
         return f
     }
-
-    private fun mimeOf(bytes: ByteArray) =
-        if (bytes.size > 3 && bytes[0] == 0x89.toByte()) "image/png" else if (bytes.size > 11 && String(bytes, 8, 4) == "WEBP") "image/webp" else "image/jpeg"
 
     /** "Send this file to that chat": the picture with the text as its caption, straight into the chat of this number. */
     private fun shareIntent(ctx: Context, file: File, text: String, phone: String): Intent {
         val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", file)
-        val mime = when (file.extension) { "png" -> "image/png"; "webp" -> "image/webp"; else -> "image/jpeg" }
-        return Intent(Intent.ACTION_SEND).setPackage(PACKAGE).setType(mime)
+        return Intent(Intent.ACTION_SEND).setPackage(PACKAGE).setType(WaImage.mimeOfExt(file.extension))
             .putExtra(Intent.EXTRA_STREAM, uri)
             .apply { if (text.isNotEmpty()) putExtra(Intent.EXTRA_TEXT, text) }
             .putExtra("jid", "$phone@s.whatsapp.net")
