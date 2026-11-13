@@ -474,6 +474,12 @@ export const getHomeRooms = () => instance.get("/home/rooms").then((r) => r.data
 export const saveHomeRooms = (rooms) => instance.put("/home/rooms", { rooms }).then((r) => r.data);
 export const setRoomPhone = (id, on) => instance.put(`/home/rooms/phone/${id}`, { on }).then((r) => r.data);
 export const deleteRoomSamples = (body) => instance.delete("/home/rooms/samples", { data: body }).then((r) => r.data);
+/** Deletes one room everywhere: every phone's training for it, its place on the map, a phone's "current room" that was it. */
+export const deleteHomeRoom = (name) => instance.delete(`/home/room/${encodeURIComponent(name)}`).then((r) => r.data);
+/** Auto-improve on or off for one phone. */
+export const setRoomAuto = (id, auto) => instance.put(`/home/rooms/phone/${id}`, { auto }).then((r) => r.data);
+/** Tune every phone's model and check its auto samples now (it also runs by itself once an hour). */
+export const maintainRoomModel = () => instance.post("/home/room/maintain").then((r) => r.data);
 export const getHomeTrail = () => instance.get("/home/trail").then((r) => r.data);
 export const getTelegramDiagnose = () => instance.get("/telegram/diagnose").then((r) => r.data);
 export const repairTelegram = () => instance.post("/telegram/repair").then((r) => r.data);

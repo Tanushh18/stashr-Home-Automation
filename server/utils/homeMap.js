@@ -216,11 +216,13 @@ async function build(owner, now = Date.now(), { rooms: useRooms = true } = {}) {
     if (roomMode) {
         const blocks = roomNames.map((n, i) => ({ id: "r:" + n, name: n, auto: false, hint: "", bssids: [], observations: roomNames.length - i, days: 0, confidence: 1, roomBlock: true, devices: Object.entries(rooms).filter(([room]) => same(room, n)).flatMap(([, items]) => items) }));
         const others = Object.entries(rooms).filter(([room]) => !roomNames.some((n) => same(room, n))).map(([room, items]) => ({ id: "room:" + room, name: room, auto: false, hint: "from your device labels", bssids: [], observations: 0, days: 0, confidence: 0, labelOnly: true, devices: items }));
-        const auto = layout(blocks, [], others);
+        // rooms people walk between (a phone's room changed from one to the other) are put next to each other; your saved layout always wins
+        const walks = edges.filter((e) => String(e.a).startsWith("r:") && String(e.b).startsWith("r:")).map((e) => ({ a: e.a, b: e.b, count: e.count }));
+        const auto = layout(blocks, walks, others);
         const saved = cleanLayout(map.layout, roomNames);
         const geometry = applyLayout(auto.filter((b) => b.roomBlock), saved);
         placed = [...geometry.map((b) => ({ ...b, z: b.z || DEFAULT_Z })), ...auto.filter((b) => !b.roomBlock)];
-    } else placed = layout(zones.map((z) => ({ ...z, devices: attach.get(z.id) })), edges.map((e) => ({ a: e.a, b: e.b, count: e.count })), extra);
+    } else placed = layout(zones.map((z) => ({ ...z, devices: attach.get(z.id) })), edges.filter((e) => !String(e.a).startsWith("r:")).map((e) => ({ a: e.a, b: e.b, count: e.count })), extra);
 
     // People and the tablet: where each is connected right now.
     const people = home.presence(hubs, phones, now, settings.homeSpot);
@@ -235,7 +237,9 @@ async function build(owner, now = Date.now(), { rooms: useRooms = true } = {}) {
         const ph = phones.find((d) => (d.person || d.name) === p.person);
         if (!p.home) { away.push({ person: p.person, distanceKm: p.distanceKm ?? null }); continue; }
         const z = ph && inZone.get(roomMode ? roomIdOf(ph) : zoneOf(ph));
-        if (z) z.people.push({ person: p.person, by: roomMode ? "room" : p.by }); else homeNoZone.push({ person: p.person, by: p.by });
+        // in a room: also how sure the latest scan was (the 3D map fades a person whose room is not sure)
+        const r = roomMode && z ? roomLive.currentOf(ph, now) : null;
+        if (z) z.people.push({ person: p.person, by: roomMode ? "room" : p.by, ...(r ? { sure: r.sure !== false, confidence: Number(r.confidence) || 0 } : {}) }); else homeNoZone.push({ person: p.person, by: p.by });
     }
     const days = rows.length ? Math.max(1, Math.round((now - Math.min(...rows.map((r) => new Date(r.firstSeen).getTime()))) / 86400000)) : 0;
     const note = roomMode ? `${roomNames.length} kamre. Phones ka Wi-Fi/Bluetooth se kamra pehchana jaata hai (Room Lab mein train karo); jis phone ka kamra pakka nahi wo “ghar par, kamra pata nahi” mein dikhta hai.`

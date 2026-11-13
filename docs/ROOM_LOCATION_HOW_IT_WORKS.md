@@ -22,10 +22,10 @@ Phone (Stashr Location 1.7.0, Room Lab)         Server                          
 
 ## Step 3: Pehchan (saare samples vote karte hain)
 Naye scan ko **har** sample se milaya jata hai (sirf paas wale 3 se nahi):
-1. **Doori** = do scans kitne alag hain: har network ka dBm ka fark, uska varg, average, phir varg-mool. Jo network ek mein sunayi de aur doosre mein nahi, use `-100` maana jata hai ("sunayi hi nahi diya"). Bluetooth ka wazan Wi-Fi se kam (0.6), kyunki phones/earbuds ka address badalta rehta hai.
+1. **Doori** = do scans kitne alag hain: har network ka dBm ka fark, uska varg, average, phir varg-mool. Jo network ek mein sunayi de aur doosre mein nahi, use `-100` maana jata hai ("sunayi hi nahi diya"). Bluetooth ka wazan Wi-Fi se kam (0.6), kyunki phones/earbuds ka address badalta rehta hai. Bluetooth (ya Wi-Fi) sirf tab gina jaata hai jab **dono** scans mein ho: Bluetooth band karke liya scan ab "anjaan" nahi lagta. Jo network purane samples mein zor se tha par kamron ke taaze samples mein kahin nahi (router badla, padosi gaya), wo ignore hota hai.
 2. **Wazan** = `exp(-(doori / chaudai)²)`. Bahut milta-julta sample ka wazan ~1, door wale ka ~0. Chaudai itni rakhi jati hai ki koi bhi sample poori tarah gayab na ho.
 3. **Umr:** purane sample ka asar dheere kam hota hai (30 din mein aadha), taaki router ya furniture hilne ka purana data beech mein na aaye.
-4. **Kamre ka score** = us kamre ke samples ke wazan ka **average** (jod nahi, taaki jis kamre mein zyada samples hain wo sirf zyada hone se na jeete).
+4. **Kamre ka score** = us kamre ke samples ke wazan ka **weighted average** (jod nahi, taaki jis kamre mein zyada samples hain wo sirf zyada hone se na jeete). Wazan label ke hisaab se: "Galat hai" sudhaar 1.5, training/"Sahi hai" 1, apne aap seekha 0.5.
 5. Scores ko jod ke 100% banaya jata hai: yahi **confidence** hai.
 
 ## Step 4: "Pakka nahi" bolna aur kamra badalna
@@ -34,15 +34,30 @@ Naye scan ko **har** sample se milaya jata hai (sirf paas wale 3 se nahi):
 - Kamra badalne par timeline mein ek line likhi jaati hai ("Papa: Bedroom → Kitchen"), Telegram par nahi (bahut zyada ho jayega).
 
 ## Step 5: Sahi-galat ka hisaab (accuracy)
-- Har training scan ko **chhupa ke** (aur uske saath us tap ke baaki scans bhi) baaki samples se guess karwate hain. Jitne sahi, wahi accuracy.
+- Har training scan ko **chhupa ke** (aur uske saath us tap ke baaki scans bhi) baaki samples se guess karwate hain. Jitne sahi, wahi accuracy. Sirf **insaan ke diye** label jaanche jaate hain; apne aap seekhe scan kabhi test nahi bante (unka label model ka apna hai).
 - Saath mein **confusion table**: asli kamra x guess kiya gaya kamra. Isse dikhta hai ki Kitchen ko Hall se kitni baar mix kiya.
 - Verdict: 85%+ "Good", 65-85% "Fair", usse kam "Weak" (tab zyada jagah se train karo, ya har kamre mein ek purana phone Bluetooth beacon banake rakho).
 - Ye hisaab aapke ghar ka asli napne wala hai, kisi aur ghar ke aankde nahi.
 
-## Step 6: Khud behtar hona
-- **"Galat hai, main X mein hoon"** (phone ke Room Lab mein): wo scan sahi naam ke saath naya sample ban jata hai.
-- Har kamre ke 80 sabse naye samples rakhe jaate hain; purane ghat jaate hain. 120 din baad sample apne aap hat jaate hain.
-- Naye samples jodte raho jab furniture ya router badle: model apne aap naye data par chalega.
+## Step 6: Khud behtar hona (auto-improve) — poora plan aur wajah: `docs/ROOM_MODEL_AUTO_IMPROVE_PLAN.md`
+- **"Galat hai, main X mein hoon"** (phone ke Room Lab mein): wo scan sahi naam ke saath naya sample ban jata hai, aur pichhle 24 ghante ke jo
+  apne aap seekhe scan us jagah par doosre kamre ka naam le rahe the, wo mit jaate hain.
+- **"Sahi hai ✓"** (Stashr Location 1.10+): 6 second sunke scan bhejta hai, jo "confirm" sample banta hai.
+- **Apne aap seekhna:** phone ke normal checks ka scan tab sample banta hai jab: scan taaza ho (Wi-Fi nateeje ≤ 2 min), 75%+ pakka, doosre kamre
+  se 35+ points aage, jaani-pehchani jagah (≤ 12 dBm), banda kamre mein pehle se ho (sthir), aur us kamre ko insaan ne 5+ scan se train kiya ho.
+  Ek kamre ka 10 min mein ek, aur lagbhag-same jagah dobara nahi. Har phone par on/off (website aur phone dono par switch).
+- **Har ghante jaanch (`roomLive.maintain`):** har phone ki chaudai `[4, 5, 7, 9, 12]` dBm mein se naap ke chuni jaati hai; apne aap seekhe scan
+  ke saath aur bina accuracy napi jaati hai, aur agar saath wali 3 points kam ho to auto-improve 7 din ruk jaata hai aur wo scan mit jaate hain.
+  Accuracy apne best se 15+ points gire to timeline par "dobara train karo" (hafte mein ek baar se zyada nahi). Website par "Abhi sudhaaro" se turant.
+- Har kamre ke 80 sabse naye insaani samples aur **alag se** 40 apne aap seekhe samples rakhe jaate hain. 120 din baad sample apne aap hat jaate hain.
+- **Kamron ke beech chalna:** jab kisi ka kamra sach mein badalta hai, wo jodi gini jaati hai; jin kamron ka layout save nahi kiya, auto-arrange unhe
+  paas-paas rakhta hai.
+
+## Kamra delete karna
+- Website: Room Lab mein kamre ke chip ka ✕ (poochh ke turant), ya 3D model mein kamre par tap → "Ye kamra delete karo", ya layout editor mein.
+- Phone: Stashr Location → Room Lab → "Kamra hatao".
+- Server (`DELETE /home/room/:name`, phone se `POST /home/agent/room/delete`): room list, layout, **sab phones** ki us kamre ki training, jin phones ka
+  abhi wala kamra yahi tha unka kamra, aur kamron ke beech chalne ki ginti, sab hatte hain; timeline par ek line.
 
 ## Jo dikhta hai
 - **Website → Smart home → Insights:** "Kamre ki pehchan (Room Lab)": kamre banao, har phone ka training, accuracy, confusion table. "Ghar ka map" mein kamre blocks ban jaate hain, aur har banda us kamre mein dikhta hai.
@@ -80,9 +95,16 @@ Dhyan: training (step 3) ke bina model kuch nahi bata sakta. Wo ek baar karna hi
 - Save layout (`PUT /home/map/layout`), Auto-arrange (reset), Export/Import layout (JSON file).
 - Tablet ko x, y, w, h wahi milte hain; height (z) tablet par abhi nahi dikhti (Hub ke naye release mein aayegi).
 
+## 3D model mein devices
+- "3D model" button tab bhi hai jab .glb import nahi kiya: tab 3D aapke layout se banta hai (har kamra ek dibba, layout ki unchai).
+- Har kamre mein: log (neela; kamra pakka nahi to dhundhla aur `?`), tablet (purple), aur tablet ki Wi-Fi list mein jis device ko ye kamra diya
+  (hara = abhi Wi-Fi par, grey = kuch der se nahi dikha). Kamre ke upar label: naam, log, tablet, kitne device (kitne on).
+- Kamre par tap: amber ho jaata hai, uske har marker ka naam dikhta hai, aur neeche panel: log, devices, har phone ki training, delete.
+- Controls: Reset view, Upar se, X-ray (deewarein paardarshi, markers farsh par).
+
 ## Asli 3D model import (.glb)
 - Web par House map > "3D model import karo (.glb)". Blender ya kisi bhi 3D tool se glTF Binary (.glb) export karo, 12 MB tak.
-- Model ke hisse (mesh/group) ka naam kamre ke naam jaisa rakho: "Bedroom", "bedroom.001", "Bedroom_wall" sab Bedroom mein gine jaate hain. "Bedroom 2" alag kamra hai.
+- Model ke hisse (mesh/group) ka naam kamre ke naam jaisa rakho: "Bedroom", "bedroom.001", "Bedroom_wall" sab Bedroom mein gine jaate hain. "Bedroom 2" alag kamra hai. (Matching file ke asli naam se hoti hai; three.js "Bedroom.001" ko "Bedroom001" bana deta hai, isliye pehle Blender ki copies 3D mein nahi jagti thi.)
 - Jis kamre mein koi hai wo hara jagta hai aur uske upar logon ke naam dikhte hain. Jis kamre ka model mein hissa nahi mila, uski list page par aati hai.
 - "Sample .glb download": aapke abhi ke layout se kamron ke naam wale dibbe, jinhe Blender mein badal ke wapas import kar sakte ho.
 - Server: `GET/PUT/DELETE /home/map/model` (har account ka ek model). Sirf website par; tablet par abhi nahi.

@@ -60,6 +60,52 @@ object RoomLogic {
 
     fun newSession(now: Long) = "s$now"
 
+    /* ───────── auto-improve (docs/ROOM_MODEL_AUTO_IMPROVE_PLAN.md, part D) ───────── */
+
+    const val FRESH_SEC = 120                   // the server only learns from scans whose Wi-Fi readings are this new
+    const val AUTO_SCAN_EVERY_MS = 10 * 60_000L // at most one extra Wi-Fi scan for auto-improve this often (Android allows few anyway)
+
+    /** How old, in seconds, the oldest of these readings is. ScanResult.timestamp and the clock are both microseconds since boot. -1: none. */
+    fun ageSec(nowMicros: Long, stampsMicros: List<Long>): Int =
+        if (stampsMicros.isEmpty()) -1 else ((nowMicros - stampsMicros.minOrNull()!!).coerceAtLeast(0L) / 1_000_000L).toInt()
+
+    /** Ask Android for a new Wi-Fi scan for auto-improve now? Only when it is on, the readings are not already fresh, and not too often. */
+    fun autoScanDue(on: Boolean, ageSec: Int, now: Long, lastAsk: Long): Boolean =
+        on && (ageSec < 0 || ageSec > FRESH_SEC) && now - lastAsk >= AUTO_SCAN_EVERY_MS
+
+    /** The scan as it leaves the phone, with how old its Wi-Fi readings are and whether it may teach the model. */
+    fun withMeta(scan: JSONObject, ageSec: Int, auto: Boolean): JSONObject = scan.put("ageSec", if (ageSec >= 0) ageSec else JSONObject.NULL).put("auto", auto)
+
+    /** Why a scan did not teach the model, in plain words (the server's reasons: server/utils/roomModel.js autoGate). */
+    fun learnWhy(why: String): String = when (why) {
+        "auto-improve is off" -> "apne aap seekhna band hai"
+        "paused" -> "ruka hua hai"
+        "the scan is not fresh" -> "scan taaza nahi tha"
+        "not sure" -> "kamra pakka nahi"
+        "not sure enough" -> "75% se kam pakka"
+        "two rooms are close" -> "do kamre milte-julte lage"
+        "not a familiar spot" -> "ye jagah anjaan lagi"
+        "the room is not settled" -> "abhi kamre mein aaye (sthir nahi)"
+        "not trained enough by a person" -> "pehle har kamre mein 5+ scan khud train karo"
+        "already have this spot" -> "ye jagah pehle se seekhi hui"
+        "one a while ago" -> "is kamre ka abhi-abhi seekha (10 min mein ek)"
+        "" -> "—"
+        else -> why
+    }
+
+    /** Auto-improve in one line, from the server's config ("auto"). */
+    fun autoSummary(a: JSONObject?, now: Long = System.currentTimeMillis()): String {
+        if (a == null) return "Server purana hai: apne aap seekhna abhi nahi."
+        if (!a.optBoolean("on", true)) return "Apne aap seekhna band hai."
+        if (a.optBoolean("paused")) return "Ruka hua: ${a.optString("why").ifEmpty { "accuracy giri thi" }}. Kuch din baad phir chalega."
+        val n = a.optJSONObject("counts")?.let { c -> c.keys().asSequence().sumOf { c.optInt(it) } } ?: a.optInt("added")
+        if (n <= 0) return "On: abhi tak kuch nahi seekha (jab Stashr kisi kamre ke baare mein bahut pakka hoga, tab seekhega)."
+        val last = a.optLong("lastAt", 0L)
+        val ago = if (last > 0) ((now - last) / 60_000L).coerceAtLeast(0L) else -1L
+        val agoText = if (ago < 0) "" else if (ago < 1) ", abhi" else if (ago < 60) ", $ago min pehle" else ", ${ago / 60} ghante pehle"
+        return "On: $n scan apne aap seekhe" + (if (a.optString("lastRoom").isNotEmpty()) " · aakhri: ${a.optString("lastRoom")}$agoText" else "")
+    }
+
     /** A typed room name made safe and tidy ("  living   room " -> "living room"), or null when it is shorter than 2 letters. */
     fun cleanRoom(raw: String): String? {
         val s = raw.replace(Regex("[\\u0000-\\u001f<>&\"]"), " ").replace(Regex("\\s+"), " ").trim().take(24).trim()

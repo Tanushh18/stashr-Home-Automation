@@ -41,6 +41,10 @@ const homeDeviceSchema = new mongoose.Schema({
     roomOn: { type: Boolean, default: false },
     // Room location, measured in real life: how often the person said the room was right ("Sahi hai") or wrong ("Galat hai, main X mein hoon").
     roomStats: { type: mongoose.Schema.Types.Mixed, default: {} },
+    // Room location auto-improve for this phone: { off, added, lastAt, lastRoom, pausedUntil, pauseWhy, guard: { at, with, without, tested } }.
+    roomAuto: { type: mongoose.Schema.Types.Mixed, default: {} },
+    // The kernel width picked for this phone by measuring (utils/roomModel.tune, hourly): { width, accuracy, unsure, wrong, tested, tried, at, best, alertAt }.
+    roomTune: { type: mongoose.Schema.Types.Mixed, default: {} },
     fcmToken: { type: String, default: "", select: false },
     fcmSet: { type: Boolean, default: false },     // the token above exists (the token itself is never sent to a page)
     fcmSeenAt: { type: Date },
