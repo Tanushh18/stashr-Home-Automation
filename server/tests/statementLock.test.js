@@ -178,7 +178,8 @@ describe("searching the saved statements", () => {
         await atNovember(async (pretend) => {
             pretend(); await saved();
             const raw = JSON.stringify(await Line.find({}).lean());
-            expect(raw).not.toMatch(/Ramesh|1200|ACME|613112345679/);
+            // words with letters outside a-f cannot occur by chance in hex ciphertext, and the long numbers are far too specific to
+            expect(raw).not.toMatch(/Ramesh|ACME|Meta Verifie|613112345679|1200\.5/);
             expect(raw).toMatch(/2026-11-02/);                                  // only the date and month stay readable
         });
     });
