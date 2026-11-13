@@ -41,7 +41,8 @@ separate apps, so there is no account clash: lead messages always use Business (
 (`com.whatsapp`, found first). One thing was wrong: the group sender did not check whether a lead message was in progress, so a place or
 arrival message could pull normal WhatsApp to the front in the middle of a lead's send and break it. It now waits (up to 90 s) for the lead
 message to finish; the lead sender already refused to start while a group message was running (the website then puts that lead back in line).
-Note: if normal WhatsApp were ever uninstalled, group messages would go out through Business, because the group sender takes whichever is installed first.
+Group messages now use normal WhatsApp only: if it is missing, the message fails with "WhatsApp is not installed (Smart home messages use normal
+WhatsApp, not WhatsApp Business)" instead of going out from the business number.
 
 ## Rolling it out safely
 Set Stashr Hub to Hold under Settings → App updates before merging, merge, then choose Selected → the tablet, test, and only then everyone.
