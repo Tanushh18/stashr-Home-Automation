@@ -1,0 +1,324 @@
+[
+ {
+  "date": "2026-10-02",
+  "desc": "UPI/DR/177516799952/Swiggy/pay",
+  "amount": 1907.26,
+  "type": "Debit",
+  "balance": 48092.74
+ },
+ {
+  "date": "2026-10-03",
+  "desc": "UPI/DR/334107653877/Uber India/pay",
+  "amount": 297.23,
+  "type": "Debit",
+  "balance": 47795.51
+ },
+ {
+  "date": "2026-10-03",
+  "desc": "UPI/DR/199817887524/Priya Sharma/rent and other charges for the whole quarter",
+  "amount": 2018.86,
+  "type": "Debit",
+  "balance": 45776.65
+ },
+ {
+  "date": "2026-10-03",
+  "desc": "UPI/DR/792448538713/Uber India/pay",
+  "amount": 611.77,
+  "type": "Debit",
+  "balance": 45164.88
+ },
+ {
+  "date": "2026-10-05",
+  "desc": "NEFT/N9790005680/META VERIFIE PVT LTD/salary and payments for the month",
+  "amount": 39168.93,
+  "type": "Credit",
+  "balance": 84333.81
+ },
+ {
+  "date": "2026-10-06",
+  "desc": "UPI/DR/231171247084/Amazon Pay India/goods",
+  "amount": 2023.48,
+  "type": "Debit",
+  "balance": 82310.33
+ },
+ {
+  "date": "2026-10-07",
+  "desc": "UPI/DR/308902542663/Ramesh Kumar/goods",
+  "amount": 2800.05,
+  "type": "Debit",
+  "balance": 79510.28
+ },
+ {
+  "date": "2026-10-07",
+  "desc": "UPI/DR/166848452803/Shine One Estate/food",
+  "amount": 3423.89,
+  "type": "Debit",
+  "balance": 76086.39
+ },
+ {
+  "date": "2026-10-09",
+  "desc": "UPI/DR/612450360047/Shine One Estate/rent and other charges for the whole quarter",
+  "amount": 2063.89,
+  "type": "Debit",
+  "balance": 74022.5
+ },
+ {
+  "date": "2026-10-10",
+  "desc": "UPI/DR/865276271002/Amazon Pay India/food",
+  "amount": 1207.48,
+  "type": "Debit",
+  "balance": 72815.02
+ },
+ {
+  "date": "2026-10-10",
+  "desc": "UPI/DR/900339133901/Uber India/rent and other charges for the whole quarter",
+  "amount": 1455.19,
+  "type": "Debit",
+  "balance": 71359.83
+ },
+ {
+  "date": "2026-10-11",
+  "desc": "UPI/DR/663147804432/Uber India/rent and other charges for the whole quarter",
+  "amount": 4705.24,
+  "type": "Debit",
+  "balance": 66654.59
+ },
+ {
+  "date": "2026-10-12",
+  "desc": "UPI/DR/561661581186/Rameshwar Traders/pay",
+  "amount": 746.49,
+  "type": "Debit",
+  "balance": 65908.1
+ },
+ {
+  "date": "2026-10-12",
+  "desc": "NEFT/N6642502604/SHINE ONE ESTATE PVT LTD/salary and payments for the month",
+  "amount": 25055.91,
+  "type": "Credit",
+  "balance": 90964.01
+ },
+ {
+  "date": "2026-10-13",
+  "desc": "UPI/DR/601638831325/Uber India/pay",
+  "amount": 2394.11,
+  "type": "Debit",
+  "balance": 88569.9
+ },
+ {
+  "date": "2026-10-13",
+  "desc": "UPI/DR/171571988762/Amazon Pay India/pay",
+  "amount": 2286.19,
+  "type": "Debit",
+  "balance": 86283.71
+ },
+ {
+  "date": "2026-10-14",
+  "desc": "UPI/DR/593156411813/Uber India/goods",
+  "amount": 4767.0,
+  "type": "Debit",
+  "balance": 81516.71
+ },
+ {
+  "date": "2026-10-16",
+  "desc": "UPI/DR/488530022802/Rameshwar Traders/food",
+  "amount": 127.85,
+  "type": "Debit",
+  "balance": 81388.86
+ },
+ {
+  "date": "2026-10-16",
+  "desc": "UPI/DR/416832148161/Jio Prepaid Recharge/food",
+  "amount": 301.8,
+  "type": "Debit",
+  "balance": 81087.06
+ },
+ {
+  "date": "2026-10-17",
+  "desc": "UPI/DR/649203575472/Priya Sharma/pay",
+  "amount": 1888.74,
+  "type": "Debit",
+  "balance": 79198.32
+ },
+ {
+  "date": "2026-10-18",
+  "desc": "UPI/DR/998236258174/Jio Prepaid Recharge/rent and other charges for the whole quarter",
+  "amount": 1939.86,
+  "type": "Debit",
+  "balance": 77258.46
+ },
+ {
+  "date": "2026-10-19",
+  "desc": "UPI/DR/264199827455/Priya Sharma/pay",
+  "amount": 4735.31,
+  "type": "Debit",
+  "balance": 72523.15
+ },
+ {
+  "date": "2026-10-20",
+  "desc": "NEFT/N2002170858/SWIGGY PVT LTD/salary and payments for the month",
+  "amount": 13118.49,
+  "type": "Credit",
+  "balance": 85641.64
+ },
+ {
+  "date": "2026-10-22",
+  "desc": "UPI/DR/105505850556/Uber India/food",
+  "amount": 891.6,
+  "type": "Debit",
+  "balance": 84750.04
+ },
+ {
+  "date": "2026-10-24",
+  "desc": "UPI/DR/450324768017/Shine One Estate/food",
+  "amount": 1785.03,
+  "type": "Debit",
+  "balance": 82965.01
+ },
+ {
+  "date": "2026-10-24",
+  "desc": "UPI/DR/851080315027/Jio Prepaid Recharge/rent and other charges for the whole quarter",
+  "amount": 4319.77,
+  "type": "Debit",
+  "balance": 78645.24
+ },
+ {
+  "date": "2026-10-26",
+  "desc": "UPI/DR/797852826716/Priya Sharma/rent and other charges for the whole quarter",
+  "amount": 1903.89,
+  "type": "Debit",
+  "balance": 76741.35
+ },
+ {
+  "date": "2026-10-26",
+  "desc": "UPI/DR/581932968202/Zomato/food",
+  "amount": 341.92,
+  "type": "Debit",
+  "balance": 76399.43
+ },
+ {
+  "date": "2026-10-26",
+  "desc": "UPI/DR/100439717024/Rameshwar Traders/food",
+  "amount": 2891.48,
+  "type": "Debit",
+  "balance": 73507.95
+ },
+ {
+  "date": "2026-10-26",
+  "desc": "UPI/DR/775203015452/Rameshwar Traders/rent and other charges for the whole quarter",
+  "amount": 2953.66,
+  "type": "Debit",
+  "balance": 70554.29
+ },
+ {
+  "date": "2026-10-27",
+  "desc": "UPI/DR/502018727951/Amazon Pay India/rent and other charges for the whole quarter",
+  "amount": 4587.14,
+  "type": "Debit",
+  "balance": 65967.15
+ },
+ {
+  "date": "2026-10-27",
+  "desc": "NEFT/N7296376791/RAMESH KUMAR PVT LTD/salary and payments for the month",
+  "amount": 34712.79,
+  "type": "Credit",
+  "balance": 100679.94
+ },
+ {
+  "date": "2026-10-29",
+  "desc": "UPI/DR/920777646003/Amazon Pay India/goods",
+  "amount": 430.53,
+  "type": "Debit",
+  "balance": 100249.41
+ },
+ {
+  "date": "2026-10-30",
+  "desc": "UPI/DR/667629056622/Jio Prepaid Recharge/pay",
+  "amount": 3981.93,
+  "type": "Debit",
+  "balance": 96267.48
+ },
+ {
+  "date": "2026-10-31",
+  "desc": "UPI/DR/699964271845/Shine One Estate/pay",
+  "amount": 1749.18,
+  "type": "Debit",
+  "balance": 94518.3
+ },
+ {
+  "date": "2026-11-01",
+  "desc": "UPI/DR/668057164296/Ramesh Kumar/goods",
+  "amount": 3347.82,
+  "type": "Debit",
+  "balance": 91170.48
+ },
+ {
+  "date": "2026-11-02",
+  "desc": "UPI/DR/694992953764/Rameshwar Traders/goods",
+  "amount": 3709.86,
+  "type": "Debit",
+  "balance": 87460.62
+ },
+ {
+  "date": "2026-11-03",
+  "desc": "UPI/DR/937453880587/Uber India/food",
+  "amount": 3899.02,
+  "type": "Debit",
+  "balance": 83561.6
+ },
+ {
+  "date": "2026-11-04",
+  "desc": "UPI/DR/320017170789/Priya Sharma/rent and other charges for the whole quarter",
+  "amount": 3556.59,
+  "type": "Debit",
+  "balance": 80005.01
+ },
+ {
+  "date": "2026-11-05",
+  "desc": "UPI/DR/408336192390/Meta Verifie/rent and other charges for the whole quarter",
+  "amount": 4750.31,
+  "type": "Debit",
+  "balance": 75254.7
+ },
+ {
+  "date": "2026-11-06",
+  "desc": "NEFT/N9403168264/ZOMATO PVT LTD/salary and payments for the month",
+  "amount": 29238.27,
+  "type": "Credit",
+  "balance": 104492.97
+ },
+ {
+  "date": "2026-11-08",
+  "desc": "UPI/DR/187465445125/Rameshwar Traders/food",
+  "amount": 4584.9,
+  "type": "Debit",
+  "balance": 99908.07
+ },
+ {
+  "date": "2026-11-08",
+  "desc": "UPI/DR/324788870829/Zomato/rent and other charges for the whole quarter",
+  "amount": 2266.98,
+  "type": "Debit",
+  "balance": 97641.09
+ },
+ {
+  "date": "2026-11-08",
+  "desc": "UPI/DR/977650826766/Jio Prepaid Recharge/pay",
+  "amount": 4365.97,
+  "type": "Debit",
+  "balance": 93275.12
+ },
+ {
+  "date": "2026-11-08",
+  "desc": "UPI/DR/322265160850/Priya Sharma/rent and other charges for the whole quarter",
+  "amount": 3759.41,
+  "type": "Debit",
+  "balance": 89515.71
+ },
+ {
+  "date": "2026-11-09",
+  "desc": "UPI/DR/195917431033/Priya Sharma/rent and other charges for the whole quarter",
+  "amount": 3792.07,
+  "type": "Debit",
+  "balance": 85723.64
+ }
+]

@@ -198,3 +198,64 @@ describe("searching the saved statements", () => {
         });
     });
 });
+
+describe("a PDF statement", () => {
+    const pdfFile = (n) => fs.readFileSync(path.join(__dirname, "fixtures", "pdf", n));
+    test("a plain PDF is read, checked and saved for searching", async () => {
+        await atNovember(async (pretend) => {
+            const auth = await signUp(); pretend();
+            const r = await request(app).post("/expenses/statement?async=1&filename=s.pdf").set(auth).set("Content-Type", "application/octet-stream").send(pdfFile("statement-plain.pdf"));
+            expect(r.status).toBe(202);
+            const job = await finish(auth, r.body.job);
+            expect(job.status).toBe("done");
+            expect(job.report.source).toBe("pdf");
+            expect(job.report.lines).toBe(46);
+            expect(job.report.saved).toBe(46);
+            expect((await search(auth, "swiggy")).total > 0).toBe(true);
+            expect((await search(auth, "1,907.26")).total).toBe(1);
+        });
+    });
+    test("a locked PDF asks for the password, refuses a wrong one, and opens with the right one (every lock type)", async () => {
+        await atNovember(async (pretend) => {
+            const auth = await signUp(); pretend();
+            for (const kind of ["aes-256", "aes-128", "rc4-128"]) {
+                const bytes = pdfFile(`statement-${kind}.pdf`);
+                const post = (pw) => { const q = request(app).post("/expenses/statement?async=1&filename=s.pdf").set(auth).set("Content-Type", "application/octet-stream"); if (pw !== undefined) q.set("X-Statement-Password", encodeURIComponent(pw)); return q.send(bytes); };
+                const ask = await post();
+                expect(ask.status).toBe(422); expect(ask.body.code).toBe("password_required");
+                const bad = await post("nope");
+                expect(bad.status).toBe(422); expect(bad.body.code).toBe("wrong_password");
+                const ok = await post("secret123");
+                expect(ok.status).toBe(202);
+                expect((await finish(auth, ok.body.job)).status).toBe("done");
+            }
+            expect(JSON.stringify(await Statement.find({}).lean())).not.toMatch(/secret123/);
+        });
+    });
+    test("the same PDF through the app's way (the answer comes when it is done)", async () => {
+        await atNovember(async (pretend) => {
+            const auth = await signUp(); pretend();
+            const r = await request(app).post("/expenses/statement?filename=s.pdf&month=2026-10").set(auth).set("Content-Type", "application/octet-stream").send(pdfFile("statement-plain.pdf"));
+            expect(r.status).toBe(200);
+            expect(r.body.report.source).toBe("pdf");
+            // the month chosen (October) keeps only October's lines of the 46
+            const october = JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures", "pdf", "statement-expected.json"), "utf8")).filter((x) => x.date.startsWith("2026-10")).length;
+            expect(october > 0 && october < 46).toBe(true);
+            expect(r.body.report.lines).toBe(october);
+        });
+    });
+    test("a misread PDF, a scanned PDF and a broken file are refused with a reason, and nothing is saved", async () => {
+        await atNovember(async (pretend) => {
+            const auth = await signUp(); pretend();
+            const sync = (bytes) => request(app).post("/expenses/statement?filename=s.pdf").set(auth).set("Content-Type", "application/octet-stream").send(bytes);
+            const broken = await sync(pdfFile("statement-broken-balance.pdf"));
+            expect(broken.status).toBe(400); expect(broken.body.error).toMatch(/could not be read reliably/);
+            const scan = await sync(pdfFile("statement-scan.pdf"));
+            expect(scan.status).toBe(400); expect(scan.body.error).toMatch(/no readable text/); expect(scan.body.error).toMatch(/Excel or CSV/);
+            const junk = await sync(Buffer.from("%PDF-1.4 this is not really a pdf at all, just words"));
+            expect(junk.status).toBe(400); expect(junk.body.error).toMatch(/Excel or CSV/);
+            expect(await Line.countDocuments({})).toBe(0);
+            expect(await ExpenseTx.countDocuments({})).toBe(0);
+        });
+    });
+});

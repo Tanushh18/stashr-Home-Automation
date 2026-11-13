@@ -355,10 +355,11 @@ router.post("/expenses/remove-unmatched", authenticate, writeLimiter, async (req
 const { processStatement: runStatement } = require("../utils/statementRun");
 const saved = require("../utils/statementSearch");
 const officeCrypto = require("../utils/officeCrypto");
+const statementPdf = require("../utils/statementPdf");
 
 /** The statement check for this account, with its rules, the 4-month cut-off and where the result summary is saved. */
-const processStatement = ({ owner, s, st, copy, bytes, progress, month = "", filename = "", dataKey }) => runStatement({
-    s, st, copy, bytes, progress, month, rules: userRules(s), cutoff: cutoffDate(),
+const processStatement = ({ owner, s, st, copy, bytes, table = null, source = "", progress, month = "", filename = "", dataKey }) => runStatement({
+    s, st, copy, bytes, table, source, progress, month, rules: userRules(s), cutoff: cutoffDate(),
     saveSummary: (summary) => Settings.updateOne({ owner }, { $set: { lastStatement: summary } }),
     saveLines: ({ lines }) => saved.saveStatement(owner, dataKey, { filename, month, lines })     // kept (encrypted) so it can be searched later
 });
@@ -370,15 +371,28 @@ router.post("/expenses/statement", authenticate, writeLimiter, express.raw({ typ
         if (!Buffer.isBuffer(req.body) || !req.body.length) return res.status(400).json({ error: "Send the statement file." });
         const name = String(req.query.filename || "").toLowerCase();
         // what can be refused without reading the file is refused at once, for both ways of calling this
-        if (/\.pdf$/.test(name) || req.body.subarray(0, 4).toString() === "%PDF") return res.status(400).json({ error: "Download the statement as Excel or CSV from net banking (a PDF cannot be read reliably)." });
         if (/\.xls$/.test(name)) return res.status(400).json({ error: "Save the statement as .xlsx or .csv and send that." });
         const month = String(req.query.month || "");
         if (month && !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return res.status(400).json({ error: "Pick the month as YYYY-MM." });
 
         // A locked Excel file: ask for the password (code "password_required"), or say it was wrong ("wrong_password"). The password travels in a
         // header (never the address), is used once to open the file and is not kept or logged.
-        let bytes = req.body;
-        if (officeCrypto.isCompoundFile(bytes)) {
+        let bytes = req.body, table = null, source = "";
+        const readPassword = () => { try { return decodeURIComponent(String(req.get("x-statement-password") || "")); } catch (e) { return String(req.get("x-statement-password") || ""); } };
+        if (statementPdf.isPdf(bytes)) {
+            // A PDF statement (locked or not): the password goes in the same header, is used once in memory and is never kept. The text is read
+            // out of the PDF into the same kind of table an Excel file gives; processStatement then refuses it if the balances do not add up.
+            try { table = statementPdf.tableFromPdf(bytes, readPassword()); source = "pdf"; }
+            catch (e) {
+                if (e.code === "password_required") return res.status(422).json({ code: "password_required", error: "This PDF is locked. Enter its password to open it." });
+                if (e.code === "wrong_password") return res.status(422).json({ code: "wrong_password", error: "That password did not unlock the PDF. Check it and try again." });
+                if (!e.code) console.error("[expenses] PDF statement failed:", e && e.message);
+                const msg = e.code ? e.message : "Could not read that PDF.";
+                return res.status(400).json({ error: /Excel or CSV/.test(msg) ? msg : `${msg} Download the statement as Excel or CSV from net banking instead.` });
+            }
+        } else if (/\.pdf$/.test(name)) {
+            return res.status(400).json({ error: "That does not look like a readable PDF. Download the statement as Excel or CSV from net banking instead." });
+        } else if (officeCrypto.isCompoundFile(bytes)) {
             if (!officeCrypto.isEncryptedWorkbook(bytes)) return res.status(400).json({ error: "Save the statement as .xlsx or .csv and send that (this looks like an old .xls file)." });
             let password = "";
             try { password = decodeURIComponent(String(req.get("x-statement-password") || "")); } catch (e) { password = String(req.get("x-statement-password") || ""); }
@@ -398,14 +412,14 @@ router.post("/expenses/statement", authenticate, writeLimiter, express.raw({ typ
             const job = jobs.create(owner, { filename: name });
             res.status(202).json({ job: jobs.view(job) });
             setImmediate(() => {
-                processStatement({ owner, s, st, copy, bytes, month, filename: String(req.query.filename || ""), dataKey, progress: (p) => jobs.progress(job.id, p) })
+                processStatement({ owner, s, st, copy, bytes, table, source, month, filename: String(req.query.filename || ""), dataKey, progress: (p) => jobs.progress(job.id, p) })
                     .then(({ report }) => jobs.finish(job.id, report))
                     .catch((e) => { if (!Number.isInteger(e.status)) console.error("[expenses] statement check failed:", e && e.message); jobs.fail(job.id, Number.isInteger(e.status) ? e.message : "Could not check the statement. Try uploading it again."); });
             });
             return undefined;
         }
         // the mobile app (and anyone else who waits): the same work, answered when it is done
-        const { report } = await processStatement({ owner, s, st, copy, bytes, month, filename: String(req.query.filename || ""), dataKey });
+        const { report } = await processStatement({ owner, s, st, copy, bytes, table, source, month, filename: String(req.query.filename || ""), dataKey });
         return res.json({ report });
     } catch (e) { return fail(res, e, "Could not check the statement."); }
 });
