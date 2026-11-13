@@ -416,6 +416,31 @@ describe("the website API", () => {
         expect((await request(app).get(`/wa/agent/image/${send._id}`).set(bearer(other.token))).status).toBe(404);
     });
 
+    test("a picture another sheet already has can be reused on a sheet, without uploading it again", async () => {
+        const { auth, sheet } = await setup();
+        const pic = (t) => "data:image/png;base64," + Buffer.from(t).toString("base64");
+        const b = (await request(app).post("/wa/sheets").set(auth).send({ name: "Second" })).body;
+        await request(app).patch(`/wa/sheets/${sheet.id}`).set(auth).send({ addImage: pic("one") });
+        await request(app).patch(`/wa/sheets/${sheet.id}`).set(auth).send({ addImage: pic("two") });
+        const list = (await request(app).get("/wa/pictures").set(auth)).body.pictures;
+        expect(list.length).toBe(2);
+        expect(list[0].sheetName).toBe("Test");
+        expect((await request(app).get(`/wa/pictures/${sheet.id}/1`).set(auth)).body.image).toBe(pic("two"));
+        expect((await request(app).get(`/wa/pictures/${sheet.id}/5`).set(auth)).status).toBe(404);
+        const copy = await request(app).patch(`/wa/sheets/${b.id}`).set(auth).send({ copyImage: { sheet: sheet.id, index: 1 } });
+        expect(copy.status).toBe(200);
+        expect((await request(app).get(`/wa/pictures/${b.id}/0`).set(auth)).body.image).toBe(pic("two"));
+        // The same picture twice is refused, and a wrong position is not found.
+        expect((await request(app).patch(`/wa/sheets/${b.id}`).set(auth).send({ copyImage: { sheet: sheet.id, index: 1 } })).status).toBe(409);
+        expect((await request(app).patch(`/wa/sheets/${b.id}`).set(auth).send({ copyImage: { sheet: sheet.id, index: 7 } })).status).toBe(404);
+        // The original keeps its pictures.
+        expect((await request(app).get(`/wa/pictures/${sheet.id}/1`).set(auth)).status).toBe(200);
+        // Someone else cannot read or copy it.
+        const other = await signUp("bob@example.com");
+        expect((await request(app).get("/wa/pictures").set(other)).body.pictures.length).toBe(0);
+        expect((await request(app).get(`/wa/pictures/${sheet.id}/0`).set(other)).status).toBe(404);
+    });
+
     test("a sheet keeps up to five pictures and each message uses one of them at random", async () => {
         const { auth, hub, sheet, o } = await setup();
         const pic = (t) => "data:image/png;base64," + Buffer.from(t).toString("base64");

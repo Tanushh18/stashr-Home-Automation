@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import {
   getWaLink, connectWaLink, disconnectWaLink, getWaOrigins, importWaOrigin,
-  getWaOverview, saveWaSettings, resetWaSheet, sendWaReportNow, createWaSheet, saveWaSheet, deleteWaSheet, addWaPeople, retryWaSheet, sendWaTest, getWaSend
+  getWaOverview, saveWaSettings, resetWaSheet, sendWaReportNow, createWaSheet, saveWaSheet, deleteWaSheet, addWaPeople, retryWaSheet, sendWaTest, getWaSend, getWaPictures, getWaPicture
 } from "../../api/client";
 import { Section, Skeleton } from "../Render/RenderUi";
 import { errorMessage } from "../Render/renderUtils";
@@ -27,6 +27,40 @@ function Count({ label, n, tone }) {
   return <div className={"wa-count" + (tone ? " is-" + tone : "")}><b>{n}</b><span>{label}</span></div>;
 }
 
+/** Pictures other sheets already hold: pick one to use on this sheet too (no need to upload it again). */
+function PicturePicker({ sheetId, onPick, onClose, disabled }) {
+  const [list, setList] = useState(null);
+  const [thumbs, setThumbs] = useState({});
+  useEffect(() => {
+    let alive = true;
+    getWaPictures().then((r) => {
+      if (!alive) return;
+      const others = (r.pictures || []).filter((p) => p.sheet !== sheetId);
+      setList(others);
+      others.forEach((p) => getWaPicture(p.sheet, p.index).then((x) => { if (alive) setThumbs((t) => ({ ...t, [p.sheet + ":" + p.index]: x.image })); }).catch(() => {}));
+    }).catch((e) => { if (alive) { toast.error(errorMessage(e)); setList([]); } });
+    return () => { alive = false; };
+  }, [sheetId]);
+  return (
+    <div className="wa-picker">
+      {list === null && <p className="wa-muted">Loading pictures…</p>}
+      {list && list.length === 0 && <p className="wa-muted">No other sheet has a picture yet.</p>}
+      <div className="wa-picker-grid">
+        {(list || []).map((p) => {
+          const key = p.sheet + ":" + p.index, src = thumbs[key];
+          return (
+            <button key={key} type="button" className="wa-picker-item" disabled={disabled || !src} onClick={() => onPick(p)} title={"From " + p.sheetName}>
+              {src ? <img src={src} alt={"Picture from " + p.sheetName} /> : <span className="wa-muted">…</span>}
+              <small>{p.sheetName}</small>
+            </button>
+          );
+        })}
+      </div>
+      <button className="rd-btn is-quiet" onClick={onClose}>Close</button>
+    </div>
+  );
+}
+
 /** One sheet: its on/off, limit, messages, picture, people and counts. */
 function SheetCard({ sheet, onChanged }) {
   const [texts, setTexts] = useState(textsToBox(sheet.texts));
@@ -34,6 +68,7 @@ function SheetCard({ sheet, onChanged }) {
   const [people, setPeople] = useState("");
   const [busy, setBusy] = useState(false);
   const fileRef = useRef(null);
+  const [picking, setPicking] = useState(false);
   const c = sheet.counts || {};
   const total = (c.pending || 0) + (c.queued || 0) + (c.sent || 0) + (c.failed || 0) + (c.skipped || 0);
 
@@ -86,8 +121,11 @@ function SheetCard({ sheet, onChanged }) {
             {sheet.imageCount > 0 ? <span className="wa-pill">{sheet.imageCount} picture{sheet.imageCount === 1 ? "" : "s"} saved</span> : <span className="wa-pill is-warn">No picture yet</span>}
             <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={pickImage} />
             <button className="rd-btn" disabled={busy || sheet.imageCount >= 5} onClick={() => fileRef.current && fileRef.current.click()}>Add a picture</button>
+            <button className="rd-btn" disabled={busy || sheet.imageCount >= 5} onClick={() => setPicking((v) => !v)}>Use a saved picture</button>
             {sheet.imageCount > 0 && <button className="rd-btn is-quiet" disabled={busy} onClick={() => { if (window.confirm("Remove all pictures from this sheet?")) run(() => saveWaSheet(sheet._id, { image: "" }), "Pictures removed."); }}>Remove all</button>}
           </div>
+          {picking && <PicturePicker sheetId={sheet._id} disabled={busy} onClose={() => setPicking(false)}
+            onPick={(p) => run(() => saveWaSheet(sheet._id, { copyImage: { sheet: p.sheet, index: p.index } }), "Picture added from " + p.sheetName + ".")} />}
           <label className="wa-label" htmlFor={"l" + sheet._id}>Limit for this sheet per day (0 = only the main limit)</label>
           <div className="wa-row"><input id={"l" + sheet._id} className="wa-input is-short" type="number" min="0" max="60" value={limit} onChange={(e) => setLimit(e.target.value)} /><button className="rd-btn" disabled={busy} onClick={saveLimit}>Save limit</button></div>
         </div>

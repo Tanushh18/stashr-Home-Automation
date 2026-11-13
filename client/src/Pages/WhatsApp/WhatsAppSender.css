@@ -30,3 +30,11 @@
 .wa-table th, .wa-table td { text-align: left; padding: 7px 8px; border-bottom: 1px solid rgba(127,127,127,.18); }
 .wa-status.is-sent { color: #1f9d55; }
 .wa-status.is-failed { color: #d64545; }
+
+/* Reuse a picture another sheet already has */
+.wa-picker { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.wa-picker-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.wa-picker-item { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px; border: 1px solid var(--line, rgba(128,128,128,.3)); border-radius: 10px; background: transparent; color: inherit; cursor: pointer; }
+.wa-picker-item:disabled { opacity: .5; cursor: default; }
+.wa-picker-item img { width: 100%; height: 80px; object-fit: cover; border-radius: 6px; }
+.wa-picker-item small { font-size: 11px; opacity: .7; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

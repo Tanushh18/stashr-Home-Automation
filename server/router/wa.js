@@ -148,6 +148,20 @@ router.patch("/wa/sheets/:id", authenticate, writeLimiter, async (req, res) => {
             const list = sender.imagesOf(cur);
             if (list.length >= MAX_IMAGES) return res.status(400).json({ error: `A sheet can have up to ${MAX_IMAGES} pictures.` });
             set.images = [...list, { data: c.image, mime: c.imageType }]; set.image = ""; set.imageType = "";
+        } else if (b.copyImage) {                                                                                    // reuse a picture another sheet already has
+            const from = b.copyImage || {}, i = Number(from.index);
+            if (!validId(from.sheet)) return res.status(404).json({ error: "Picture not found." });
+            const [cur, src] = await Promise.all([
+                WaSheet.findOne(filter).select("images image imageType").lean(),
+                WaSheet.findOne({ _id: from.sheet, owner: req.rootUser._id }).select("images image imageType").lean()
+            ]);
+            if (!cur) return res.status(404).json({ error: "Sheet not found." });
+            const pics = sender.imagesOf(src);
+            if (!src || !Number.isInteger(i) || i < 0 || i >= pics.length) return res.status(404).json({ error: "Picture not found." });
+            const list = sender.imagesOf(cur);
+            if (list.some((p) => p.data === pics[i].data)) return res.status(409).json({ error: "This sheet already has that picture." });
+            if (list.length >= MAX_IMAGES) return res.status(400).json({ error: `A sheet can have up to ${MAX_IMAGES} pictures.` });
+            set.images = [...list, { data: pics[i].data, mime: pics[i].mime }]; set.image = ""; set.imageType = "";
         } else if (b.removeImage !== undefined) {                                                                    // remove one picture by position
             const cur = await WaSheet.findOne(filter).select("images image imageType").lean();
             if (!cur) return res.status(404).json({ error: "Sheet not found." });
@@ -159,6 +173,27 @@ router.patch("/wa/sheets/:id", authenticate, writeLimiter, async (req, res) => {
         if (!doc) return res.status(404).json({ error: "Sheet not found." });
         res.json(doc);
     } catch (e) { if (e && e.code === 11000) return res.status(409).json({ error: "A sheet with that name already exists." }); fail(res, e, "Could not save the sheet."); }
+});
+
+/** Every picture the account's sheets already hold (names and positions only), so one can be reused on another sheet. */
+router.get("/wa/pictures", authenticate, async (req, res) => {
+    try {
+        const rows = await WaSheet.find({ owner: req.rootUser._id }).select("name images image imageType").sort({ name: 1 }).lean();
+        const out = [];
+        for (const s of rows) sender.imagesOf(s).forEach((_, index) => out.push({ sheet: String(s._id), sheetName: s.name, index }));
+        res.json({ pictures: out });
+    } catch (e) { fail(res, e, "Could not load the pictures."); }
+});
+
+/** One saved picture as a data URL, for the picker's preview. */
+router.get("/wa/pictures/:sheet/:index", authenticate, async (req, res) => {
+    try {
+        if (!validId(req.params.sheet)) return res.status(404).json({ error: "Picture not found." });
+        const s = await WaSheet.findOne({ _id: req.params.sheet, owner: req.rootUser._id }).select("images image imageType").lean();
+        const pics = sender.imagesOf(s), i = Number(req.params.index);
+        if (!s || !Number.isInteger(i) || i < 0 || i >= pics.length) return res.status(404).json({ error: "Picture not found." });
+        res.json({ image: pics[i].data });
+    } catch (e) { fail(res, e, "Could not load the picture."); }
 });
 
 router.delete("/wa/sheets/:id", authenticate, writeLimiter, async (req, res) => {
