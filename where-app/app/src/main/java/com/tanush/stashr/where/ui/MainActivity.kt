@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.provider.Settings
 import android.view.View
 import android.widget.LinearLayout
@@ -24,6 +25,7 @@ import com.tanush.stashr.where.update.Updater
 import com.tanush.stashr.where.work.Locator
 import com.tanush.stashr.where.work.Reporter
 import com.tanush.stashr.where.work.Scheduler
+import com.tanush.stashr.where.work.StatusService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -59,8 +61,9 @@ class MainActivity : Activity() {
         super.onResume()
         if (!Prefs(this).linked) { startActivity(Intent(this, SetupActivity::class.java)); finish(); return }
         Scheduler.registerPassive(this)
-        com.tanush.stashr.where.work.StatusService.sync(this)
+        StatusService.sync(this)
         render()
+        if (Prefs(this).alwaysOn) autoAsk()
         // Opening the app is a good moment to check at once (a pending live-map request is picked up), at most every 20 s.
         if (!busy && System.currentTimeMillis() - Prefs(this).upAt > 20_000 && Prefs(this).lastActivityCheck(20_000)) {
             scope.launch { withContext(Dispatchers.IO) { Reporter.run(this@MainActivity) }; render() }
@@ -72,8 +75,33 @@ class MainActivity : Activity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         Scheduler.registerPassive(this)
+        StatusService.sync(this)
         render()
+        if (Prefs(this).alwaysOn) autoAsk()
     }
+
+    /**
+     * Always-on is compulsory unless switched off here: whenever the app opens, the next missing Android permission pops up by itself
+     * (location, then notifications, then the battery-saver exemption). "Allow all the time" and the autostart screens need the
+     * settings app, so they have their own buttons below.
+     */
+    private var asking = false
+    private fun autoAsk() {
+        if (asking || Build.VERSION.SDK_INT < 23) return
+        val fine = granted(Manifest.permission.ACCESS_FINE_LOCATION)
+        val coarse = granted(Manifest.permission.ACCESS_COARSE_LOCATION)
+        when {
+            !(fine || coarse) -> { asking = true; requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 1) }
+            Build.VERSION.SDK_INT >= 33 && !granted(Manifest.permission.POST_NOTIFICATIONS) -> { asking = true; requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 2) }
+            !batteryExempt() -> { asking = true; askBatteryExemption() }
+        }
+        main.postDelayed({ asking = false }, 1500)
+    }
+
+    private fun batteryExempt() = (getSystemService(PowerManager::class.java))?.isIgnoringBatteryOptimizations(packageName) != false
+
+    @android.annotation.SuppressLint("BatteryLife")
+    private fun askBatteryExemption() = open(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName")))
 
     /* ───────── screen ───────── */
 
@@ -109,13 +137,14 @@ class MainActivity : Activity() {
         room.addView(ui.primary("Room Lab kholo") { startActivity(Intent(this, RoomLabActivity::class.java)) })
         body.addView(room)
 
-        val shade = ui.card("Notification", "Shade mein “Hello, connected to your home” dikhta hai jab tak ye phone Stashr se juda hai. Ye sirf dikhata hai, tracking alag chalti hai.")
-        shade.addView(ui.quiet(if (prefs.statusOn) "Notification band karo" else "Notification chalu karo") {
-            prefs.statusOn = !prefs.statusOn
-            com.tanush.stashr.where.work.StatusService.sync(this)
-            render()
-        })
-        body.addView(shade)
+        val always = ui.card("Always work in background", if (prefs.alwaysOn) "ON: Stashr Location keeps running all the time, even when the app is closed or the phone restarts. A quiet “connected to your home” notification stays in the shade; Android needs it to keep the app alive." else "OFF: this phone only shares its location when Android lets the app run. Your family may see old locations.")
+        always.addView(ui.dim("This setting is only for this phone."))
+        always.addView(if (prefs.alwaysOn) ui.quiet("Turn off on this phone") { confirmAlwaysOff() } else ui.primary("Turn on (recommended)") { setAlways(true) })
+        if (prefs.alwaysOn) {
+            always.addView(ui.primary("Fix all permissions now") { fixAll() })
+            always.addView(ui.quiet("Autostart / background settings (Xiaomi, Oppo, Vivo, Samsung…)") { openAutostart() })
+        }
+        body.addView(always)
 
         val help = ui.card("If updates stop", "Some phones (Xiaomi, Oppo, Vivo, Samsung, OnePlus) close background apps to save battery. If your location stops updating, let Stashr Location run in the background.")
         help.addView(ui.quiet("Battery optimisation list") { open(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) })
@@ -152,7 +181,10 @@ class MainActivity : Activity() {
                     if (Build.VERSION.SDK_INT >= 33 && !granted(Manifest.permission.POST_NOTIFICATIONS)) requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 2)
                     else open(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, packageName))
                 })
-                "batteryUnrestricted" -> card.addView(ui.quiet("Battery optimisation list") { open(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) })
+                "batteryUnrestricted" -> {
+                    card.addView(ui.primary("Allow to run in background") { askBatteryExemption() })
+                    card.addView(ui.quiet("Battery optimisation list") { open(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) })
+                }
             }
         }
         return card
@@ -192,6 +224,49 @@ class MainActivity : Activity() {
             if (!Prefs(this@MainActivity).linked) { startActivity(Intent(this@MainActivity, SetupActivity::class.java)); finish(); return@launch }
             render()
         }
+    }
+
+    private fun setAlways(on: Boolean) {
+        prefs.alwaysOn = on
+        StatusService.sync(this)
+        if (on) { Scheduler.start(this); autoAsk() }
+        render()
+    }
+
+    private fun confirmAlwaysOff() {
+        AlertDialog.Builder(this).setTitle("Turn off always-on?")
+            .setMessage("This phone will stop running in the background all the time. Android may pause Stashr Location, and your family can see old or missing locations. You can turn it back on here any time.")
+            .setPositiveButton("Turn off") { _, _ -> setAlways(false) }
+            .setNegativeButton("Keep on", null).show()
+    }
+
+    /** Goes through every missing permission in order: runtime pop-ups first, then the settings screens. */
+    private fun fixAll() {
+        val fine = granted(Manifest.permission.ACCESS_FINE_LOCATION)
+        val coarse = granted(Manifest.permission.ACCESS_COARSE_LOCATION)
+        val bg = Build.VERSION.SDK_INT < 29 || granted(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+        when {
+            !(fine || coarse) -> requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 1)
+            Build.VERSION.SDK_INT >= 33 && !granted(Manifest.permission.POST_NOTIFICATIONS) -> requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 2)
+            !bg -> askBackground()
+            !batteryExempt() -> askBatteryExemption()
+            else -> { note = "All permissions are on."; render() }
+        }
+    }
+
+    private fun openAutostart() {
+        val tries = listOf(
+            "com.miui.securitycenter" to "com.miui.permcenter.autostart.AutoStartManagementActivity",
+            "com.coloros.safecenter" to "com.coloros.safecenter.permission.startup.StartupAppListActivity",
+            "com.oppo.safe" to "com.oppo.safe.permission.startup.StartupAppListActivity",
+            "com.vivo.permissionmanager" to "com.vivo.permissionmanager.activity.BgStartUpManagerActivity",
+            "com.samsung.android.lool" to "com.samsung.android.sm.battery.ui.BatteryActivity",
+            "com.oneplus.security" to "com.oneplus.security.chainlaunch.view.ChainLaunchAppListActivity",
+        )
+        for ((pkg, cls) in tries) {
+            try { startActivity(Intent().setClassName(pkg, cls)); return } catch (_: Exception) { }
+        }
+        open(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
     }
 
     private fun installUpdate() {
