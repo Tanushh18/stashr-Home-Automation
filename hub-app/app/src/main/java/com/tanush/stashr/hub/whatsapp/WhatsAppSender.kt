@@ -27,12 +27,12 @@ object WhatsAppSender {
 
     @Volatile var job: Job? = null
 
-    private fun installed(ctx: Context): String? {
-        for (p in listOf("com.whatsapp", "com.whatsapp.w4b")) {
-            try { ctx.packageManager.getPackageInfo(p, 0); return p } catch (e: PackageManager.NameNotFoundException) { }
-        }
-        return null
-    }
+    /** Group messages (Stashr Smart home) use normal WhatsApp only. WhatsApp Business is the lead sender's app and is never used here, so a
+     *  group message can never go out from the business number, even when normal WhatsApp is missing. */
+    private const val PACKAGE = "com.whatsapp"
+
+    private fun installed(ctx: Context): String? =
+        try { ctx.packageManager.getPackageInfo(PACKAGE, 0); PACKAGE } catch (e: PackageManager.NameNotFoundException) { null }
 
     /** Returns "Sent to <group>" or throws with a message you can show. */
     @Suppress("DEPRECATION")
@@ -40,8 +40,13 @@ object WhatsAppSender {
         val g = group.trim(); val t = text.trim()
         if (g.isEmpty() || t.isEmpty()) throw IllegalArgumentException("Group name and message are needed")
         if (WhatsAppAccessibility.instance == null) throw IllegalStateException("Turn on Stashr Hub in Accessibility settings")
-        val pkg = installed(ctx) ?: throw IllegalStateException("WhatsApp is not installed")
+        val pkg = installed(ctx) ?: throw IllegalStateException("WhatsApp is not installed (Smart home messages use normal WhatsApp, not WhatsApp Business)")
         if (job != null && job?.done == false && System.currentTimeMillis() < job!!.deadline) throw IllegalStateException("Another message is being sent")
+        // A lead message may be going out through WhatsApp Business. Opening this app now would pull WhatsApp to the front and break it,
+        // so wait for it to finish (at most 90 s; it ends itself within 80 s) instead of failing a time-sensitive group message.
+        val waitUntil = System.currentTimeMillis() + 90_000
+        while (WaLeadSender.isBusy() && System.currentTimeMillis() < waitUntil) delay(500)
+        if (WaLeadSender.isBusy()) throw IllegalStateException("Another message is being sent")
         val wasOff = com.tanush.stashr.hub.core.ScreenGuard.wasOff(ctx)
         val j = Job(g, t, System.currentTimeMillis() + 60_000)
         job = j

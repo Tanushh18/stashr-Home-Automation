@@ -24,6 +24,19 @@ describe("waSteps", () => {
         expect(fromAnswer(false, "Timed out before pressing Send (step 2)", { withImage: true }).steps.find((x) => x.state === "failed").note).toMatch(/newest photo/);
         expect(fromAnswer(false, "Timed out before pressing Send (step 0)", { withImage: false }).steps.find((x) => x.state === "failed").key).toBe("send");
     });
+    test("the newer tablet app's timeout names the step and the screen it was stuck on", () => {
+        const stuck = fromAnswer(false, "Timed out before pressing Send (step 3, picture shared; screen: root,toolbar,caption_input)", { withImage: true });
+        expect(stuck.where).toBe("tablet");
+        const bad = stuck.steps.find((x) => x.state === "failed");
+        expect(bad.key).toBe("picture");
+        expect(bad.note).toMatch(/shared into the chat/);
+        expect(bad.note).toMatch(/root,toolbar,caption_input/);
+        const noChat = fromAnswer(false, "Timed out before pressing Send (step 0; screen: nothing from WhatsApp)", { withImage: true });
+        expect(noChat.steps.find((x) => x.state === "failed").key).toBe("opened");
+        expect(noChat.steps.find((x) => x.state === "failed").note).toMatch(/nothing from WhatsApp/);
+        // without a picture the same words still name the Send step
+        expect(fromAnswer(false, "Timed out before pressing Send (step 0; screen: entry)", { withImage: false }).steps.find((x) => x.state === "failed").key).toBe("send");
+    });
     test("pressed Send without confirmation is WhatsApp's, and says to check WhatsApp", () => {
         const r = fromAnswer(false, "Pressed Send but WhatsApp did not confirm");
         expect(r.where).toBe("whatsapp");

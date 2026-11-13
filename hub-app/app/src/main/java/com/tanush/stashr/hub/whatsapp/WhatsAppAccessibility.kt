@@ -50,6 +50,14 @@ class WhatsAppAccessibility : AccessibilityService() {
         catch (e: Throwable) { Log.w(TAG, "keyboard mode failed: ${e.message}") }
     }
 
+    /** The view ids on a window, in tree order (only ids, never any text): what a failure reports so the steps can be tuned. */
+    private fun idsOn(n: AccessibilityNodeInfo?, out: MutableList<String?> = ArrayList(), depth: Int = 0): List<String?> {
+        if (n == null || depth > 40 || out.size > 200) return out
+        out.add(n.viewIdResourceName)
+        for (i in 0 until n.childCount) idsOn(n.getChild(i), out, depth + 1)
+        return out
+    }
+
     /** True when any text or description on the screen matches the pattern. */
     private fun hasText(n: AccessibilityNodeInfo?, re: Regex, depth: Int = 0): Boolean {
         if (n == null || depth > 30) return false
@@ -76,8 +84,9 @@ class WhatsAppAccessibility : AccessibilityService() {
     }
 
     /**
-     * One step of a number send. With a picture: attach button, Gallery, the newest photo, the preview's Send, then wait for
-     * the chat to come back. Without: the composer's Send. A number WhatsApp says is invalid ends the job at once.
+     * One step of a number send. With a picture: wait for the chat to open (so the number is valid), ask the sender to share this
+     * message's own picture file into it, press the preview's Send, then wait for the chat to come back. Without a picture: the
+     * composer's Send. A number WhatsApp says is invalid ends the job at once.
      */
     private fun waStep(j: WaLeadSender.Job) {
         val now = System.currentTimeMillis()
@@ -85,7 +94,8 @@ class WhatsAppAccessibility : AccessibilityService() {
             perm.findAccessibilityNodeInfosByText("Allow").orEmpty().firstOrNull()?.let { if (clickUp(it)) j.stageAt = now }
             return
         }
-        val root = windowRoot(WaLeadSender.PACKAGE) ?: return
+        val root = windowRoot(WaLeadSender.PACKAGE) ?: run { j.seen = ""; return }
+        j.seen = WaImage.shortIds(idsOn(root)).joinToString(",")
         if (j.clicks == 0 && j.stage == 0) {
             // "The phone number +91 ... isn't on WhatsApp." (WhatsApp may use a curly apostrophe, so match any character there).
             // Only when no chat is open: the typed message itself (the composer) can contain those words, e.g. a report.
@@ -104,15 +114,18 @@ class WhatsAppAccessibility : AccessibilityService() {
         Log.d(TAG, "wa stage=${j.stage} image=${j.withImage}")
         when (j.stage) {
             0 -> if (j.withImage) {
-                val att = findAcross("input_attach_button") ?: return
-                if (clickUp(att)) { j.stage = 1; j.stageAt = now }
+                // The chat is open: the sender shares the picture file into it (never "the newest photo" of the gallery).
+                if (findAcross("input_attach_button") == null) return
+                j.shareWanted = true; j.stage = 3; j.stageAt = now
             } else {
                 val send = findAcross("send") ?: return
                 if (clickUp(send)) { j.clicks++; j.lastClick = now; j.stage = 4; j.stageAt = now }
             }
-            1 -> { val g = findAcross("pickfiletype_gallery_holder") ?: return; if (clickUp(g)) { j.stage = 2; j.stageAt = now } }
-            2 -> { val t = findAcross("media_item_view") ?: return; if (clickUp(t)) { j.stage = 3; j.stageAt = now } }
-            3 -> { val b = findAcross("send_media_btn") ?: return; if (clickUp(b)) { j.clicks++; j.lastClick = now; j.stage = 4; j.stageAt = now } }
+            3 -> {
+                if (!j.shared) return
+                val b = findAcross("send_media_btn") ?: findAcross("send") ?: return
+                if (clickUp(b)) { j.clicks++; j.lastClick = now; j.stage = 4; j.stageAt = now }
+            }
             4 -> {
                 val chat = findAcross("input_attach_button") != null
                 val busy = findAcross("send_media_btn") != null || findAcross("send") != null

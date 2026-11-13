@@ -46,22 +46,3 @@ WhatsApp, not WhatsApp Business)" instead of going out from the business number.
 
 ## Rolling it out safely
 Set Stashr Hub to Hold under Settings → App updates before merging, merge, then choose Selected → the tablet, test, and only then everyone.
-
-## Quick start for the day the tablet is connected (copy this)
-
-Needs: a computer with the repo cloned, Claude Code running in it (a cloud session cannot see a USB tablet), and `adb` installed
-(Android platform-tools). Tablet: Developer options → USB debugging on; accept the "Allow USB debugging?" prompt.
-
-```bash
-adb devices          # must list the tablet as "device"
-```
-
-Then tell Claude in that terminal:
-
-> The tablet is connected over USB. Read docs/WHATSAPP_IMAGE_FIX.md. The picture fix is on branch `whatsapp-image-fix` (PR #89); check it
-> out, install the Hub APK from it (or build it), send a test lead with a picture from the website, watch `adb logcat -s StashrWA`, and if
-> it stops, dump the screen with `uiautomator dump`, fix the accessibility steps in `hub-app/.../whatsapp/WhatsAppAccessibility.kt` until
-> the right picture is sent, then show me the result before merging.
-
-Order that keeps the lead sender safe: set Stashr Hub to **Hold** (Settings → App updates) → test on the tablet → fix → merge PR #89 → set
-Hub to **Selected → the tablet** → confirm a real lead → then everyone.
