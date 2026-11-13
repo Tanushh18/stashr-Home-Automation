@@ -7,6 +7,8 @@ export const home = {
   devices: () => request("/home/devices"),
   renameDevice: (id, name) => j(`/home/devices/${id}`, "PUT", { name }),
   removeDevice: (id) => j(`/home/devices/${id}`, "DELETE"),
+  // A device linked again under another name: everything of the old entry (id) moves to the one kept (into), then the old one is removed.
+  mergeDevice: (id, into) => j(`/home/devices/${id}/merge`, "POST", { into }, 40000),
   command: (id, type, args = {}) => j(`/home/devices/${id}/commands`, "POST", { type, args }),
   labelLan: (id, key, body) => j(`/home/devices/${id}/lan/${key}`, "PUT", body),
   mergeLan: (id, key, into) => j(`/home/devices/${id}/lan/${key}/merge`, "POST", { into }),

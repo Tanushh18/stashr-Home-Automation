@@ -12,5 +12,12 @@ export const money = {
   list: (month) => request(`/expenses${month ? `?month=${encodeURIComponent(month)}` : ""}`, { timeout: 40000 }),
   setCategory: (index, category, remember) => j("/expenses/category", "PUT", { index, category, remember: Boolean(remember) }, 40000),
   review: (index, action) => j("/expenses/review", "PUT", { index, action }, 40000),
-  statement: (filename, bytes) => requestBytes(`/expenses/statement?filename=${encodeURIComponent(filename)}`, bytes, { timeout: 120000 }),
+  // A locked Excel file: the password goes in a header (URL-encoded), never the address. month = "YYYY-MM" to match only that month.
+  statement: (filename, bytes, { password, month } = {}) => requestBytes(
+    `/expenses/statement?filename=${encodeURIComponent(filename)}${month ? `&month=${encodeURIComponent(month)}` : ""}`, bytes,
+    { timeout: 120000, headers: password ? { "X-Statement-Password": encodeURIComponent(password) } : undefined }),
+  // Statements kept (encrypted) for searching later.
+  savedStatements: () => request("/expenses/statement/saved", { timeout: 30000 }),
+  searchStatements: (q, month) => request(`/expenses/statement/search?q=${encodeURIComponent(q)}${month ? `&month=${encodeURIComponent(month)}` : ""}`, { timeout: 30000 }),
+  deleteSavedStatement: (id) => j(`/expenses/statement/saved/${id}`, "DELETE"),
 };
