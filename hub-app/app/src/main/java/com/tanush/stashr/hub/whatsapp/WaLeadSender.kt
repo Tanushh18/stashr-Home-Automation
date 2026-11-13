@@ -42,6 +42,9 @@ object WaLeadSender {
 
     @Volatile var job: Job? = null
 
+    /** True while a lead message is being sent (WhatsApp Business is on screen), so nothing else may open WhatsApp. */
+    fun isBusy(): Boolean { val j = job; return j != null && !j.done && j.error == null && System.currentTimeMillis() < j.deadline }
+
     private fun installed(ctx: Context): Boolean = try { ctx.packageManager.getPackageInfo(PACKAGE, 0); true } catch (e: PackageManager.NameNotFoundException) { false }
 
     /** Returns "Sent to <number>" or throws with a message Stashr can show ("That number is not on WhatsApp", ...). */
@@ -55,8 +58,7 @@ object WaLeadSender {
         if (text.isEmpty() && !withImage) throw IllegalArgumentException("Nothing to send")
         if (WhatsAppAccessibility.instance == null) throw IllegalStateException("Turn on Stashr Hub in Accessibility settings")
         if (!installed(ctx)) throw IllegalStateException("WhatsApp Business is not installed")
-        val running = job
-        if (running != null && !running.done && running.error == null && System.currentTimeMillis() < running.deadline) throw IllegalStateException("Another message is being sent")
+        if (isBusy()) throw IllegalStateException("Another message is being sent")
         if (WhatsAppSender.job?.done == false) throw IllegalStateException("Another message is being sent")
 
         val shareFile: File? = if (withImage) {

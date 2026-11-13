@@ -42,6 +42,11 @@ object WhatsAppSender {
         if (WhatsAppAccessibility.instance == null) throw IllegalStateException("Turn on Stashr Hub in Accessibility settings")
         val pkg = installed(ctx) ?: throw IllegalStateException("WhatsApp is not installed")
         if (job != null && job?.done == false && System.currentTimeMillis() < job!!.deadline) throw IllegalStateException("Another message is being sent")
+        // A lead message may be going out through WhatsApp Business. Opening this app now would pull WhatsApp to the front and break it,
+        // so wait for it to finish (at most 90 s; it ends itself within 80 s) instead of failing a time-sensitive group message.
+        val waitUntil = System.currentTimeMillis() + 90_000
+        while (WaLeadSender.isBusy() && System.currentTimeMillis() < waitUntil) delay(500)
+        if (WaLeadSender.isBusy()) throw IllegalStateException("Another message is being sent")
         val wasOff = com.tanush.stashr.hub.core.ScreenGuard.wasOff(ctx)
         val j = Job(g, t, System.currentTimeMillis() + 60_000)
         job = j

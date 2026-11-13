@@ -35,9 +35,13 @@ This was written and compiled by CI only. WhatsApp's screens differ between vers
    gallery folder `Pictures/StashrWA` under its own name, open WhatsApp's picker, open the `StashrWA` album and take its first item (the
    album holds only that message's picture). Those accessibility steps need the real screens, so they are done with the tablet connected.
 
-## Two WhatsApp accounts on the tablet
-The tablet only ever uses WhatsApp Business (`com.whatsapp.w4b`). If two accounts live inside WhatsApp Business, a message goes out from
-whichever account is open when the send starts; WhatsApp has no way to pick an account from outside. To be decided together with the tablet.
+## The two WhatsApp apps on the tablet
+The tablet has normal WhatsApp (used by Stashr Smart home for its group messages) and WhatsApp Business (used by the lead sender). They are
+separate apps, so there is no account clash: lead messages always use Business (`com.whatsapp.w4b`), group messages use normal WhatsApp
+(`com.whatsapp`, found first). One thing was wrong: the group sender did not check whether a lead message was in progress, so a place or
+arrival message could pull normal WhatsApp to the front in the middle of a lead's send and break it. It now waits (up to 90 s) for the lead
+message to finish; the lead sender already refused to start while a group message was running (the website then puts that lead back in line).
+Note: if normal WhatsApp were ever uninstalled, group messages would go out through Business, because the group sender takes whichever is installed first.
 
 ## Rolling it out safely
 Set Stashr Hub to Hold under Settings → App updates before merging, merge, then choose Selected → the tablet, test, and only then everyone.
