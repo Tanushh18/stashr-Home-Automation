@@ -198,3 +198,15 @@
 .sh-chip { display: inline-flex; align-items: center; gap: .25rem; padding: .15rem .25rem .15rem .6rem; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface); }
 .sh-chip .rd-btn { padding: 0 .4rem; min-height: 0; }
 .sh-ok { color: var(--ok); font-size: .85rem; } .sh-warn { color: var(--rd-warn); font-size: .85rem; }
+
+/* Linked devices: the info and the buttons wrap instead of overlapping in a narrow card */
+.sh-linked { grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr)); }
+.sh-linked li { flex-wrap: wrap; align-items: flex-start; }
+.sh-linked__info { flex: 1 1 8rem; min-width: 0; }
+.sh-linked__actions { flex: 1 0 100%; display: flex; flex-wrap: wrap; gap: .4rem; }
+.sh-linked__actions .rd-btn { flex: 1 1 auto; padding: .4rem .6rem; }
+.sh-linked__merge { flex: 1 0 100%; display: flex; flex-wrap: wrap; gap: .5rem; align-items: flex-end; padding-top: .4rem; border-top: 1px dashed var(--line); }
+.sh-linked__merge label { flex: 1 1 12rem; display: grid; gap: .3rem; font-size: .75rem; color: var(--text-faint); }
+.sh-linked__merge select { min-width: 0; max-width: 100%; padding: .45rem .6rem; border: 1px solid var(--line-strong); border-radius: var(--r-md); background: var(--surface); color: inherit; }
+.sh-people li { min-width: 0; }
+.sh-people .rd-btn { white-space: normal; }

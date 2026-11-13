@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import {
   makeHomePairCode, getHomeSettings, saveHomeSettings, saveHomeSchedules, saveHomePlaces, testHomePlace, getHomeDashboard, getHomeInsights, saveHomeHistory, deleteHomeHistory, saveHomeSpots, getLocationCode, rotateLocationCode, getHubCode, rotateHubCode, getHomeWhere, locateNow, saveHomeScenes, runHomeScene,
-  getHomeShare, saveHomeShare, getHomePlaceTrail, getHomeUsage, getHomeSpeed, getHomeMedia, getHomeMediaBlob, deleteHomeMedia, getHomeLiveFrame, testHomeBrief, setHomePhonePerson, removeHomeDevice, setHomeSyncPaused
+  getHomeShare, saveHomeShare, getHomePlaceTrail, getHomeUsage, getHomeSpeed, getHomeMedia, getHomeMediaBlob, deleteHomeMedia, getHomeLiveFrame, testHomeBrief, setHomePhonePerson, removeHomeDevice, mergeHomeDevice, setHomeSyncPaused
 } from "../../api/client";
 import { Section, useConfirm } from "../Render/RenderUi";
 import { usePolling } from "../Render/renderHooks";
@@ -32,6 +32,7 @@ export function PairCard({ devices = [], onChanged = () => {} }) {
   const [code, setCode] = useState("");
   const [old, setOld] = useState({ kind: "hub", name: "", code: null });
   const { ask, dialog } = useConfirm();
+  const [merging, setMerging] = useState({ id: "", into: "" });
   const linked = devices.filter((d) => d.kind === "hub" || d.kind === "tv" || d.kind === "phone");
   useEffect(() => { getHubCode().then((r) => setCode(r.code)).catch(() => {}); }, []);
   const copy = async () => { try { await navigator.clipboard.writeText(code); toast.success("Code copied."); } catch { toast.error("Could not copy. Select the code and copy it."); } };
@@ -40,8 +41,14 @@ export function PairCard({ devices = [], onChanged = () => {} }) {
     try { setCode((await rotateHubCode()).code); toast.success("New code ready."); } catch (e) { toast.error(errorMessage(e, "Could not make a new code.")); }
   };
   const disconnect = async (d) => {
-    if (!(await ask({ title: `Disconnect ${d.name || "this device"}?`, message: "It stops syncing with Stashr. To bring it back, type the home-device code on it again.", confirmLabel: "Disconnect", danger: true }))) return;
+    if (!(await ask({ title: `Disconnect ${d.name || "this device"}?`, message: d.kind === "phone" ? "This phone stops sharing its location and leaves the family list. To bring it back, link it again in Stashr Location with a new code." : "It stops syncing with Stashr. To bring it back, type the home-device code on it again.", confirmLabel: "Disconnect", danger: true }))) return;
     try { await removeHomeDevice(d.id); toast.success("Disconnected."); onChanged(); } catch (e) { toast.error(errorMessage(e, "Could not disconnect.")); }
+  };
+  const merge = async (d) => {
+    const keep = linked.find((x) => x.id === merging.into);
+    if (!keep) return;
+    if (!(await ask({ title: `Merge "${d.name || "this device"}" into "${keep.name || "the other one"}"?`, message: `Everything recorded for "${d.name || "this device"}" (history, places, trail, room samples) moves to "${keep.name || "the other one"}", which keeps its own name. Then "${d.name || "this device"}" is removed. This cannot be undone.`, confirmLabel: "Merge", danger: true }))) return;
+    try { await mergeHomeDevice(d.id, keep.id); toast.success("Merged."); setMerging({ id: "", into: "" }); onChanged(); } catch (e) { toast.error(errorMessage(e, "Could not merge.")); }
   };
   const togglePause = async (d) => {
     const pause = !d.syncPaused;
@@ -63,14 +70,32 @@ export function PairCard({ devices = [], onChanged = () => {} }) {
       <div className="sh-editor">
         <b>Linked now</b>
         {linked.length ? (
-          <ul className="sh-people">{linked.map((d) => (
-            <li key={d.id || d.name} className={d.online ? "is-home" : ""}>
-              <span className="sh-avatar" aria-hidden="true">{d.kind === "tv" ? "TV" : d.kind === "phone" ? "PH" : "TB"}</span>
-              <div><b>{d.name || "Unnamed"}</b><span>{KIND_LABEL[d.kind] || d.kind} · {d.syncPaused ? "syncing paused" : d.online ? "online" : "offline"}{d.lastSeen ? ` · seen ${ago(d.lastSeen)}` : ""}</span></div>
-              {d.kind === "hub" && !d.viaHub ? <button type="button" className="rd-btn rd-btn--quiet" onClick={() => togglePause(d)}>{d.syncPaused ? "Resume syncing" : "Pause syncing"}</button> : null}
-              {d.kind === "hub" || d.kind === "tv" ? <button type="button" className="rd-btn rd-btn--quiet" onClick={() => disconnect(d)}>Disconnect</button> : null}
-            </li>
-          ))}</ul>
+          <ul className="sh-people sh-linked">{linked.map((d) => {
+            const others = linked.filter((x) => x.id !== d.id && x.kind === d.kind && !x.viaHub);
+            const open = merging.id === d.id;
+            return (
+              <li key={d.id || d.name} className={d.online ? "is-home" : ""}>
+                <span className="sh-avatar" aria-hidden="true">{d.kind === "tv" ? "TV" : d.kind === "phone" ? "PH" : "TB"}</span>
+                <div className="sh-linked__info"><b>{d.name || "Unnamed"}</b><span>{KIND_LABEL[d.kind] || d.kind} · {d.syncPaused ? "syncing paused" : d.online ? "online" : "offline"}{d.lastSeen ? ` · seen ${ago(d.lastSeen)}` : ""}</span></div>
+                <div className="sh-linked__actions">
+                  {d.kind === "hub" && !d.viaHub ? <button type="button" className="rd-btn rd-btn--quiet" onClick={() => togglePause(d)}>{d.syncPaused ? "Resume syncing" : "Pause syncing"}</button> : null}
+                  {!d.viaHub && others.length ? <button type="button" className="rd-btn rd-btn--quiet" onClick={() => setMerging(open ? { id: "", into: "" } : { id: d.id, into: "" })}>{open ? "Cancel merge" : "Merge into…"}</button> : null}
+                  {!d.viaHub ? <button type="button" className="rd-btn rd-btn--quiet" onClick={() => disconnect(d)}>Disconnect</button> : null}
+                </div>
+                {open ? (
+                  <div className="sh-linked__merge">
+                    <label>Keep this one (it keeps its name; "{d.name || "this device"}" is removed):
+                      <select value={merging.into} onChange={(e) => setMerging({ id: d.id, into: e.target.value })}>
+                        <option value="">Choose…</option>
+                        {others.map((x) => <option key={x.id} value={x.id}>{x.name || "Unnamed"} ({x.online ? "online" : "offline"})</option>)}
+                      </select>
+                    </label>
+                    <button type="button" className="rd-btn rd-btn--primary" disabled={!merging.into} onClick={() => merge(d)}>Merge</button>
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}</ul>
         ) : <p className="sh-dim">Nothing is linked yet. Type the code above on the tablet or TV.</p>}
       </div>
       <details className="sh-table"><summary>One-time code instead (15 minutes, works once)</summary>

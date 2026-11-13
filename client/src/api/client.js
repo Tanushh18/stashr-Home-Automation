@@ -442,6 +442,7 @@ export const testTelegramBot = () => instance.post("/telegram/test", {}, { timeo
 export const getHomeDevices = () => instance.get("/home/devices").then((r) => r.data);
 export const renameHomeDevice = (id, name) => instance.put(`/home/devices/${id}`, { name }).then((r) => r.data);
 export const setHomeSyncPaused = (id, paused) => instance.put(`/home/devices/${id}/sync`, { paused }).then((r) => r.data);
+export const mergeHomeDevice = (id, into) => instance.post(`/home/devices/${id}/merge`, { into }).then((r) => r.data);
 export const removeHomeDevice = (id) => instance.delete(`/home/devices/${id}`).then((r) => r.data);
 export const sendHomeCommand = (id, type, args = {}) => instance.post(`/home/devices/${id}/commands`, { type, args }).then((r) => r.data);
 export const labelHomeLanDevice = (id, key, label, room) => instance.put(`/home/devices/${id}/lan/${key}`, { label, room }).then((r) => r.data);

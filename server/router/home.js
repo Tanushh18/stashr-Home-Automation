@@ -154,6 +154,14 @@ router.delete("/home/devices/:id", authenticate, writeLimiter, async (req, res) 
     } catch (e) { return fail(res, e, "Could not remove the device."); }
 });
 
+// A device that was linked again under another name: move everything of the old entry (:id) to the one you keep (into), then remove the old one.
+router.post("/home/devices/:id/merge", authenticate, writeLimiter, async (req, res) => {
+    try {
+        const out = await require("../utils/homeMerge").mergeDevices(req.rootUser._id, req.params.id, req.body && req.body.into);
+        return res.json({ ok: true, ...out });
+    } catch (e) { return fail(res, e, "Could not merge the devices."); }
+});
+
 router.post("/home/devices/:id/commands", authenticate, writeLimiter, async (req, res) => {
     try {
         if (!validId(req.params.id)) return res.status(404).json({ error: "Device not found." });
