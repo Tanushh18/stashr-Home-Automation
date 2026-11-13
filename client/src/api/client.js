@@ -558,13 +558,18 @@ export const reviewExpense = (index, action) => instance.put("/expenses/review",
 export const getExpenseRules = () => instance.get("/expenses/rules").then((r) => r.data);
 export const saveExpenseRules = (rules) => instance.put("/expenses/rules", { rules }).then((r) => r.data);
 // The statement goes up first (the answer comes at once); reading, matching and saving carry on in the background and are followed with getStatementJob.
-export const uploadStatementAsync = (file, onUploadProgress) => instance.post("/expenses/statement", file, {
-  params: { filename: file.name, async: 1 },
-  headers: { "Content-Type": "application/octet-stream" },
+export const uploadStatementAsync = (file, onUploadProgress, { password, month } = {}) => instance.post("/expenses/statement", file, {
+  params: { filename: file.name, async: 1, ...(month ? { month } : {}) },
+  // a locked file's password goes in a header (never the address), URL-encoded so any characters survive
+  headers: { "Content-Type": "application/octet-stream", ...(password ? { "X-Statement-Password": encodeURIComponent(password) } : {}) },
   transformRequest: [(data) => data],
   onUploadProgress,
   timeout: 120000
 }).then((r) => r.data);
+// Statements kept for searching later.
+export const getSavedStatements = () => instance.get("/expenses/statement/saved").then((r) => r.data);
+export const searchStatements = (q, month) => instance.get("/expenses/statement/search", { params: { q, ...(month ? { month } : {}) } }).then((r) => r.data);
+export const deleteSavedStatement = (id) => instance.delete(`/expenses/statement/saved/${id}`).then((r) => r.data);
 export const getStatementJob = (id) => instance.get("/expenses/statement/status", { params: id ? { job: id } : {} }).then((r) => r.data);
 export const uploadStatement = (file) => instance.post("/expenses/statement", file, {
   params: { filename: file.name },

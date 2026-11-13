@@ -16,6 +16,7 @@
  *   POST /expenses/statement?filename=… (raw bytes)
  */
 const express = require("express");
+const mongoose = require("mongoose");
 const router = express.Router();
 const authenticate = require("../middlewares/authenticate");
 const rateLimit = require("../middlewares/rateLimit");
@@ -352,11 +353,14 @@ router.post("/expenses/remove-unmatched", authenticate, writeLimiter, async (req
 });
 
 const { processStatement: runStatement } = require("../utils/statementRun");
+const saved = require("../utils/statementSearch");
+const officeCrypto = require("../utils/officeCrypto");
 
 /** The statement check for this account, with its rules, the 4-month cut-off and where the result summary is saved. */
-const processStatement = ({ owner, s, st, copy, bytes, progress }) => runStatement({
-    s, st, copy, bytes, progress, rules: userRules(s), cutoff: cutoffDate(),
-    saveSummary: (summary) => Settings.updateOne({ owner }, { $set: { lastStatement: summary } })
+const processStatement = ({ owner, s, st, copy, bytes, progress, month = "", filename = "", dataKey }) => runStatement({
+    s, st, copy, bytes, progress, month, rules: userRules(s), cutoff: cutoffDate(),
+    saveSummary: (summary) => Settings.updateOne({ owner }, { $set: { lastStatement: summary } }),
+    saveLines: ({ lines }) => saved.saveStatement(owner, dataKey, { filename, month, lines })     // kept (encrypted) so it can be searched later
 });
 
 router.post("/expenses/statement", authenticate, writeLimiter, express.raw({ type: "application/octet-stream", limit: "8mb" }), async (req, res) => {
@@ -368,6 +372,24 @@ router.post("/expenses/statement", authenticate, writeLimiter, express.raw({ typ
         // what can be refused without reading the file is refused at once, for both ways of calling this
         if (/\.pdf$/.test(name) || req.body.subarray(0, 4).toString() === "%PDF") return res.status(400).json({ error: "Download the statement as Excel or CSV from net banking (a PDF cannot be read reliably)." });
         if (/\.xls$/.test(name)) return res.status(400).json({ error: "Save the statement as .xlsx or .csv and send that." });
+        const month = String(req.query.month || "");
+        if (month && !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return res.status(400).json({ error: "Pick the month as YYYY-MM." });
+
+        // A locked Excel file: ask for the password (code "password_required"), or say it was wrong ("wrong_password"). The password travels in a
+        // header (never the address), is used once to open the file and is not kept or logged.
+        let bytes = req.body;
+        if (officeCrypto.isCompoundFile(bytes)) {
+            if (!officeCrypto.isEncryptedWorkbook(bytes)) return res.status(400).json({ error: "Save the statement as .xlsx or .csv and send that (this looks like an old .xls file)." });
+            let password = "";
+            try { password = decodeURIComponent(String(req.get("x-statement-password") || "")); } catch (e) { password = String(req.get("x-statement-password") || ""); }
+            if (!password) return res.status(422).json({ code: "password_required", error: "This statement is locked. Enter its password to open it." });
+            try { bytes = officeCrypto.decryptWorkbook(bytes, password); }
+            catch (e) {
+                if (e.code === "wrong_password") return res.status(422).json({ code: "wrong_password", error: "That password did not unlock the statement. Check it and try again." });
+                return res.status(400).json({ error: e.message || "Could not open the locked statement." });
+            }
+        }
+        const dataKey = await req.rootUser.getDataKey();
 
         if (req.query.async === "1") {
             // the website: the file is in, so answer now; reading, matching and saving carry on in the background and /expenses/statement/status shows how far it is
@@ -376,14 +398,14 @@ router.post("/expenses/statement", authenticate, writeLimiter, express.raw({ typ
             const job = jobs.create(owner, { filename: name });
             res.status(202).json({ job: jobs.view(job) });
             setImmediate(() => {
-                processStatement({ owner, s, st, copy, bytes: req.body, progress: (p) => jobs.progress(job.id, p) })
+                processStatement({ owner, s, st, copy, bytes, month, filename: String(req.query.filename || ""), dataKey, progress: (p) => jobs.progress(job.id, p) })
                     .then(({ report }) => jobs.finish(job.id, report))
                     .catch((e) => { if (!Number.isInteger(e.status)) console.error("[expenses] statement check failed:", e && e.message); jobs.fail(job.id, Number.isInteger(e.status) ? e.message : "Could not check the statement. Try uploading it again."); });
             });
             return undefined;
         }
         // the mobile app (and anyone else who waits): the same work, answered when it is done
-        const { report } = await processStatement({ owner, s, st, copy, bytes: req.body });
+        const { report } = await processStatement({ owner, s, st, copy, bytes, month, filename: String(req.query.filename || ""), dataKey });
         return res.json({ report });
     } catch (e) { return fail(res, e, "Could not check the statement."); }
 });
@@ -393,6 +415,28 @@ router.get("/expenses/statement/status", authenticate, (req, res) => {
     const job = jobs.get(req.rootUser._id, String(req.query.job || ""));
     res.set("Cache-Control", "no-store");
     return res.json({ job: job ? jobs.view(job) : null });
+});
+
+// The statements kept for searching: the list (with the months they cover), a search, and deleting one.
+router.get("/expenses/statement/saved", authenticate, async (req, res) => {
+    try { res.set("Cache-Control", "no-store"); return res.json(await saved.listStatements(req.rootUser._id)); }
+    catch (e) { return fail(res, e, "Could not load your saved statements."); }
+});
+router.get("/expenses/statement/search", authenticate, async (req, res) => {
+    try {
+        res.set("Cache-Control", "no-store");
+        const q = String(req.query.q || "").slice(0, 120);
+        const month = /^\d{4}-\d{2}$/.test(String(req.query.month || "")) ? String(req.query.month) : "";
+        const statement = mongoose.isValidObjectId(String(req.query.statement || "")) ? String(req.query.statement) : "";
+        return res.json(await saved.searchSaved(req.rootUser._id, await req.rootUser.getDataKey(), q, { month, statement, limit: Number(req.query.limit) || 100 }));
+    } catch (e) { return fail(res, e, "Could not search the statements."); }
+});
+router.delete("/expenses/statement/saved/:id", authenticate, writeLimiter, async (req, res) => {
+    try {
+        if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: "Statement not found." });
+        const r = await saved.removeStatement(req.rootUser._id, req.params.id);
+        return r ? res.json(r) : res.status(404).json({ error: "Statement not found." });
+    } catch (e) { return fail(res, e, "Could not delete the statement."); }
 });
 
 router.idle = stores.idle;

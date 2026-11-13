@@ -92,3 +92,15 @@ label.mn-chip:has(input:disabled) { opacity: .55; cursor: not-allowed; }
 .mn-progress p { margin: 0; }
 .mn-progress__bar { height: 8px; border-radius: 999px; background: rgba(127, 127, 127, .2); overflow: hidden; }
 .mn-progress__bar span { display: block; height: 100%; border-radius: 999px; background: var(--accent, #2a78d6); transition: width .6s ease; }
+
+/* statement: month to match, the unlock prompt, and searching the saved statements */
+.mn-field { display: grid; gap: .25rem; font-size: .75rem; color: var(--text-faint); }
+.mn-field select { min-width: 0; max-width: 100%; padding: .5rem .65rem; border: 1px solid var(--line-strong); border-radius: var(--r-md); background: var(--surface); color: inherit; font: inherit; }
+.mn-unlock { margin: .6rem 0; padding: .7rem .8rem; border: 1px solid var(--line-strong); border-radius: var(--r-md); background: color-mix(in srgb, var(--accent) 6%, var(--surface)); }
+.mn-unlock p { margin: 0 0 .4rem; }
+.mn-unlock input[type="password"] { flex: 1 1 14rem; }
+.mn-scroll { overflow-x: auto; }
+.mn-wrap { overflow-wrap: anywhere; }
+.mn-saved { margin-top: .8rem; }
+.mn-savedlist { list-style: none; margin: .4rem 0 0; padding: 0; display: grid; gap: .4rem; }
+.mn-savedlist li { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; justify-content: space-between; padding: .4rem 0; border-top: 1px solid var(--line); font-size: .82rem; }
