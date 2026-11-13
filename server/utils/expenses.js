@@ -357,6 +357,8 @@ function reconcile(sheetRows, stmt, userRules = [], opts = {}) {
     // only judged for the days it covers completely: entries of today (the statement's last day, when that is today) are left alone.
     const dayBefore = (iso) => new Date(Date.parse(iso + "T00:00:00Z") - 86400000).toISOString().slice(0, 10);
     const settledTo = opts.today && to >= opts.today ? dayBefore(to) : to;
+    // For months that are over, the statement is the only truth: even an entry the owner confirmed by hand is set aside when it is not in it.
+    const pastMonth = (d) => Boolean(opts.today) && d.slice(0, 7) < opts.today.slice(0, 7);
     const info = stmt.map((s) => kit.describeLine(s.desc));
     const dayGap = (a, b) => Math.abs(Date.parse(a) - Date.parse(b)) / 86400000;
     const pairs = new Map();                                  // statement line index -> stored entry
@@ -420,9 +422,9 @@ function reconcile(sheetRows, stmt, userRules = [], opts = {}) {
     // (an entry an EARLIER statement or message verified is not safe either: when this newer statement is the truth for these dates and does
     // not have it, it is a duplicate or from another account, and keeping it counted is what made months "differ". Only the owner's own
     // "Confirmed" stays. Nothing is deleted: it is set aside, listed under Needs checking, and the owner decides.)
-    const missing = sheetRows.filter((t) => !used.has(t.index) && t.date >= from && t.date <= settledTo && t.status !== "Confirmed");
+    const missing = sheetRows.filter((t) => !used.has(t.index) && t.date >= from && t.date <= settledTo && (t.status !== "Confirmed" || pastMonth(t.date)));
     for (const t of missing) {
-        const note = t.status === "Verified" ? "Not found in the newer statement you sent (an earlier check had verified it)" : "Not found in the statement you sent";
+        const note = t.status === "Confirmed" ? "Not in your bank statement (you had confirmed it, but that month is over and the statement is the truth)" : t.status === "Verified" ? "Not found in the newer statement you sent (an earlier check had verified it)" : "Not found in the statement you sent";
         updates.push({ index: t.index, status: "Not in statement", note, fields: { status: "Not in statement", note } });
     }
     for (const t of sheetRows) {

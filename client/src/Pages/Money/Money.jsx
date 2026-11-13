@@ -335,10 +335,10 @@ function TxRow({ tx, categories, onChanged }) {
 }
 
 /** Unsorted payments in groups: one tap sorts every payment to or from the same UPI id/name, past and future. */
-function QuickSortCard({ categories, onChanged, refreshKey }) {
+function QuickSortCard({ categories, onChanged, refreshKey, month }) {
   const [data, setData] = useState(null);
   const [busy, setBusy] = useState("");
-  useEffect(() => { let live = true; getUncategorized().then((d) => { if (live) setData(d); }).catch(() => {}); return () => { live = false; }; }, [refreshKey]);
+  useEffect(() => { let live = true; getUncategorized(month).then((d) => { if (live) setData(d); }).catch(() => {}); return () => { live = false; }; }, [refreshKey, month]);
   if (!data || !data.groups.length) return null;
   const sort = async (g, category) => {
     setBusy(g.key);
@@ -348,7 +348,7 @@ function QuickSortCard({ categories, onChanged, refreshKey }) {
   };
   const options = (categories || []).filter((c) => c && c !== "Uncategorized");
   return (
-    <Section title={`Sort quickly (${data.total} unsorted)`} subtitle="Pick a category once. Every payment to or from the same UPI id or name, old and new, follows it automatically.">
+    <Section title={`Sort quickly: ${month ? monthLabel(month) : "all months"} (${data.total} unsorted)`} subtitle="Pick a category once. Every payment to or from the same UPI id or name, old and new, follows it automatically.">
       <ul className="mn-quick">
         {data.groups.slice(0, 12).map((g) => (
           <li key={g.key}>
@@ -736,7 +736,7 @@ export default function Money() {
                 <>
                   <CardBoundary><Tiles totals={data.totals} flagged={(data.flagged || []).length} /></CardBoundary>
                   <CardBoundary><FlaggedCard rows={data.flagged || []} onChanged={reload} /></CardBoundary>
-                  <CardBoundary><QuickSortCard categories={categories} onChanged={reload} refreshKey={data.rows} /></CardBoundary>
+                  <CardBoundary><QuickSortCard month={month} categories={categories} onChanged={reload} refreshKey={data.rows} /></CardBoundary>
                   <CardBoundary><CategoryBars totals={data.totals} selected={filter} onSelect={setFilter} /></CardBoundary>
                   <CardBoundary><TxList rows={data.rows || []} categories={categories} filter={filter} onClear={() => setFilter("")} onChanged={reload} uncategorized={data.uncategorized || 0} /></CardBoundary>
                 </>

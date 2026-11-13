@@ -162,16 +162,16 @@ export function Flagged({ rows, onChange }) {
 }
 
 /** Unsorted payments in groups. One pick sorts every payment to or from the same UPI id or name, old and new, and later ones follow. */
-export function QuickSort({ categories, refreshKey, onChange }) {
+export function QuickSort({ categories, refreshKey, month, onChange }) {
   const act = useAct();
   const [data, setData] = useState(null);
   const [open, setOpen] = useState(null);                  // the group whose category list is showing
-  useEffect(() => { let live = true; money.uncategorized().then((d) => { if (live) setData(d); }).catch(() => {}); return () => { live = false; }; }, [refreshKey]);
+  useEffect(() => { let live = true; money.uncategorized(month).then((d) => { if (live) setData(d); }).catch(() => {}); return () => { live = false; }; }, [refreshKey, month]);
   if (!data || !data.groups || !data.groups.length) return null;
   const options = (categories || []).filter((c) => c && c !== "Uncategorized");
   const pick = async (g, c) => { setOpen(null); if (await act(() => money.setCategory(g.index, c, g.remembers), g.remembers ? "Sorted, and remembered for this name" : "Sorted")) onChange(); };
   return (
-    <Box title={`Sort quickly (${data.total} unsorted)`} subtitle="Pick a category once. Every payment to or from the same UPI id or name follows it, now and later.">
+    <Box title={`Sort quickly: ${month ? monthLabel(month) : "all"} (${data.total} unsorted)`} subtitle="Pick a category once. Every payment to or from the same UPI id or name follows it, now and later.">
       {data.groups.slice(0, 10).map((g) => (
         <View key={g.key} style={{ gap: 6 }}>
           <Row gap={8} wrap={false}>

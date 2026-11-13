@@ -11,7 +11,7 @@ export const money = {
   sms: (messages) => j("/expenses/sms", "POST", { messages }, 60000),
   list: (month) => request(`/expenses${month ? `?month=${encodeURIComponent(month)}` : ""}`, { timeout: 40000 }),
   setCategory: (index, category, remember) => j("/expenses/category", "PUT", { index, category, remember: Boolean(remember) }, 40000),
-  uncategorized: () => request("/expenses/uncategorized", { timeout: 30000 }),
+  uncategorized: (month) => request(`/expenses/uncategorized${month ? `?month=${encodeURIComponent(month)}` : ""}`, { timeout: 30000 }),
   review: (index, action) => j("/expenses/review", "PUT", { index, action }, 40000),
   // A locked Excel file: the password goes in a header (URL-encoded), never the address. month = "YYYY-MM" to match only that month.
   statement: (filename, bytes, { password, month } = {}) => requestBytes(

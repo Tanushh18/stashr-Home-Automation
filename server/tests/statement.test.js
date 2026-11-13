@@ -272,6 +272,14 @@ describe("a statement that is not the whole history", () => {
         expect(report.months[0].stashrDebit).toBe(report.months[0].statementDebit + 40);
     });
 
+    test("for a month that is over, even an entry the owner confirmed is set aside: the statement is the truth, so the month matches", () => {
+        const rows = [entry(9, { date: "2026-08-07", amount: 40, merchant: "Owner says genuine", ref: "", status: "Confirmed" })];
+        const { updates, report } = ex.reconcile(rows, lines(), [], { today: "2026-11-13" });
+        expect(updates.find((x) => x.index === 9).status).toBe("Not in statement");
+        expect(report.months[0].stashrDebit).toBe(report.months[0].statementDebit);
+        expect(ex.reconcile(rows, lines(), [], { today: "2026-08-20" }).updates.find((x) => x.index === 9)).toBe(undefined);   // this month: still the owner's call
+    });
+
     test("an entry from before the statement's first day or after its last day is not judged at all", () => {
         const rows = [entry(1, { date: "2026-08-02", amount: 77, merchant: "Before", status: "Verified" }), entry(2, { date: "2026-08-12", amount: 88, merchant: "After", status: "Verified" })];
         const { updates } = ex.reconcile(rows, lines(), []);

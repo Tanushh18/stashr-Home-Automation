@@ -316,7 +316,8 @@ router.get("/expenses/uncategorized", authenticate, async (req, res) => {
     try {
         const owner = req.rootUser._id, s = await settingsOf(owner);
         const { st } = await storeFor(req, s);
-        const rows = (await st.list()).filter((t) => (!t.category || t.category === "Uncategorized") && t.status !== "Not in statement");
+        const month = /^\d{4}-\d{2}$/.test(String(req.query.month || "")) ? String(req.query.month) : "";
+        const rows = (await st.list()).filter((t) => (!t.category || t.category === "Uncategorized") && t.status !== "Not in statement" && (!month || String(t.date).slice(0, 7) === month));
         const groups = new Map();
         for (const t of rows) {
             const key = ex.ruleKey(t.merchant) || `one:${t.index}`;           // a name that says nothing ("No Remark") is sorted one by one

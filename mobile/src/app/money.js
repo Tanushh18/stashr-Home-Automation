@@ -70,7 +70,7 @@ export default function Money() {
             <>
               <Boundary name="SMS access"><SmsAccess settings={settings} allowed={allowed} setAllowed={setAllowed} last={last} onSynced={afterSync} /></Boundary>
               {data ? <Boundary name="Needs checking"><Flagged rows={data.flagged} onChange={() => loadList(month || undefined)} /></Boundary> : null}
-              {data ? <Boundary name="Sort quickly"><QuickSort categories={settings.categories || []} refreshKey={data} onChange={() => loadList(month || undefined)} /></Boundary> : null}
+              {data ? <Boundary name="Sort quickly"><QuickSort month={month || data.month} categories={settings.categories || []} refreshKey={data} onChange={() => loadList(month || undefined)} /></Boundary> : null}
               {data ? <Boundary name="This month"><MonthView data={data} categories={settings.categories || []} month={month || data.month} setMonth={setMonth} filter={filter} setFilter={setFilter} onChange={() => loadList(month || undefined)} /></Boundary> : <Loading />}
               <Boundary name="Statement"><Statement settings={settings} onChecked={() => { loadAll(month); }} /></Boundary>
               <Dim>Reading messages from {dayLabel(settings.startDate)}. Entries stay for {settings.retentionMonths || 4} months in this list; older ones move to the Archive tab of your sheet. Nothing is stored in Stashr's database.</Dim>
