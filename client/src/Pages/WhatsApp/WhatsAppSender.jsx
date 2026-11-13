@@ -105,6 +105,8 @@ function SheetCard({ sheet, onChanged }) {
   const fileRef = useRef(null);
   const [picking, setPicking] = useState(false);
   const c = sheet.counts || {};
+  const savedCount = (sheet.texts || []).length;
+  const unsaved = JSON.stringify(boxToTexts(texts)) !== JSON.stringify(sheet.texts || []);
   const total = (c.pending || 0) + (c.queued || 0) + (c.sent || 0) + (c.failed || 0) + (c.skipped || 0);
 
   const run = async (fn, ok) => {
@@ -149,7 +151,12 @@ function SheetCard({ sheet, onChanged }) {
         <div>
           <label className="wa-label" htmlFor={"t" + sheet._id}>Messages. Put a line with only --- between two messages (a message can have many lines). One is picked at random for each person. Use {"{name}"} for the first name.</label>
           <textarea id={"t" + sheet._id} className="wa-input" rows={5} value={texts} onChange={(e) => setTexts(e.target.value)} placeholder={"Happy Diwali {name}!\nWishing you and your family a bright Diwali.\n---\nDiwali greetings from ..."} />
-          <div className="wa-row"><button className="rd-btn" disabled={busy} onClick={saveTexts}>Save messages</button><button className="rd-btn is-quiet" disabled={busy} onClick={useStarter}>Use the 25 We Three quotes</button><span className="wa-muted">{boxToTexts(texts).length} messages</span></div>
+          <div className="wa-row"><button className="rd-btn" disabled={busy} onClick={saveTexts}>Save messages</button><button className="rd-btn is-quiet" disabled={busy} onClick={useStarter}>Use the 25 We Three quotes</button><span className="wa-muted">{boxToTexts(texts).length} in the box</span></div>
+          {unsaved
+            ? <p className="wa-warn">Not saved yet: the box has {boxToTexts(texts).length} message{boxToTexts(texts).length === 1 ? "" : "s"}, but {savedCount} {savedCount === 1 ? "is" : "are"} saved on the server. Press <b>Save messages</b>, or they are lost when you refresh the page.</p>
+            : savedCount > 0
+              ? <p className="wa-muted">Saved: {savedCount} message{savedCount === 1 ? "" : "s"}. Every new lead from this sheet gets one of them, picked at random.</p>
+              : <p className="wa-error">No message is saved for this sheet{sheet.imageCount > 0 ? ", so leads get only the picture" : " and it has no picture, so nothing can be sent"}. Type or add messages above and press Save messages.</p>}
         </div>
         <div>
           <span className="wa-label">Pictures (PNG, JPEG or WebP, up to 2 MB each, up to 5). One is picked at random for each message.</span>
