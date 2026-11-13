@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { Badge } from "../ui";
 import { Box, Btn, Dim, Input, Row, Sub, Toggle, Txt, Bad, ask, useAct } from "../home/h";
@@ -155,6 +155,30 @@ export function Flagged({ rows, onChange }) {
             <Btn kind="primary" label="This is genuine" onPress={() => genuine(tx)} />
             <Btn kind="danger" label="Delete (fake)" onPress={() => remove(tx)} />
           </Row>
+        </View>
+      ))}
+    </Box>
+  );
+}
+
+/** Unsorted payments in groups. One pick sorts every payment to or from the same UPI id or name, old and new, and later ones follow. */
+export function QuickSort({ categories, refreshKey, onChange }) {
+  const act = useAct();
+  const [data, setData] = useState(null);
+  const [open, setOpen] = useState(null);                  // the group whose category list is showing
+  useEffect(() => { let live = true; money.uncategorized().then((d) => { if (live) setData(d); }).catch(() => {}); return () => { live = false; }; }, [refreshKey]);
+  if (!data || !data.groups || !data.groups.length) return null;
+  const options = (categories || []).filter((c) => c && c !== "Uncategorized");
+  const pick = async (g, c) => { setOpen(null); if (await act(() => money.setCategory(g.index, c, g.remembers), g.remembers ? "Sorted, and remembered for this name" : "Sorted")) onChange(); };
+  return (
+    <Box title={`Sort quickly (${data.total} unsorted)`} subtitle="Pick a category once. Every payment to or from the same UPI id or name follows it, now and later.">
+      {data.groups.slice(0, 10).map((g) => (
+        <View key={g.key} style={{ gap: 6 }}>
+          <Row gap={8} wrap={false}>
+            <View style={{ flex: 1 }}><Txt bold numberOfLines={1}>{g.label}</Txt><Dim>{g.count} {g.count === 1 ? "payment" : "payments"}{g.debit ? ` · spent ${inr(g.debit)}` : ""}{g.credit ? ` · received ${inr(g.credit)}` : ""}</Dim></View>
+            <Btn label={open === g.key ? "Close" : "Sort"} kind="quiet" onPress={() => setOpen(open === g.key ? null : g.key)} />
+          </Row>
+          {open === g.key ? <Row gap={8} wrap>{options.map((c) => <Btn key={c} label={c} kind="quiet" onPress={() => pick(g, c)} />)}</Row> : null}
         </View>
       ))}
     </Box>

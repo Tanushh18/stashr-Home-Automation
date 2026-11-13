@@ -553,6 +553,7 @@ export const removeUnmatchedExpenses = () => instance.post("/expenses/remove-unm
 export const requestExpenseSync = () => instance.post("/expenses/sync-request").then((r) => r.data);
 export const postExpenseSms = (messages) => instance.post("/expenses/sms", { messages }).then((r) => r.data);
 export const getExpenses = (month) => instance.get("/expenses", { params: month ? { month } : {} }).then((r) => r.data);
+export const getUncategorized = () => instance.get("/expenses/uncategorized").then((r) => r.data);
 export const setExpenseCategory = (index, category, remember) => instance.put("/expenses/category", { index, category, remember }).then((r) => r.data);
 export const reviewExpense = (index, action) => instance.put("/expenses/review", { index, action }).then((r) => r.data);
 export const getExpenseRules = () => instance.get("/expenses/rules").then((r) => r.data);

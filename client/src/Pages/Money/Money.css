@@ -104,3 +104,8 @@ label.mn-chip:has(input:disabled) { opacity: .55; cursor: not-allowed; }
 .mn-saved { margin-top: .8rem; }
 .mn-savedlist { list-style: none; margin: .4rem 0 0; padding: 0; display: grid; gap: .4rem; }
 .mn-savedlist li { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; justify-content: space-between; padding: .4rem 0; border-top: 1px solid var(--line); font-size: .82rem; }
+
+.mn-quick { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.mn-quick li { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.mn-quick em { font-style: normal; opacity: .7; font-size: .85em; }
+.mn-quick select { min-height: 40px; }

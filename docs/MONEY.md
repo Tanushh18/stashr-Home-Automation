@@ -90,3 +90,9 @@ read during the first sync is not kept; the statement check also looks only at t
 - SMS reading works only on Android, and only while you allow it. Nothing is read before the start date.
 - In sheet-only mode reading the sheet takes a moment; the list is cached for under a minute.
 - The app (2.5.0 and later) works with both modes unchanged: it only talks to the Stashr API, and an entry's `index` is just an opaque id.
+
+## Months that "differ", and sorting by UPI name
+
+- A statement is rarely your whole history, so Stashr never assumes a zero opening balance. It compares only the dates the statement covers.
+- An entry that an earlier check verified but this newer statement does not have is **set aside** ("Not in statement", listed under Needs checking, not counted), never deleted. Entries you confirmed by hand stay counted. The statement's last day is not judged if it is still today. Each month shows how many entries were set aside and their amounts.
+- Sorting: pick a category once and every payment to or from the same UPI id (or name, when there is no id) gets it, old ones included, and later ones follow the saved rule. "Sort quickly" lists the unsorted payments in groups for one-tap sorting; names like "No Remark" are sorted one by one.

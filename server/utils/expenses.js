@@ -101,6 +101,9 @@ const DEFAULT_RULES = [
     ["school", "Education"], ["college", "Education"], ["course", "Education"], ["udemy", "Education"], ["coaching", "Education"], ["fees", "Education"],
     ["rent", "Rent & Home"], ["maintenance", "Rent & Home"], ["society", "Rent & Home"], ["furniture", "Rent & Home"],
     ["zerodha", "Investments"], ["groww", "Investments"], ["upstox", "Investments"], ["mutual", "Investments"], ["sip", "Investments"], ["lic", "Investments"], ["insurance", "Investments"],
+    ["tea", "Food"], ["chai", "Food"], ["coffee", "Food"], ["sweets", "Food"], ["bakery", "Food"], ["juice", "Food"], ["dhaba", "Food"], ["canteen", "Food"], ["tiffin", "Food"], ["dairy", "Food"], ["bbnow", "Groceries"], ["vegetable", "Groceries"],
+    ["petrol", "Travel"], ["hpcl", "Travel"], ["bpcl", "Travel"], ["iocl", "Travel"], ["fastag", "Travel"], ["toll", "Travel"], ["parking", "Travel"],
+    ["recharge", "Bills & Recharge"], ["broadband", "Bills & Recharge"], ["fibernet", "Bills & Recharge"], ["tata play", "Bills & Recharge"], ["dth", "Bills & Recharge"], ["gym", "Health"],
     ["atm", "Cash"], ["cash", "Cash"], ["bank charges", "Other"], ["salary", "Salary & Income"], ["interest", "Salary & Income"], ["refund", "Salary & Income"]
 ];
 
@@ -121,8 +124,26 @@ function categorize(merchant, type, method, userRules = []) {
     return "Uncategorized";
 }
 
-/** A short key to make a rule from: the first two words of the merchant. */
-const ruleKey = (merchant) => norm(merchant).split(" ").slice(0, 2).join(" ");
+/** The UPI id inside a merchant text ("Name (abc.def@ybl)", "abc@ybl"): its name part, normalised, or "". Handles are cut short in bank texts, the part before @ is not. */
+function vpaOf(merchant) {
+    const m = /([a-z0-9][a-z0-9._-]{2,})@[a-z]{2,}/i.exec(String(merchant || ""));
+    return m ? norm(m[1]) : "";
+}
+
+/** Names that say nothing about who was paid: a rule made from them would sort unrelated payments together. */
+const GENERIC = new Set(["", "no remark", "upi", "unknown", "payment", "transfer", "received", "paid", "money", "upi payment", "cash", "na", "none"]);
+
+/**
+ * What a rule is made from, so that one choice sorts every payment to or from the same place, past and future:
+ * the UPI id when there is one (the same person or shop has one id however the name is spelt, and whichever bank handle follows it),
+ * else the first two words of the name. "" for a name that says nothing ("No Remark"): those are sorted one by one.
+ */
+function ruleKey(merchant) {
+    const v = vpaOf(merchant);
+    if (v && v.replace(/ /g, "").length >= 5) return v;
+    const k = norm(merchant).split(" ").slice(0, 2).join(" ");
+    return GENERIC.has(k) || k.length < 3 ? "" : k;
+}
 
 /* ───────── sheet rows ───────── */
 
@@ -327,11 +348,15 @@ function limitStatement(stmt, { startDate = "", cutoff = "", keepsOld = false } 
  *
  * -> { updates: [{ index, status, note, fields }], additions: [tx fields], report }
  */
-function reconcile(sheetRows, stmt, userRules = []) {
+function reconcile(sheetRows, stmt, userRules = [], opts = {}) {
     const used = new Set();
     const updates = [], additions = [];
     const dates = stmt.map((s) => s.date).sort();
     const from = dates[0], to = dates[dates.length - 1];
+    // A statement does not have to be the whole history, and one taken today may stop in the middle of today. What it does not have is
+    // only judged for the days it covers completely: entries of today (the statement's last day, when that is today) are left alone.
+    const dayBefore = (iso) => new Date(Date.parse(iso + "T00:00:00Z") - 86400000).toISOString().slice(0, 10);
+    const settledTo = opts.today && to >= opts.today ? dayBefore(to) : to;
     const info = stmt.map((s) => kit.describeLine(s.desc));
     const dayGap = (a, b) => Math.abs(Date.parse(a) - Date.parse(b)) / 86400000;
     const pairs = new Map();                                  // statement line index -> stored entry
@@ -392,8 +417,14 @@ function reconcile(sheetRows, stmt, userRules = []) {
         finalRows.push({ date: s.date, amount: s.amount, type: s.type, status: "Verified", category: add.category });
     });
     // entries the statement does not have (inside its dates; the owner's own "Confirmed" and earlier-verified rows are left alone)
-    const missing = sheetRows.filter((t) => !used.has(t.index) && t.date >= from && t.date <= to && t.status !== "Verified" && t.status !== "Confirmed");
-    for (const t of missing) updates.push({ index: t.index, status: "Not in statement", note: "Not found in the statement you sent", fields: { status: "Not in statement", note: "Not found in the statement you sent" } });
+    // (an entry an EARLIER statement or message verified is not safe either: when this newer statement is the truth for these dates and does
+    // not have it, it is a duplicate or from another account, and keeping it counted is what made months "differ". Only the owner's own
+    // "Confirmed" stays. Nothing is deleted: it is set aside, listed under Needs checking, and the owner decides.)
+    const missing = sheetRows.filter((t) => !used.has(t.index) && t.date >= from && t.date <= settledTo && t.status !== "Confirmed");
+    for (const t of missing) {
+        const note = t.status === "Verified" ? "Not found in the newer statement you sent (an earlier check had verified it)" : "Not found in the statement you sent";
+        updates.push({ index: t.index, status: "Not in statement", note, fields: { status: "Not in statement", note } });
+    }
     for (const t of sheetRows) {
         if (!used.has(t.index) && t.date >= from && t.date <= to) finalRows.push(missing.includes(t) ? { ...t, status: "Not in statement" } : t);
     }
@@ -409,17 +440,20 @@ function reconcile(sheetRows, stmt, userRules = []) {
     // does each month now add up to the statement? (only the days the statement covers)
     const byMonth = new Map();
     for (const s of stmt) {
+        if (s.date > settledTo) continue;
         const m = byMonth.get(s.date.slice(0, 7)) || { month: s.date.slice(0, 7), statementDebit: 0, statementCredit: 0, lines: 0 };
         if (s.type === "Debit") m.statementDebit = round2(m.statementDebit + s.amount); else m.statementCredit = round2(m.statementCredit + s.amount);
         m.lines++; byMonth.set(m.month, m);
     }
     const months = [...byMonth.values()].sort((a, b) => a.month.localeCompare(b.month)).map((m) => {
-        const mine = summarize(finalRows.filter((t) => t.date && t.date.slice(0, 7) === m.month && t.date >= from && t.date <= to));
-        return { ...m, stashrDebit: round2(mine.debit), stashrCredit: round2(mine.credit), match: Math.abs(mine.debit - m.statementDebit) < 0.01 && Math.abs(mine.credit - m.statementCredit) < 0.01 };
+        const mine = summarize(finalRows.filter((t) => t.date && t.date.slice(0, 7) === m.month && t.date >= from && t.date <= settledTo));
+        const aside = missing.filter((t) => t.date.slice(0, 7) === m.month);
+        const asideSum = (type) => round2(aside.filter((t) => t.type === type).reduce((n, t) => n + Number(t.amount || 0), 0));
+        return { ...m, setAside: aside.length, setAsideDebit: asideSum("Debit"), setAsideCredit: asideSum("Credit"), stashrDebit: round2(mine.debit), stashrCredit: round2(mine.credit), match: Math.abs(mine.debit - m.statementDebit) < 0.01 && Math.abs(mine.credit - m.statementCredit) < 0.01 };
     });
 
     return { updates, additions, report: { from, to, lines: stmt.length, verified, mismatched, added: additions.length, renamed, notInStatement: missing.length, months, allMonthsMatch: months.every((m) => m.match),
         closingBalance: stmt.length ? stmt[stmt.length - 1].balance : null, balanceBreaks: breaks.slice(0, 20), balanceBreakCount: breaks.length } };
 }
 
-module.exports = { makeTx, txToRow, assess, bankSender, ist, parseDate, parseSms, categorize, ruleKey, norm, DEFAULT_CATEGORIES, DEFAULT_RULES, HEADERS, rowFromTx, txFromRow, sameTx, reclearBalanceFlags, DOUBTFUL, limitStatement, summarize, parseCsv, parseXlsx, statementRows, reconcile, round2 };
+module.exports = { vpaOf, makeTx, txToRow, assess, bankSender, ist, parseDate, parseSms, categorize, ruleKey, norm, DEFAULT_CATEGORIES, DEFAULT_RULES, HEADERS, rowFromTx, txFromRow, sameTx, reclearBalanceFlags, DOUBTFUL, limitStatement, summarize, parseCsv, parseXlsx, statementRows, reconcile, round2 };

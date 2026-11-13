@@ -293,18 +293,42 @@ router.put("/expenses/category", authenticate, writeLimiter, async (req, res) =>
         const row = all.find((t) => String(t.index) === String(index));
         if (!row) return res.status(404).json({ error: "That row is gone. Reload the list." });
         const items = [{ index: row.index, fields: { category }, tx: row }];
+        let rule = "";
         if (req.body.remember === true && row.merchant) {
+            // One choice sorts every payment to or from the same place, past and future: the rule is the UPI id (else the first two words of the
+            // name), and it is applied now to every stored entry the rule matches, the same test later payments are sorted by.
             const k = ex.ruleKey(row.merchant);
             if (k) {
-                const rules = userRules(s).filter((r) => ex.norm(r.match) !== k).concat([{ match: k, category }]).slice(-200);
+                rule = k;
+                const rules = userRules(s).filter((r) => ex.norm(r.match) !== k).concat([{ match: k, category }]).slice(-300);
                 await Settings.updateOne({ owner }, { $set: { rules } });
-                for (const t of all) if (String(t.index) !== String(index) && t.category === "Uncategorized" && ex.norm(t.merchant).includes(k)) items.push({ index: t.index, fields: { category }, tx: t });
+                for (const t of all) if (String(t.index) !== String(index) && t.category !== category && ex.norm(t.merchant).includes(ex.norm(k))) items.push({ index: t.index, fields: { category }, tx: t });
             }
         }
         await st.updateMany(items);
         if (copy) copy.update(items);
-        return res.json({ updated: items.length });
+        return res.json({ updated: items.length, others: items.length - 1, rule });
     } catch (e) { return fail(res, e, "Could not change the category."); }
+});
+
+// The payments with no category yet, grouped by who they went to (the same key a saved rule uses), biggest first: sort a whole group with one tap.
+router.get("/expenses/uncategorized", authenticate, async (req, res) => {
+    try {
+        const owner = req.rootUser._id, s = await settingsOf(owner);
+        const { st } = await storeFor(req, s);
+        const rows = (await st.list()).filter((t) => (!t.category || t.category === "Uncategorized") && t.status !== "Not in statement");
+        const groups = new Map();
+        for (const t of rows) {
+            const key = ex.ruleKey(t.merchant) || `one:${t.index}`;           // a name that says nothing ("No Remark") is sorted one by one
+            const g = groups.get(key) || { key, label: t.merchant || "No name", count: 0, debit: 0, credit: 0, remembers: !key.startsWith("one:"), index: t.index, last: "" };
+            g.count++; if (t.type === "Credit") g.credit = Math.round((g.credit + t.amount) * 100) / 100; else g.debit = Math.round((g.debit + t.amount) * 100) / 100;
+            if (t.date > g.last) { g.last = t.date; g.index = t.index; g.label = t.merchant || g.label; }
+            groups.set(key, g);
+        }
+        const list = [...groups.values()].sort((a, b) => (b.debit + b.credit) - (a.debit + a.credit) || b.count - a.count);
+        res.set("Cache-Control", "no-store");
+        return res.json({ total: rows.length, groups: list.slice(0, 40), more: Math.max(0, list.length - 40) });
+    } catch (e) { return fail(res, e, "Could not load the unsorted payments."); }
 });
 
 router.put("/expenses/review", authenticate, writeLimiter, async (req, res) => {

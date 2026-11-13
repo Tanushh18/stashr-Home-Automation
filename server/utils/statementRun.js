@@ -40,7 +40,7 @@ async function processStatement({ s, st, copy, bytes, table: given = null, sourc
 
     progress({ stage: "matching", text: `Matching ${stmt.length} statement lines with your entries…`, pct: 25 });
     const rows = await st.list();
-    const { updates, additions, report } = ex.reconcile(rows, stmt, rules);
+    const { updates, additions, report } = ex.reconcile(rows, stmt, rules, { today: ex.ist(Date.now()) });
     const items = [];
     for (const u of updates) {
         // the statement is the truth: whatever it says (date, amount, name, balance, status...) is written, but only where it differs

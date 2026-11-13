@@ -239,3 +239,72 @@ describe("the statement is the truth", () => {
         expect(updates.find((x) => x.index === 3).fields.category).toBe("Friends");
     });
 });
+
+describe("a statement that is not the whole history", () => {
+    // The account already held 52,300 before this statement starts: nothing in the matching may assume a zero opening balance.
+    const csv = ["Date,Particulars,Withdrawals,Deposits,Balance",
+        "04-08-2026,UPI/DR/200000000001/SWIGGY/ICIC/s@ybl,300.00,,52000.00",
+        "05-08-2026,UPI/CR/200000000002/RAHUL K/x@ybl,,1000.00,53000.00",
+        "09-08-2026,UPI/DR/200000000003/ZOMATO/ICIC/z@ybl,250.00,,52750.00"].join("\n");
+    const lines = () => ex.statementRows(ex.parseCsv(csv));
+
+    test("it matches and reports no balance problems, whatever the balance before it was", () => {
+        const rows = [entry(1, { date: "2026-08-04", amount: 300, merchant: "Swiggy", ref: "200000000001", balance: 52000 }), entry(2, { date: "2026-08-05", amount: 1000, type: "Credit", merchant: "Rahul K", ref: "200000000002", balance: 53000 }),
+            entry(3, { date: "2026-08-09", amount: 250, merchant: "Zomato", ref: "200000000003", balance: 52750 })];
+        const { report, additions } = ex.reconcile(rows, lines(), []);
+        expect(report.balanceBreakCount).toBe(0);
+        expect(additions.length).toBe(0);
+        expect(report.allMonthsMatch).toBe(true);
+    });
+
+    test("an entry that an earlier check verified but this newer statement does not have is set aside, never left counted", () => {
+        const rows = [entry(1, { date: "2026-08-04", amount: 300, merchant: "Swiggy", ref: "200000000001", status: "Verified" }),
+            entry(8, { date: "2026-08-06", amount: 15000, merchant: "Other account transfer", ref: "", status: "Verified", source: "Statement" }),
+            entry(9, { date: "2026-08-07", amount: 40, merchant: "Owner says genuine", ref: "", status: "Confirmed" })];
+        const { updates, report } = ex.reconcile(rows, lines(), []);
+        const set = updates.find((x) => x.index === 8);
+        expect(set.status).toBe("Not in statement");
+        expect(set.note).toMatch(/earlier check had verified it/);
+        expect(updates.find((x) => x.index === 9)).toBe(undefined);               // the owner's own Confirmed stays
+        expect(report.notInStatement).toBe(1);
+        expect(report.months[0]).toMatchObject({ setAside: 1, setAsideDebit: 15000 });
+        // the month now adds up (the Confirmed 40 is the owner's decision and is still counted)
+        expect(report.months[0].stashrDebit).toBe(report.months[0].statementDebit + 40);
+    });
+
+    test("an entry from before the statement's first day or after its last day is not judged at all", () => {
+        const rows = [entry(1, { date: "2026-08-02", amount: 77, merchant: "Before", status: "Verified" }), entry(2, { date: "2026-08-12", amount: 88, merchant: "After", status: "Verified" })];
+        const { updates } = ex.reconcile(rows, lines(), []);
+        expect(updates.length).toBe(0);
+    });
+
+    test("a statement taken today may stop in the middle of today: today's entries are left alone", () => {
+        const rows = [entry(1, { date: "2026-08-09", amount: 60, merchant: "Later today", status: "Verified" })];
+        expect(ex.reconcile(rows, lines(), [], { today: "2026-08-09" }).updates.find((x) => x.index === 1)).toBe(undefined);
+        expect(ex.reconcile(rows, lines(), [], { today: "2026-08-20" }).updates.find((x) => x.index === 1).status).toBe("Not in statement");
+    });
+});
+
+describe("rules that sort payments by who they went to", () => {
+    test("the UPI id is the key, however the name is spelt and whichever bank handle follows", () => {
+        expect(ex.ruleKey("Ramesh (paytm. s3wsjf6@pty)")).toBe("s3wsjf6");
+        expect(ex.ruleKey("durgesh tea (q469914584@ybl)")).toBe("q469914584");
+        expect(ex.ruleKey("SWIGGY INSTA (swiggyinstamartecom@axb)")).toBe(ex.ruleKey("swiggyinstamartecom@icic"));
+        expect(ex.ruleKey("0000 : Cash Transaction TFR : Fund Trans (YASHASVI) (8527368086@ibl)")).toBe("8527368086");
+    });
+    test("without an id it is the first two words; a name that says nothing makes no rule", () => {
+        expect(ex.ruleKey("UPIInt (Meta Ads)")).toBe("upiint meta");
+        for (const g of ["No Remark", "", null, "UPI", "unknown"]) expect(ex.ruleKey(g)).toBe("");
+    });
+    test("a saved id-rule sorts later payments of that person whatever name the bank shows", () => {
+        const rules = [{ match: "q469914584", category: "Friends" }];
+        expect(ex.categorize("durgesh tea (q469914584@ybl)", "Debit", "UPI", rules)).toBe("Friends");
+        expect(ex.categorize("DURGESH T (q469914584@ybl)", "Debit", "UPI", rules)).toBe("Friends");
+        expect(ex.categorize("someone else (q111111111@ybl)", "Debit", "UPI", rules)).toBe("Uncategorized");
+    });
+    test("chai, tea and petrol are sorted without a rule", () => {
+        expect(ex.categorize("GAYATRI TEA (q674348808@ybl)", "Debit", "UPI")).toBe("Food");
+        expect(ex.categorize("Sharma Chai Point", "Debit", "UPI")).toBe("Food");
+        expect(ex.categorize("HPCL Petrol Pump", "Debit", "UPI")).toBe("Travel");
+    });
+});

@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import {
-  getExpenseSettings, saveExpenseSheet, setExpenseStorage, unlinkExpenseSheet, exportExpenseSheet, setExpenseStart, changeExpenseStart, removeUnmatchedExpenses, uploadStatementAsync, getStatementJob, getSavedStatements, searchStatements, deleteSavedStatement, postExpenseSms, requestExpenseSync, getExpenses, setExpenseCategory, reviewExpense, uploadStatement
+  getExpenseSettings, saveExpenseSheet, setExpenseStorage, unlinkExpenseSheet, exportExpenseSheet, setExpenseStart, changeExpenseStart, removeUnmatchedExpenses, uploadStatementAsync, getStatementJob, getSavedStatements, searchStatements, deleteSavedStatement, postExpenseSms, requestExpenseSync, getExpenses, getUncategorized, setExpenseCategory, reviewExpense, uploadStatement
 } from "../../api/client";
 import { Section, Skeleton, useConfirm } from "../Render/RenderUi";
 import { errorMessage } from "../Render/renderUtils";
@@ -334,6 +334,36 @@ function TxRow({ tx, categories, onChanged }) {
   );
 }
 
+/** Unsorted payments in groups: one tap sorts every payment to or from the same UPI id/name, past and future. */
+function QuickSortCard({ categories, onChanged, refreshKey }) {
+  const [data, setData] = useState(null);
+  const [busy, setBusy] = useState("");
+  useEffect(() => { let live = true; getUncategorized().then((d) => { if (live) setData(d); }).catch(() => {}); return () => { live = false; }; }, [refreshKey]);
+  if (!data || !data.groups.length) return null;
+  const sort = async (g, category) => {
+    setBusy(g.key);
+    try { const r = await setExpenseCategory(g.index, category, g.remembers); toast.success(r.updated > 1 ? `${r.updated} payments sorted as ${category}.` : "Sorted."); await onChanged(); }
+    catch (e) { toast.error("Could not save the category."); }
+    finally { setBusy(""); }
+  };
+  const options = (categories || []).filter((c) => c && c !== "Uncategorized");
+  return (
+    <Section title={`Sort quickly (${data.total} unsorted)`} subtitle="Pick a category once. Every payment to or from the same UPI id or name, old and new, follows it automatically.">
+      <ul className="mn-quick">
+        {data.groups.slice(0, 12).map((g) => (
+          <li key={g.key}>
+            <span><b>{g.label}</b> <em>{g.count} {g.count === 1 ? "payment" : "payments"}{g.debit ? " · spent " + inr(g.debit) : ""}{g.credit ? " · received " + inr(g.credit) : ""}</em></span>
+            <select defaultValue="" disabled={busy === g.key} aria-label={`Category for ${g.label}`} onChange={(e) => e.target.value && sort(g, e.target.value)}>
+              <option value="">Choose…</option>
+              {options.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </li>
+        ))}
+      </ul>
+    </Section>
+  );
+}
+
 function TxList({ rows, categories, filter, onClear, onChanged, uncategorized }) {
   const shown = filter ? rows.filter((r) => r.category === filter) : rows;
   const days = useMemo(() => groupByDay(shown), [shown]);
@@ -572,9 +602,10 @@ function StatementCard({ settings, onDone }) {
                   <span>Statement: spent {inr(m.statementDebit)}, received {inr(m.statementCredit)}</span>
                   <span>Stashr: spent {inr(m.stashrDebit)}, received {inr(m.stashrCredit)}</span>
                   <span>{m.match ? "✓" : "differs"}</span>
+                  {m.setAside ? <span className="mn-dim">{m.setAside} earlier-verified {m.setAside === 1 ? "entry" : "entries"} ({inr(m.setAsideDebit)} spent, {inr(m.setAsideCredit)} received) not in this statement: set aside under "Needs checking", not counted.</span> : null}
                 </li>
               ))}</ul>
-              {!r.allMonthsMatch ? <p className="mn-dim">A month differs when you confirmed an entry by hand that the statement does not have, or an entry is still under "Needs checking".</p> : null}
+              {!r.allMonthsMatch ? <p className="mn-dim">A month differs when an entry this statement does not have is still counted, you confirmed an entry by hand that the statement does not have, or an entry is still under "Needs checking".</p> : null}
             </div>
           ) : null}
           {r.notInStatement > 0 ? <div className="mn-row"><button className="rd-btn rd-btn--danger-quiet" onClick={removeUnmatched}>Delete the {r.notInStatement} entries the statement does not have</button></div> : null}
@@ -705,6 +736,7 @@ export default function Money() {
                 <>
                   <CardBoundary><Tiles totals={data.totals} flagged={(data.flagged || []).length} /></CardBoundary>
                   <CardBoundary><FlaggedCard rows={data.flagged || []} onChanged={reload} /></CardBoundary>
+                  <CardBoundary><QuickSortCard categories={categories} onChanged={reload} refreshKey={data.rows} /></CardBoundary>
                   <CardBoundary><CategoryBars totals={data.totals} selected={filter} onSelect={setFilter} /></CardBoundary>
                   <CardBoundary><TxList rows={data.rows || []} categories={categories} filter={filter} onClear={() => setFilter("")} onChanged={reload} uncategorized={data.uncategorized || 0} /></CardBoundary>
                 </>

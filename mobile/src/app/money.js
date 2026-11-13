@@ -4,7 +4,7 @@ import { useFocusEffect } from "expo-router";
 import { Page, Loading, Note } from "../components/kit";
 import { Boundary, Dim } from "../components/home/h";
 import { SheetSetup, StartDate, SmsAccess } from "../components/money/Setup";
-import { MonthView, Flagged } from "../components/money/Month";
+import { MonthView, Flagged, QuickSort } from "../components/money/Month";
 import Statement from "../components/money/Statement";
 import { money } from "../lib/moneyApi";
 import { hasPermission } from "../lib/sms";
@@ -70,6 +70,7 @@ export default function Money() {
             <>
               <Boundary name="SMS access"><SmsAccess settings={settings} allowed={allowed} setAllowed={setAllowed} last={last} onSynced={afterSync} /></Boundary>
               {data ? <Boundary name="Needs checking"><Flagged rows={data.flagged} onChange={() => loadList(month || undefined)} /></Boundary> : null}
+              {data ? <Boundary name="Sort quickly"><QuickSort categories={settings.categories || []} refreshKey={data} onChange={() => loadList(month || undefined)} /></Boundary> : null}
               {data ? <Boundary name="This month"><MonthView data={data} categories={settings.categories || []} month={month || data.month} setMonth={setMonth} filter={filter} setFilter={setFilter} onChange={() => loadList(month || undefined)} /></Boundary> : <Loading />}
               <Boundary name="Statement"><Statement settings={settings} onChecked={() => { loadAll(month); }} /></Boundary>
               <Dim>Reading messages from {dayLabel(settings.startDate)}. Entries stay for {settings.retentionMonths || 4} months in this list; older ones move to the Archive tab of your sheet. Nothing is stored in Stashr's database.</Dim>
