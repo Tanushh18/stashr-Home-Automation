@@ -514,7 +514,7 @@ function StatementCard({ settings, onDone }) {
     try { const x = await removeUnmatchedExpenses(); toast.success(`Removed ${x.removed}.`); setReport({ ...r, notInStatement: 0 }); onDone(); } catch (err) { toast.error(errorMessage(err, "Could not remove them.")); }
   };
   return (
-    <Section title="Check against a bank statement" subtitle="Download your Federal Bank statement from net banking as Excel or CSV and upload it. The statement is treated as the truth: what it confirms takes its date, amount and name, what is missing is added, and what it does not have is set aside.">
+    <Section title="Check against a bank statement" subtitle="Download your Federal Bank statement from net banking (PDF, Excel or CSV, locked or not) and upload it. The statement is treated as the truth: what it confirms takes its date, amount and name, what is missing is added, and what it does not have is set aside.">
       {dialog}
       <div className="mn-row">
         <label className="mn-field">Month to match
@@ -525,8 +525,8 @@ function StatementCard({ settings, onDone }) {
         </label>
       </div>
       <div className="mn-row">
-        <input ref={input} type="file" accept=".csv,.xlsx,.xls,text/csv" onChange={pick} hidden />
-        <button className="rd-btn rd-btn--primary" onClick={() => input.current && input.current.click()} disabled={busy}>{sending !== null ? `Uploading… ${sending}%` : running ? "Checking…" : "Choose a statement (.csv or .xlsx)"}</button>
+        <input ref={input} type="file" accept=".pdf,.csv,.xlsx,.xls,text/csv,application/pdf" onChange={pick} hidden />
+        <button className="rd-btn rd-btn--primary" onClick={() => input.current && input.current.click()} disabled={busy}>{sending !== null ? `Uploading… ${sending}%` : running ? "Checking…" : "Choose a statement (.pdf, .xlsx or .csv)"}</button>
       </div>
       {sending !== null || running ? (
         <div className="mn-progress" role="status" aria-live="polite">
@@ -537,7 +537,7 @@ function StatementCard({ settings, onDone }) {
       ) : null}
       {locked ? (
         <form className="mn-unlock" onSubmit={unlock} aria-label="Unlock the statement">
-          <p><b>🔒 {locked.file.name} is locked.</b> {locked.wrong ? <span className="mn-bad" role="alert">That password did not open it. Check it and try again.</span> : "Enter the password the bank gave you for this file. It is used once to open the file and is not saved."}</p>
+          <p><b>🔒 {locked.file.name} is locked.</b> {locked.wrong ? <span className="mn-bad" role="alert">That password did not open it. Check it and try again.</span> : "Enter the password the bank gave you for this file (for a PDF, usually the one printed in the e-mail). It is used once to open the file and is not saved."}</p>
           <div className="mn-row">
             <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Statement password" autoComplete="off" autoFocus aria-label="Statement password" />
             <button className="rd-btn rd-btn--primary" type="submit" disabled={!password || busy}>Unlock and check</button>

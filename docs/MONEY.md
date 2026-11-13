@@ -44,10 +44,18 @@ date; the arrival time disagrees with the date in the text; an amount over the U
 transaction** (a message may be missing). You can mark it *genuine* or *delete* it, or let the next statement decide.
 
 ## Check with your bank statement (any time, e.g. month end)
-Download the statement from Federal net banking as **Excel or CSV** (PDF is not read) and upload it on Money (a locked Excel file asks for its password). Every line is matched by
+Download the statement from Federal net banking as **Excel or CSV** (a PDF is read too, see below) and upload it on Money (a locked Excel file asks for its password). Every line is matched by
 reference (else amount and day): **Verified**, **Mismatch** (amount differs), lines the sheet missed are **added** (Source: Statement), sheet rows inside
 the statement's dates that the bank does not show are **Not in statement**, and the statement's own running balance is checked for breaks.
 A flagged row that the statement confirms becomes Verified.
+
+**PDF statements.** The PDF that net banking e-mails (locked with a password or not) can be uploaded directly. Stashr opens the password (RC4 and
+AES locks, the ones banks use), reads the text of every page with its position, finds the table header (a line with Date, Balance and
+Withdrawals/Deposits) and puts each piece of text into its column; a narration that wraps onto several lines is joined, repeated headers and
+page numbers are dropped. Because reading text out of a PDF can go wrong for an unusual layout, the statement's own **running balance is
+checked first**: if the lines do not add up (more than 2% do not follow from the line above) the PDF is refused with that reason, and nothing is
+changed. A scanned PDF (a picture, no text) cannot be read, and a PDF whose layout is very unusual may be refused: download the Excel or CSV
+instead. The password is used once in memory and never stored.
 
 **Locked statements.** An Excel file protected with a password (File > Info > Protect Workbook, or one the bank sends locked) is opened by
 asking for its password on the Money page: pick the file, type the password, *Unlock and check*. A wrong password says so and lets you try

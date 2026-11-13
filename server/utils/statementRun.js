@@ -10,14 +10,22 @@ const ex = require("./expenses");
  * truth), write the changes in small batches and add what the messages missed. `progress({ stage, text, pct })` says how far it is.
  * Throws an Error with .status 400 and a plain message when the file is not usable.
  */
-async function processStatement({ s, st, copy, bytes, rules = [], cutoff = "", month = "", saveSummary = async () => {}, saveLines = async () => {}, progress = () => {} }) {
+async function processStatement({ s, st, copy, bytes, table: given = null, source = "", rules = [], cutoff = "", month = "", saveSummary = async () => {}, saveLines = async () => {}, progress = () => {} }) {
     const bad = (message) => Object.assign(new Error(message), { status: 400 });
     progress({ stage: "reading", text: "Reading the statement…", pct: 8 });
-    let table;
-    try { table = bytes.subarray(0, 2).toString() === "PK" ? ex.parseXlsx(bytes) : ex.parseCsv(bytes.toString("utf8")); }
-    catch (e) { throw bad(e.message || "Could not read that file."); }
+    let table = given;                                        // a PDF is read to a table before this (it needs the password)
+    if (!table) {
+        try { table = bytes.subarray(0, 2).toString() === "PK" ? ex.parseXlsx(bytes) : ex.parseCsv(bytes.toString("utf8")); }
+        catch (e) { throw bad(e.message || "Could not read that file."); }
+    }
     let stmt;
     try { stmt = ex.statementRows(table); } catch (e) { throw bad(e.message); }
+    if (source === "pdf") {
+        // Reading text out of a PDF can go wrong where a bank lays its table out in an unusual way. A real statement's running balance always
+        // follows its amounts, so rows that do not add up mean the PDF was misread: refuse rather than "correct" entries from wrong numbers.
+        const breaks = chainBreaks(stmt);
+        if (breaks > Math.max(1, Math.floor(stmt.length * 0.02))) throw bad(`This PDF could not be read reliably (${breaks} of its ${stmt.length} lines do not add up to the running balance). Download the statement as Excel or CSV from net banking instead.`);
+    }
     // the month the owner chose to match: only that month's lines are used (and saved), so only that month's entries are checked and corrected
     if (month) {
         const all = stmt;
@@ -57,6 +65,7 @@ async function processStatement({ s, st, copy, bytes, rules = [], cutoff = "", m
     if (copy) copy.append(saved.stored);
 
     progress({ stage: "finishing", text: "Finishing…", pct: 95 });
+    report.source = source || "";
     report.skipped = { beforeStart: limited.beforeStart, tooOld: limited.tooOld, startDate: s.startDate || "", cutoff: st.keepsOld ? "" : cutoff };
         const summary = { at: new Date().toISOString(), skipped: report.skipped, from: report.from, to: report.to, lines: report.lines, verified: report.verified, mismatched: report.mismatched, added: report.added, renamed: report.renamed, notInStatement: report.notInStatement, months: report.months, allMonthsMatch: report.allMonthsMatch, closingBalance: report.closingBalance, balanceBreakCount: report.balanceBreakCount };
     await saveSummary(summary);
@@ -65,4 +74,15 @@ async function processStatement({ s, st, copy, bytes, rules = [], cutoff = "", m
     return { report };
 }
 
-module.exports = { processStatement };
+/** How many lines of a statement do not follow from the line above them (previous balance, plus the credit or minus the debit). */
+function chainBreaks(stmt) {
+    let n = 0;
+    for (let i = 1; i < stmt.length; i++) {
+        const a = stmt[i - 1], b = stmt[i];
+        if (a.balance == null || b.balance == null) continue;
+        if (Math.abs(Math.round((a.balance + (b.type === "Credit" ? b.amount : -b.amount)) * 100) / 100 - b.balance) >= 0.01) n++;
+    }
+    return n;
+}
+
+module.exports = { processStatement, chainBreaks };

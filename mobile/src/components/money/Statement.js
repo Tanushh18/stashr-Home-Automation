@@ -8,7 +8,7 @@ import { inr, dayLabel, monthLabel } from "../../lib/moneyFmt";
 /** The last few months for "Month to match", newest first: ["2026-11", "2026-10", ...]. */
 const recentMonths = (n = 4, now = new Date()) => Array.from({ length: n }, (_, i) => { const d = new Date(now.getFullYear(), now.getMonth() - i, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`; });
 
-/** Check the sheet against a bank statement (Excel or CSV downloaded from net banking). A locked Excel file asks for its password. */
+/** Check the sheet against a bank statement (PDF, Excel or CSV from net banking). A locked PDF or Excel file asks for its password. */
 export default function Statement({ settings, onChecked }) {
   const [busy, setBusy] = useState(false);
   const [report, setReport] = useState(null);
@@ -35,11 +35,11 @@ export default function Statement({ settings, onChecked }) {
   const pick = async () => {
     setError(""); setReport(null); setLocked(null);
     try {
-      const res = await DocumentPicker.getDocumentAsync({ type: ["text/csv", "text/comma-separated-values", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-excel", "*/*"], copyToCacheDirectory: true });
+      const res = await DocumentPicker.getDocumentAsync({ type: ["application/pdf", "text/csv", "text/comma-separated-values", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/vnd.ms-excel", "*/*"], copyToCacheDirectory: true });
       if (res.canceled || !res.assets || !res.assets[0]) return;
       const a = res.assets[0];
       const name = a.name || "statement";
-      if (!/\.(csv|xlsx)$/i.test(name)) { setError("Choose the statement as an Excel (.xlsx) or CSV file. In net banking, download it as Excel or CSV, not PDF."); return; }
+      if (!/\.(csv|xlsx|pdf)$/i.test(name)) { setError("Choose the statement as a PDF, an Excel (.xlsx) or a CSV file."); return; }
       const { File } = require("expo-file-system");
       const bytes = new Uint8Array(await new File(a.uri).arrayBuffer());
       await send(name, bytes, "");
@@ -48,7 +48,7 @@ export default function Statement({ settings, onChecked }) {
   const r = report;
   return (
     <>
-      <Box title="Check against a bank statement" subtitle="Send your Federal Bank statement (Excel or CSV) any time, in the middle of the month or at the end. Every entry is matched with it. A password-protected Excel file asks for its password.">
+      <Box title="Check against a bank statement" subtitle="Send your Federal Bank statement (PDF, Excel or CSV) any time, in the middle of the month or at the end. Every entry is matched with it. A password-protected PDF or Excel file asks for its password.">
         <Dim>Month to match</Dim>
         <Pick options={[["", "Whole statement"], ...months.map((m) => [m, monthLabel(m)])]} value={month} onChange={setMonth} />
         <Btn kind="primary" label={busy ? "Checking…" : "Choose statement file"} onPress={pick} loading={busy} disabled={Boolean(locked)} />
