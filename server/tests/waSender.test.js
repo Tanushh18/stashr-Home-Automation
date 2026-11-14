@@ -19,6 +19,7 @@ const WaSheet = require("../models/waSheet");
 const WaRecipient = require("../models/waRecipient");
 const WaSend = require("../models/waSend");
 const sender = require("../utils/waSender");
+const rhythm = require("../utils/waRhythm");
 
 let mongo;
 beforeAll(async () => { mongo = await MongoMemoryServer.create(); await mongoose.connect(mongo.getUri()); });
@@ -52,7 +53,8 @@ async function setup({ people = 3, report = false } = {}) {
     const recipients = Array.from({ length: people }, (_, i) => ({ name: `Person ${i + 1}`, phone: `98100000${String(i + 1).padStart(2, "0")}` }));
     await request(app).post(`/wa/sheets/${sheet.id}/recipients`).set(auth).send({ recipients });
     await request(app).patch(`/wa/sheets/${sheet.id}`).set(auth).send({ enabled: true });
-    await request(app).put("/wa/settings").set(auth).send({ enabled: true, dailyLimit: 2, reportEnabled: report });
+    // No rest days unless a test asks for them: a random rest day must not land on the day the tests run.
+    await request(app).put("/wa/settings").set(auth).send({ enabled: true, dailyLimit: 2, reportEnabled: report, restDaysPerWeek: 0 });
     return { auth, hub, sheet, o: await owner() };
 }
 
@@ -63,12 +65,17 @@ describe("pure rules", () => {
         expect(sender.normalizePhone("09810000001")).toBe("919810000001");
         expect(sender.normalizePhone("123")).toBe(null);
     });
-    test("the gap stays between 6 and 12 minutes and follows the daily limit", () => {
+    test("the gap is different every time: mostly between 6 and 12 minutes, with a longer break now and then", () => {
         const s = { from: "10:00", to: "19:00", gapMin: 6, gapMax: 12, dailyLimit: 13 };
-        for (let i = 0; i < 200; i++) { const g = sender.nextGapMinutes(s); expect(g >= 6 && g <= 12).toBe(true); }
-        // 540 minutes / 60 a day is 9 minutes a message: the gap is centred there.
-        const mid = sender.nextGapMinutes({ ...s, dailyLimit: 60 }, () => 0.5);
-        expect(Math.round(mid)).toBe(9);
+        const gaps = Array.from({ length: 4000 }, () => sender.nextGapMinutes(s));
+        expect(gaps.every((g) => g >= 6 && g <= 12 * 4)).toBe(true);
+        const breaks = gaps.filter((g) => g > 12).length / gaps.length;
+        expect(breaks > 0.05 && breaks < 0.2).toBe(true);
+        expect(new Set(gaps.map((g) => g.toFixed(1))).size > 150).toBe(true);           // not the same 12 minutes every time
+        expect(sender.nextGapMinutes(s, () => 0)).toBe(6);
+        // 540 minutes / 60 a day is 9 minutes a message: most gaps lean there.
+        const many = Array.from({ length: 4000 }, () => sender.nextGapMinutes({ ...s, dailyLimit: 60 })).filter((g) => g <= 12).sort((a, b) => a - b);
+        expect(Math.abs(many[Math.floor(many.length / 2)] - 9) < 0.8).toBe(true);
     });
     test("the window", () => {
         const s = { from: "10:00", to: "19:00" };
@@ -76,6 +83,78 @@ describe("pure rules", () => {
         expect(sender.inWindow(s, 10 * 60)).toBe(true);
         expect(sender.inWindow(s, 18 * 60 + 59)).toBe(true);
         expect(sender.inWindow(s, 19 * 60)).toBe(false);
+    });
+});
+
+describe("the rhythm (pure rules)", () => {
+    const wd = (days) => days.map(rhythm.weekdayOf).join();
+    test("each week gets two random rest days that never repeat last week's, a weekday never rests three weeks running, and the runs stay short", () => {
+        let week = "2026-11-16";
+        const hist = [], flags = [], pairs = new Set();
+        for (let i = 0; i < 600; i++) {
+            const days = rhythm.planWeek({ week, perWeek: 2, history: hist });
+            expect(days.length).toBe(2);
+            expect(days.every((d) => rhythm.weekOf(d) === week)).toBe(true);
+            if (hist.length) expect(wd(days) === wd(hist[hist.length - 1].days)).toBe(false);
+            if (hist.length >= 2) for (const d of days) expect(hist.slice(-2).every((h) => h.days.some((x) => rhythm.weekdayOf(x) === rhythm.weekdayOf(d)))).toBe(false);
+            rhythm.daysOfWeek(week).forEach((d) => flags.push(days.includes(d)));
+            pairs.add(wd(days));
+            hist.push({ week, days });
+            week = rhythm.addDays(week, 7);
+        }
+        expect(rhythm.longestRun(flags, false) <= 7).toBe(true);                   // never more than 7 sending days in a row
+        expect(rhythm.longestRun(flags, true) <= 3).toBe(true);                    // never more than 3 rest days in a row
+        expect(pairs.size).toBe(21);                                               // every pair of weekdays turns up
+    });
+    test("a week already under way gets its fair share, days that are over are kept, and the dates line up", () => {
+        expect(rhythm.shareOf(2, 7, () => 0.99)).toBe(2);
+        expect(rhythm.shareOf(2, 1, () => 0.1)).toBe(1);                           // 2/7 = 0.29: rests when the draw is under it
+        expect(rhythm.shareOf(2, 1, () => 0.5)).toBe(0);
+        expect(rhythm.weekOf("2026-11-14")).toBe("2026-11-09");                    // a Saturday belongs to the week of Monday 9 Nov
+        expect(rhythm.dayLabel("2026-11-17")).toBe("Tue 17 Nov");
+        const days = rhythm.planWeek({ week: "2026-11-16", perWeek: 2, count: 2, fixed: ["2026-11-16"], free: ["2026-11-19", "2026-11-20", "2026-11-21", "2026-11-22"] });
+        expect(days[0]).toBe("2026-11-16");
+        expect(days.length).toBe(2);
+        expect(["2026-11-19", "2026-11-20", "2026-11-21", "2026-11-22"]).toContain(days[1]);
+        expect(rhythm.planWeek({ week: "2026-11-16", perWeek: 0, count: 0 })).toEqual([]);
+        expect(rhythm.nextSendingDay("2026-11-16", ["2026-11-17", "2026-11-18"])).toBe("2026-11-19");
+    });
+    test("each day picks its own number of messages, a start after 10:00 and a stop before 18:00, a lunch break and a few rounds", () => {
+        const s = { from: "10:00", to: "18:00", dailyLimit: 13, gapMin: 6, gapMax: 12 };
+        const plans = Array.from({ length: 400 }, () => rhythm.dayPlanFor(s, "2026-11-16"));
+        expect(plans.every((p) => p.target >= 10 && p.target <= 13)).toBe(true);
+        expect(plans.every((p) => p.start >= 600 && p.start <= 690 && p.end <= 1080 && p.end >= 1020)).toBe(true);   // 10:00-11:30, 17:00-18:00
+        expect(new Set(plans.map((p) => p.start)).size > 40).toBe(true);
+        expect(new Set(plans.map((p) => p.target)).size).toBe(4);
+        for (const p of plans) {
+            if (p.lunch) expect(p.lunch.start >= 780 && p.lunch.start <= 840 && p.lunch.end - p.lunch.start >= 30 && p.lunch.end - p.lunch.start <= 75).toBe(true);
+            expect(p.rounds.reduce((a, r) => a + r.count, 0)).toBe(p.target);
+            expect(p.rounds.length >= 2 && p.rounds.length <= 4).toBe(true);                     // more than 6 messages: never one burst
+            expect(p.rounds[0].at).toBe(p.start);
+            expect(p.rounds.every((r, i) => r.count >= 1 && (i === 0 || r.at > p.rounds[i - 1].at) && r.at < p.end && !rhythm.atLunch(p, r.at))).toBe(true);
+        }
+        expect(plans.filter((p) => p.lunch).length > 350).toBe(true);
+        expect(rhythm.dayPlanFor({ ...s, dailyLimit: 2 }, "2026-11-16", () => 0)).toMatchObject({ target: 2, start: 600, end: 1080, rounds: [{ at: 600, count: 2 }], basis: rhythm.basisOf({ ...s, dailyLimit: 2 }) });
+        // What a plan allows by a given minute, and the next round.
+        const p = { target: 5, rounds: [{ at: 600, count: 2 }, { at: 800, count: 3 }], lunch: { start: 780, end: 820 } };
+        expect([rhythm.allowedBy(p, 599), rhythm.allowedBy(p, 600), rhythm.allowedBy(p, 799), rhythm.allowedBy(p, 800)]).toEqual([0, 2, 2, 5]);
+        expect(rhythm.nextRound(p, 700)).toEqual({ at: 800, count: 3 });
+        expect([rhythm.atLunch(p, 779), rhythm.atLunch(p, 780), rhythm.atLunch(p, 820)]).toEqual([false, true, false]);
+        expect(rhythm.allowedBy({ target: 4 }, 0)).toBe(4);                                        // an older plan without rounds
+        expect(rhythm.splitCount(13, 3).reduce((a, b) => a + b, 0)).toBe(13);
+        expect(rhythm.splitCount(3, 3, () => 0)).toEqual([1, 1, 1]);
+        expect(rhythm.secureRandom() < 1).toBe(true);
+    });
+    test("the tablet waits a different 3 to 12 seconds on the chat, and {a|b} picks one choice for each message", () => {
+        const pauses = Array.from({ length: 500 }, (_, i) => rhythm.sendPauseMs("x".repeat(i)));
+        expect(pauses.every((ms) => ms >= 3000 && ms <= 12000)).toBe(true);
+        expect(new Set(pauses).size > 400).toBe(true);
+        expect(rhythm.spin("{Hi|Hello|Namaste} {name}, {new|fresh} plots{!|.}", () => 0)).toBe("Hi {name}, new plots!");
+        expect(rhythm.spin("{Hi|Hello|Namaste} {name}", () => 0.99)).toBe("Namaste {name}");
+        expect(rhythm.spin("{Hi {name}|Hey}{| 🙂}", () => 0.6)).toBe("Hey 🙂");                    // groups inside groups, empty choices
+        expect(rhythm.spin("No choices, {name}: {just braces}", () => 0)).toBe("No choices, {name}: {just braces}");
+        const seen = new Set(Array.from({ length: 200 }, () => rhythm.spin("{a|b|c}{1|2}")));
+        expect(seen.size).toBe(6);
     });
 });
 
@@ -193,7 +272,7 @@ describe("the sender", () => {
 
     test("a message the tablet never picked up goes back in line", async () => {
         const { o } = await setup({ people: 1 });
-        await sender.tickOwner(o, NOON, () => 0);                            // queued, the tablet has not reported since
+        await sender.tickOwner(o, NOON, () => 0.5);                          // queued (the next gap is about 10 minutes), the tablet has not reported since
         await sender.tickOwner(o, NOON + 7 * 60000, () => 0);
         expect((await WaSend.findOne({})).status).toBe("failed");
         expect((await WaRecipient.findOne({})).status).toBe("pending");
@@ -253,6 +332,156 @@ describe("the sender", () => {
         await hubReport(hub.token, [{ id: cmd.id, ok: true, message: "Sent" }]);
         await seenAt(night + 31000);
         expect((await sender.tickOwner(o, night + 31000, () => 0)).did).toBe("queued");
+    });
+});
+
+describe("rest days and the day's plan", () => {
+    const thisWeek = rhythm.weekOf(DAY), nextWeek = rhythm.addDays(thisWeek, 7);
+    const restOn = (days) => WaSettings.updateOne({}, { $set: { restDaysPerWeek: 2, restWeeks: [{ week: thisWeek, days: days.filter((d) => d < nextWeek), perWeek: 2, count: 2 }, { week: nextWeek, days: days.filter((d) => d >= nextWeek), perWeek: 2, count: 2 }] } });
+
+    test("on a rest day nothing goes out, the website says so, and test mode still sends", async () => {
+        const { auth, o } = await setup();
+        await restOn([DAY, rhythm.addDays(DAY, 1)]);
+        const r = await sender.tickOwner(o, NOON, () => 0);
+        expect(r.did).toBe("wait");
+        expect(r.status).toMatch(/Rest day today/);
+        expect(r.status).toMatch(new RegExp(`Sending again on ${rhythm.dayLabel(rhythm.addDays(DAY, 2))}`));
+        expect(await WaSend.countDocuments({})).toBe(0);
+        const ov = (await request(app).get("/wa/overview").set(auth)).body;
+        expect(ov.rhythm.rest).toBe(true);
+        expect(ov.rhythm.perWeek).toBe(2);
+        expect(ov.rhythm.nextSendDay).toBe(rhythm.addDays(DAY, 2));
+        const shown = ov.rhythm.weeks.flatMap((w) => w.days);
+        expect(shown.length).toBe(14);
+        expect(shown.filter((d) => d.rest).map((d) => d.date)).toEqual([DAY, rhythm.addDays(DAY, 1)]);
+        expect(shown.find((d) => d.today).date).toBe(DAY);
+        expect(ov.next.reason).toMatch(/rest day/);
+        expect(ov.settings.restWeeks).toBe(undefined);
+        await request(app).put("/wa/settings").set(auth).send({ testMode: true });
+        expect((await sender.tickOwner(o, NOON, () => 0)).did).toBe("queued");
+    });
+
+    test("the rest days are picked once and kept: this week from today on, next week in full", async () => {
+        const { auth, o } = await setup();
+        await WaSettings.updateOne({}, { $set: { restDaysPerWeek: 2, restWeeks: [] } });
+        await sender.tickOwner(o, NOON);
+        const first = (await WaSettings.findOne({}).lean()).restWeeks;
+        expect(first.map((w) => w.week)).toEqual([thisWeek, nextWeek]);
+        expect(first[0].days.every((d) => d >= DAY && d < nextWeek)).toBe(true);
+        expect(first[1].days.length).toBe(2);
+        await sender.tickOwner(o, NOON + 60000);
+        await request(app).get("/wa/overview").set(auth);
+        expect((await WaSettings.findOne({}).lean()).restWeeks).toEqual(first);
+    });
+
+    test("'Pick other days' keeps the rest days that are over, and the number of rest days a week can be changed", async () => {
+        const { auth } = await setup();
+        await restOn([thisWeek, rhythm.addDays(nextWeek, 2), rhythm.addDays(nextWeek, 4)]);
+        const r = await request(app).post("/wa/rest-days/shuffle").set(auth);
+        expect(r.status).toBe(200);
+        const weeks = (await WaSettings.findOne({}).lean()).restWeeks;
+        const cur = weeks.find((w) => w.week === thisWeek), next = weeks.find((w) => w.week === nextWeek);
+        if (thisWeek < DAY) expect(cur.days).toContain(thisWeek);                // Monday is over: it stays a rest day
+        expect(cur.days.length <= 2).toBe(true);
+        expect(next.days.length).toBe(2);
+        expect(r.body.rhythm.weeks.length).toBe(2);
+        await request(app).put("/wa/settings").set(auth).send({ restDaysPerWeek: 3 });
+        expect((await WaSettings.findOne({}).lean()).restWeeks.find((w) => w.week === nextWeek).days.length).toBe(3);
+        await request(app).put("/wa/settings").set(auth).send({ restDaysPerWeek: 0 });
+        const ov = (await request(app).get("/wa/overview").set(auth)).body;
+        expect(ov.rhythm.weeks.flatMap((w) => w.days).some((d) => d.rest)).toBe(false);
+        expect((await request(app).put("/wa/settings").set(auth).send({ restDaysPerWeek: 9 })).body.restDaysPerWeek).toBe(3);
+    });
+
+    test("sending starts at today's own start time and stops at today's own number of messages", async () => {
+        const { auth, hub, o } = await setup();
+        const basis = rhythm.basisOf(await WaSettings.findOne({}).lean());
+        await WaSettings.updateOne({}, { $set: { dayPlan: { day: DAY, target: 1, start: 12 * 60 + 30, end: 17 * 60 + 20, basis } } });
+        const early = await sender.tickOwner(o, NOON, () => 0);
+        expect(early.status).toMatch(/Today starts at 12:30/);
+        expect((await request(app).get("/wa/overview").set(auth)).body.rhythm.today).toMatchObject({ target: 1, limit: 2, start: "12:30", end: "17:20" });
+        await seenAt(NOON + 31 * 60000);
+        expect((await sender.tickOwner(o, NOON + 31 * 60000, () => 0)).did).toBe("queued");
+        const cmd = (await hubReport(hub.token)).body.commands.find((c) => c.type === "send_wa");
+        await hubReport(hub.token, [{ id: cmd.id, ok: true, message: "Sent" }]);
+        const done = await sender.tickOwner(o, NOON + 60 * 60000, () => 0);
+        expect(done.status).toMatch(/Done for today \(1 of 1: today's random number, under the limit of 2\)/);
+        // After today's stop time nothing more goes, even under the limit.
+        await WaSettings.updateOne({}, { $set: { "dayPlan.target": 2 } });
+        const late = Date.parse(`${DAY}T11:55:00Z`);                         // 17:25 India time
+        await seenAt(late);
+        expect((await sender.tickOwner(o, late, () => 0)).status).toMatch(/Stopped for today at 17:20 \(a random time before 18:00\)/);
+        // A new limit makes a new plan for the day.
+        await request(app).put("/wa/settings").set(auth).send({ dailyLimit: 5 });
+        await sender.tickOwner(o, late, () => 0);
+        expect((await WaSettings.findOne({}).lean()).dayPlan.basis).toBe(rhythm.basisOf(await WaSettings.findOne({}).lean()));
+        expect((await WaSettings.findOne({}).lean()).dayPlan.basis).toMatch(/ 5 /);
+    });
+
+    test("messages go out in rounds with breaks between them and nothing during lunch", async () => {
+        const { auth, hub, o } = await setup({ people: 3 });
+        const basis = rhythm.basisOf(await WaSettings.findOne({}).lean());
+        const at = (h, m) => Date.parse(`${DAY}T00:00:00Z`) + ((h * 60 + m) - 330) * 60000;          // India time on the test day
+        await WaSettings.updateOne({}, { $set: { dayPlan: { day: DAY, target: 2, start: 11 * 60, end: 17 * 60, basis, lunch: { start: 13 * 60, end: 13 * 60 + 45 }, rounds: [{ at: 11 * 60, count: 1 }, { at: 15 * 60, count: 1 }] } } });
+        expect((await sender.tickOwner(o, NOON, () => 0)).did).toBe("queued");
+        const cmd = (await hubReport(hub.token)).body.commands.find((c) => c.type === "send_wa");
+        expect(cmd.args.pauseMs >= 3000 && cmd.args.pauseMs <= 12000).toBe(true);                    // the tablet looks at the chat before Send
+        await hubReport(hub.token, [{ id: cmd.id, ok: true, message: "Sent" }]);
+        expect((await sender.tickOwner(o, NOON + 30 * 60000, () => 0)).status).toMatch(/Break between rounds: the next message goes at 15:00/);
+        const ov = (await request(app).get("/wa/overview").set(auth)).body;
+        expect(ov.rhythm.today.rounds).toEqual([{ at: "11:00", count: 1 }, { at: "15:00", count: 1 }]);
+        expect(ov.rhythm.today.lunch).toEqual({ start: "13:00", end: "13:45" });
+        await seenAt(at(13, 10));
+        expect((await sender.tickOwner(o, at(13, 10), () => 0)).status).toMatch(/Lunch break until 13:45/);
+        await seenAt(at(14, 30));
+        expect((await sender.tickOwner(o, at(14, 30), () => 0)).did).toBe("wait");
+        await seenAt(at(15, 1));
+        expect((await sender.tickOwner(o, at(15, 1), () => 0)).did).toBe("queued");
+        // The pure plan for the website says the same.
+        const plan = sender.schedulePlan({ settings: { enabled: true, from: "10:00", to: "18:00", gapMin: 6, gapMax: 12, dailyLimit: 2, nextDueAt: null }, local: { minutes: 12 * 60 + 30, date: DAY }, now: 1e12, tablet: { _id: 1 }, sentToday: 1, waiting: false,
+            sheets: [{ _id: "a", enabled: true, texts: ["x"], dailyLimit: 0 }], today: {}, pendingBy: { a: 2 }, day: { rest: false, nextSendDay: null, plan: { target: 2, start: 660, end: 1020, lunch: { start: 780, end: 825 }, rounds: [{ at: 660, count: 1 }, { at: 900, count: 1 }] } } });
+        expect(plan.next.reason).toMatch(/next round \(1\) starts at 15:00/);
+        expect(plan.next.at).toBe(1e12 + 150 * 60000);
+    });
+
+    test("{a|b} choices in a sheet's message are picked for each person", async () => {
+        const { auth, sheet, o } = await setup();
+        await request(app).patch(`/wa/sheets/${sheet.id}`).set(auth).send({ texts: ["{Hi|Hello} {name}, {new|fresh} plots{!|}"] });
+        await sender.tickOwner(o, NOON, () => 0);
+        expect((await WaSend.findOne({})).text).toBe("Hi Person, new plots!");
+    });
+
+    test("an older account on the 10:00 to 19:00 default now stops before 18:00, once; a later choice stays", async () => {
+        const auth = await signUp();
+        const o = await owner();
+        await WaSettings.collection.insertOne({ owner: o, from: "10:00", to: "19:00", enabled: false, dailyLimit: 13, gapMin: 6, gapMax: 12 });
+        expect((await sender.settingsOf(o)).to).toBe("18:00");
+        expect((await WaSettings.findOne({}).lean()).to).toBe("18:00");
+        await request(app).put("/wa/settings").set(auth).send({ to: "19:00" });
+        expect((await sender.settingsOf(o)).to).toBe("19:00");
+        await WaSettings.deleteMany({});
+        await WaSettings.collection.insertOne({ owner: o, from: "09:00", to: "19:00" });
+        expect((await sender.settingsOf(o)).to).toBe("19:00");                                    // someone's own window is left alone
+        await WaSettings.deleteMany({});
+        expect((await sender.settingsOf(o)).to).toBe("18:00");                                    // a new account starts with 10:00 to 18:00
+    });
+
+    test("the next person is picked at random among the next ones in line, not in list order", async () => {
+        const { o } = await setup({ people: 5 });
+        await sender.tickOwner(o, NOON, () => 0.99);
+        expect((await WaSend.findOne({})).phone).toBe("919810000005");
+    });
+
+    test("the night's report says when tomorrow is a rest day", async () => {
+        const { hub, o } = await setup({ people: 2, report: true });
+        await restOn([rhythm.addDays(DAY, 1), rhythm.addDays(DAY, 3)]);
+        for (const t of [NOON, NOON + 13 * 60000]) {
+            await sender.tickOwner(o, t, () => 0);
+            const cmd = (await hubReport(hub.token)).body.commands.find((c) => c.type === "send_wa" && c.status !== "done");
+            await hubReport(hub.token, [{ id: cmd.id, ok: true, message: "Sent" }]);
+        }
+        expect((await sender.tickOwner(o, NOON + 30 * 60000, () => 0)).did).toBe("report");
+        expect((await WaSend.findOne({ kind: "report" })).text).toMatch(/Tomorrow is a rest day/);
     });
 });
 
