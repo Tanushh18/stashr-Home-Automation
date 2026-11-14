@@ -70,3 +70,7 @@
 .wa-person em { font-style: normal; opacity: .7; margin-left: 6px; }
 .wa-stage { font-size: .78rem; padding: 2px 8px; border-radius: 999px; background: rgba(31,143,106,.18); white-space: nowrap; }
 .wa-stage.is-none { background: rgba(127,127,127,.18); }
+.wa-stats { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 6px 0; font-size: .9rem; }
+.wa-stats b { font-size: 1.1rem; margin-right: 3px; }
+.wa-table-wrap { overflow-x: auto; }
+.wa-h2 { margin: 18px 0 4px; font-size: 1.1rem; }

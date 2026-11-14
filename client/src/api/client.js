@@ -593,6 +593,13 @@ export const deleteHouseModel = () => instance.delete("/home/map/model").then((r
 /* WhatsApp sender: sheets, limits, on/off and test messages sent from the tablet. */
 export const getWaOverview = () => instance.get("/wa/overview").then((r) => r.data);
 export const saveWaSettings = (body) => instance.put("/wa/settings", body).then((r) => r.data);
+/* SMS sender: Shine One's SMS to the We Three sheets, sent by the SMS Service phones and managed here. */
+export const getSmsOverview = () => instance.get("/sms/overview", { timeout: 60000 }).then((r) => r.data);
+export const saveSmsSettings = (body) => instance.put("/sms/settings", body).then((r) => r.data);
+export const saveSmsSheet = (body) => instance.put("/sms/sheets", body).then((r) => r.data);
+export const saveSmsDevice = (id, body) => instance.patch(`/sms/devices/${encodeURIComponent(id)}`, body).then((r) => r.data);
+export const getSmsLog = (limit = 50) => instance.get("/sms/log", { params: { limit } }).then((r) => r.data);
+export const sendSmsTest = (phoneNumber, message) => instance.post("/sms/test", { phoneNumber, message }).then((r) => r.data);
 export const sendWaSheetToWeThree = (id) => instance.post(`/wa/sheets/${id}/we-three`, {}, { timeout: 120000 }).then((r) => r.data);
 export const createWaSheet = (body) => instance.post("/wa/sheets", body).then((r) => r.data);
 export const saveWaSheet = (id, body) => instance.patch(`/wa/sheets/${id}`, body).then((r) => r.data);

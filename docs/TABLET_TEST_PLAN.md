@@ -165,6 +165,13 @@ Adb access gives only a terminal on your computer. The app still talks to the St
 - [ ] "Delete here and in We Three" asks you to type the sheet name; the sheet disappears at once and its leads leave We Three within a few minutes (the Stashr server removes them a few at a time). A plain "Delete sheet" leaves We Three alone.
 - [ ] Unplug the tablet at more than 20% battery: after 10 minutes the WhatsApp sender page still shows it online (Stashr Hub 1.9.4, battery exemption allowed).
 
+## 7o. SMS sender (Shine One SMS, managed in Stashr)
+- [ ] Needs We Three with the "console with an admin login" change deployed, and the We Three link on the WhatsApp sender page (an admin account).
+- [ ] Stashr → SMS sender loads: On/Pause, sent today, phones online, limits (safe defaults / my numbers), lunch and night times, days.
+- [ ] A sheet: copy messages from a WhatsApp sheet, Save messages, switch Auto-send on (optionally only new leads); the phone sends at lunch/night with one of the messages picked at random; counts go up; Latest messages shows them.
+- [ ] Test SMS to your own number arrives at once. A phone set to GGN Home only does not send Shine One messages.
+- [ ] ggnHome SMS console → Shine One Estate tab only points to Stashr; its Phones and Log tabs still work.
+
 ## 8. Updates (OTA)
 - [ ] Push a change under `hub-app/` to `main`; the GitHub Release is created and is **not** "latest".
 - [ ] The app (or "check_update") finds it, verifies it and Android asks for one tap to install.
