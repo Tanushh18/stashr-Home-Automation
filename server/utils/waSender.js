@@ -48,7 +48,8 @@ function inWindow(s, minutes) {
  * `plan` is today's plan (its own window and number of messages); `random` is injectable so it can be tested.
  */
 function nextGapMinutes(s, random = rhythm.secureRandom, plan = null) {
-    const win = plan ? Math.max(0, plan.end - plan.start) : windowMinutes(s);
+    // A plan with rounds spreads the day itself, so the gaps inside a round centre on the middle of the gap range.
+    const win = plan ? (Array.isArray(plan.rounds) && plan.rounds.length ? 0 : Math.max(0, plan.end - plan.start)) : windowMinutes(s);
     return rhythm.nextGap({ gapMin: s.gapMin, gapMax: s.gapMax, windowMinutes: win, target: plan ? plan.target : s.dailyLimit }, random);
 }
 
@@ -149,6 +150,12 @@ const whenDay = (today, date) => (rhythm.daysBetween(today, date) === 1 ? "tomor
 
 async function settingsOf(owner) {
     const found = await WaSettings.findOne({ owner }).lean();
+    if (found && found.windowV2 === undefined) {
+        // Sending now stops before 18:00: an account still on the old 10:00 to 19:00 default moves to 18:00, once (a later choice stays).
+        const set = { windowV2: true, ...(found.from === "10:00" && found.to === "19:00" ? { to: "18:00" } : {}) };
+        await WaSettings.updateOne({ owner, windowV2: { $exists: false } }, { $set: set });
+        return { ...found, ...set };
+    }
     if (found) return found;
     try { return (await WaSettings.create({ owner })).toObject(); }
     catch (e) { return WaSettings.findOne({ owner }).lean(); }
@@ -249,11 +256,11 @@ function imagesOf(sheet) {
     return list;
 }
 
-/** The text for one person: one of the sheet's messages at random, {name} filled in. */
+/** The text for one person: one of the sheet's messages at random, each {Hi|Hello} choice picked at random, {name} filled in. */
 function textFor(sheet, recipient, random = rhythm.secureRandom) {
     const list = (sheet.texts || []).filter((t) => String(t || "").trim());
     if (!list.length) return "";
-    const raw = list[Math.min(list.length - 1, Math.floor(random() * list.length))];
+    const raw = rhythm.spin(list[Math.min(list.length - 1, Math.floor(random() * list.length))], random);
     const first = String(recipient.name || "").trim().split(/\s+/)[0] || "";
     return raw.replace(/\{name\}/gi, first).replace(/[ \t]+([,.!?])/g, "$1").replace(/[ \t]{2,}/g, " ").replace(/ +\n/g, "\n").trim().slice(0, 900);
 }
@@ -280,7 +287,7 @@ async function dispatch({ owner, tablet, sheet, recipient, phone, name, text, ki
     const imageIndex = pictures.length ? Math.min(pictures.length - 1, Math.floor(random() * pictures.length)) : 0;
     const send = await WaSend.create({ owner, sheet: sheet && sheet._id, recipient: recipient && recipient._id, phone, name: name || "", text, kind, day, device: tablet._id, queuedAt: new Date(now), imageIndex });
     await addSteps(send._id, [steps.step("picked", "ok", `${name || phone}${pictures.length ? `, picture ${imageIndex + 1} of ${pictures.length}` : ", no picture"}`)], now);
-    const entry = await automation.queue(tablet, "send_wa", { phone, text, sendId: String(send._id), image: pictures.length > 0 });
+    const entry = await automation.queue(tablet, "send_wa", { phone, text, sendId: String(send._id), image: pictures.length > 0, pauseMs: rhythm.sendPauseMs(text, random) });
     if (!entry) {
         await addSteps(send._id, [steps.step("queued", "failed", "The tablet's queue is full.")], now, "server");
         await WaSend.updateOne({ _id: send._id }, { $set: { status: "failed", result: "The tablet queue is full", doneAt: new Date(now) } });
@@ -317,6 +324,9 @@ async function tickOwner(owner, now = Date.now(), random = rhythm.secureRandom) 
         if (local.minutes >= p.end) return note(`Stopped for today at ${rhythm.hhmm(p.end)} (a random time before ${s.to}). ${again}`);
         const sent = await WaSend.countDocuments({ owner, day: local.date, status: { $in: ["queued", "sent"] }, kind: "scheduled" });
         if (sent >= p.target) return note(`Done for today (${sent} of ${p.target}${p.target < s.dailyLimit ? `: today's random number, under the limit of ${s.dailyLimit}` : ""})`);
+        if (rhythm.atLunch(p, local.minutes)) return note(`Lunch break until ${rhythm.hhmm(p.lunch.end)}`);
+        const round = sent >= rhythm.allowedBy(p, local.minutes) ? rhythm.nextRound(p, local.minutes) : null;
+        if (round) return note(`Break between rounds: the next ${round.count === 1 ? "message goes" : `${round.count} messages start`} at ${rhythm.hhmm(round.at)}`);
         if (s.nextDueAt && new Date(s.nextDueAt).getTime() > now) return note(`Next message at ${new Date(s.nextDueAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: s.timezone })}`);
     }
     const tablet = await tabletOf(owner, now);
@@ -360,6 +370,12 @@ function schedulePlan({ settings: s, local, now, tablet, sentToday, waiting, she
         if (local.minutes < p.start) return { at: now + (p.start - local.minutes) * 60000, why: p.start > from ? `Opens at ${rhythm.hhmm(p.start)} today (a random time after ${s.from})` : `Opens at ${s.from}` };
         if (local.minutes >= p.end) return nextDay(p.end < to ? `Stopped for today at ${rhythm.hhmm(p.end)} (a random time before ${s.to})` : "Today's window is over");
         if (sentToday >= p.target && s.dailyLimit > 0) return nextDay(`Done for today (${sentToday} of ${p.target})`);
+        const at = (m) => now + (m - local.minutes) * 60000;
+        if (rhythm.atLunch(p, local.minutes)) return { at: at(p.lunch.end), why: `Lunch break until ${rhythm.hhmm(p.lunch.end)}` };
+        if (sentToday >= rhythm.allowedBy(p, local.minutes)) {
+            const r = rhythm.nextRound(p, local.minutes);
+            if (r) return { at: at(r.at), why: `Break between rounds; the next round (${r.count}) starts at ${rhythm.hhmm(r.at)}` };
+        }
         return { at: Math.max(now, s.nextDueAt ? new Date(s.nextDueAt).getTime() : now), why: "" };
     })();
     let blocked = "";
@@ -501,7 +517,11 @@ function rhythmForWeb(day, s) {
     return {
         perWeek: day.perWeek, rest: day.rest, testMode: Boolean(s.testMode), weeks: day.weeks,
         nextSendDay: day.nextSendDay, nextSendLabel: rhythm.dayLabel(day.nextSendDay),
-        today: { target: day.plan.target, limit: Math.max(0, Number(s.dailyLimit) || 0), start: rhythm.hhmm(day.plan.start), end: rhythm.hhmm(day.plan.end) }
+        today: {
+            target: day.plan.target, limit: Math.max(0, Number(s.dailyLimit) || 0), start: rhythm.hhmm(day.plan.start), end: rhythm.hhmm(day.plan.end),
+            lunch: day.plan.lunch ? { start: rhythm.hhmm(day.plan.lunch.start), end: rhythm.hhmm(day.plan.lunch.end) } : null,
+            rounds: (day.plan.rounds || []).map((r) => ({ at: rhythm.hhmm(r.at), count: r.count }))
+        }
     };
 }
 

@@ -64,6 +64,10 @@ function Sending({ data, set }) {
 }
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+const roundsText = (rounds) => {
+  const parts = (rounds || []).map((r) => `${r.at} (${r.count})`);
+  return parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}` : parts[0] || "";
+};
 
 /** The rest days: this week and next week with the days off marked, today's own plan, and how many rest days a week (same as the website). */
 function RestDays({ rhythm, testMode, set, act, reload }) {
@@ -72,6 +76,8 @@ function RestDays({ rhythm, testMode, set, act, reload }) {
   const t = rhythm.today;
   const today = rhythm.rest ? `Rest day, nothing goes out. Sending again ${rhythm.nextSendLabel}.`
     : t.limit > 0 ? `${plural(t.target, "message")} (a random number, the limit is ${t.limit}), starting at ${t.start} and stopping by ${t.end}.`
+      + ((t.rounds || []).length > 1 ? ` In ${t.rounds.length} rounds with breaks between them: ${roundsText(t.rounds)}.` : "")
+      + (t.lunch ? ` Lunch break ${t.lunch.start} to ${t.lunch.end}.` : "")
     : "The daily limit is 0, so nothing goes out.";
   return (
     <Box title="Rest days" subtitle={rhythm.perWeek > 0 ? `Each week ${plural(rhythm.perWeek, "day")} ${rhythm.perWeek === 1 ? "is" : "are"} picked at random when nothing goes out. They change every week and never fall on the same weekdays as the week before.` : "Off: messages go out every day."}>
@@ -113,8 +119,8 @@ function Limits({ settings: s, set, act, reload }) {
     <View style={{ flex: 1, minWidth: 110, gap: 3 }}><Dim>{label}</Dim><Input value={f[k]} onChangeText={(v) => setF({ ...f, [k]: v })} keyboardType={kb} /></View>
   );
   return (
-    <Box title="Limits" subtitle="Each day picks its own number of messages (a little under the limit), its own start and stop time inside the window, and a different gap after every message, with a longer break now and then.">
-      <Row>{field("dailyLimit", "Most messages a day", "number-pad")}{field("from", "From (10:00)")}{field("to", "To (19:00)")}</Row>
+    <Box title="Limits" subtitle="Each day picks its own number of messages (a little under the limit), a first message at a random time after From and a stop at a random time before To, a lunch break, and a few rounds spread over the day. The gap is different every time, and the tablet waits a few seconds on each chat before pressing Send.">
+      <Row>{field("dailyLimit", "Most messages a day", "number-pad")}{field("from", "From (10:00)")}{field("to", "To (18:00)")}</Row>
       <Row>{field("gapMin", "Shortest gap (min)", "number-pad")}{field("gapMax", "Longest gap (min)", "number-pad")}</Row>
       <Btn kind="primary" label="Save limits" onPress={save} />
       <Toggle label="Test mode (ignores the limits)" value={s.testMode} onChange={(v) => set({ testMode: v }, v ? "Test mode is on." : "Test mode is off.")} />
@@ -229,7 +235,7 @@ function SheetCard({ sheet, all, reload }) {
       <Row gap={14}><Txt bold>{c.pending || 0} to send</Txt><Dim>{c.queued || 0} on the tablet</Dim><Good>{c.sent || 0} sent</Good>{c.failed ? <Bad>{c.failed} failed</Bad> : <Dim>0 failed</Dim>}<Dim>{c.skipped || 0} skipped</Dim></Row>
       {sheet.plan ? <Txt>{`Next message from this sheet: ${nextText(sheet.plan)}`}</Txt> : null}
 
-      <Dim>Messages. A line with only --- separates two messages. One is picked at random for each person. {"{name}"} is the first name.</Dim>
+      <Dim>Messages. A line with only --- separates two messages. One is picked at random for each person. {"{name}"} is the first name; {"{Hi|Hello|Namaste}"} picks one of the words at random for each person.</Dim>
       <Input value={texts} onChangeText={setTexts} multiline placeholder={"Happy Diwali {name}!\n---\nSecond message"} style={{ minHeight: 120, textAlignVertical: "top" }} />
       <Row>
         <Btn kind="primary" label="Save messages" onPress={() => run(() => wa.saveSheet(sheet._id, { texts: boxToTexts(texts) }), "Messages saved.")} />

@@ -57,7 +57,9 @@ const COMMANDS = {
             if (phone.length < 10 || phone.length > 14 || !/^[a-f0-9]{24}$/.test(sendId)) return null;
             const text = typeof a.text === "string" ? a.text.trim().slice(0, 900) : "";
             if (!text && a.image !== true) return null;
-            return { phone, text, sendId, image: a.image === true };
+            // How long the tablet waits on the open chat before pressing Send (a person looking at it), at most 20 seconds.
+            const pause = Number(a.pauseMs);
+            return { phone, text, sendId, image: a.image === true, ...(Number.isFinite(pause) && pause >= 0 ? { pauseMs: Math.min(20000, Math.round(pause)) } : {}) };
         }
     },
     phone: {

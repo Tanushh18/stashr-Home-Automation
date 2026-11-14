@@ -172,6 +172,9 @@ Adb access gives only a terminal on your computer. The app still talks to the St
 - [ ] "Today:" shows a number of messages a little under the limit and a start time a little after the window opens; the first message goes at that start time (not at 10:00 sharp), and sending stops at the shown number.
 - [ ] Latest messages: the time between two messages is different each time (mostly 6 to 12 minutes, sometimes a longer break), and people are not messaged in list order.
 - [ ] The nightly report before a rest day ends with "Tomorrow is a rest day". Same on the Android app's WhatsApp sender screen.
+- [ ] Limits show From 10:00, To 18:00. "Today:" lists the rounds and the lunch break; between rounds the status says "Break between rounds: the next … at HH:MM", during lunch "Lunch break until HH:MM", and nothing goes out then.
+- [ ] Stashr Hub 1.9.5: watch the tablet send one message: the chat (or the picture preview) stays open a few seconds (3 to 12) before Send is pressed, a different time each message; the message still goes and is counted as sent.
+- [ ] A sheet message with `{Hi|Hello} {name}, {new|fresh} plots`: the Latest messages show different combinations for different people.
 
 ## 8. Updates (OTA)
 - [ ] Push a change under `hub-app/` to `main`; the GitHub Release is created and is **not** "latest".

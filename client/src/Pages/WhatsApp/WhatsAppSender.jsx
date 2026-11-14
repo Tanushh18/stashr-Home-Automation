@@ -43,6 +43,12 @@ function NextLine({ plan, label = "Next message" }) {
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
+/** "10:47 (4), 13:58 (3) and 15:40 (4)": today's rounds with how many messages each has. */
+const roundsText = (rounds) => {
+  const parts = (rounds || []).map((r) => `${r.at} (${r.count})`);
+  return parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}` : parts[0] || "";
+};
+
 /** The rest days: this week and next week with the days off marked, today's own plan, and how many rest days a week. */
 function RestDays({ rhythm, testMode, onChanged }) {
   const [busy, setBusy] = useState(false);
@@ -54,6 +60,8 @@ function RestDays({ rhythm, testMode, onChanged }) {
   const t = rhythm.today;
   const todayText = rhythm.rest ? `rest day, nothing goes out. Sending again ${rhythm.nextSendLabel}.`
     : t.limit > 0 ? `${plural(t.target, "message")} (a random number, the limit is ${t.limit}), starting at ${t.start} and stopping by ${t.end}.`
+      + ((t.rounds || []).length > 1 ? ` In ${t.rounds.length} rounds with breaks between them: ${roundsText(t.rounds)}.` : "")
+      + (t.lunch ? ` Lunch break ${t.lunch.start} to ${t.lunch.end}.` : "")
     : "the daily limit is 0, so nothing goes out.";
   return (
     <Section
@@ -336,8 +344,8 @@ function SheetCard({ sheet, onChanged }) {
       <NextLine plan={sheet.plan} label="Next message from this sheet" />
       <div className="wa-grid">
         <div>
-          <label className="wa-label" htmlFor={"t" + sheet._id}>Messages. Put a line with only --- between two messages (a message can have many lines). One is picked at random for each person. Use {"{name}"} for the first name.</label>
-          <textarea id={"t" + sheet._id} className="wa-input" rows={5} value={texts} onChange={(e) => setTexts(e.target.value)} placeholder={"Happy Diwali {name}!\nWishing you and your family a bright Diwali.\n---\nDiwali greetings from ..."} />
+          <label className="wa-label" htmlFor={"t" + sheet._id}>Messages. Put a line with only --- between two messages (a message can have many lines). One is picked at random for each person. Use {"{name}"} for the first name, and {"{Hi|Hello|Namaste}"} to pick one of the words at random for each person, so no two messages are exactly alike.</label>
+          <textarea id={"t" + sheet._id} className="wa-input" rows={5} value={texts} onChange={(e) => setTexts(e.target.value)} placeholder={"{Happy Diwali|Diwali greetings} {name}!\nWishing you and your family a {bright|happy} Diwali.\n---\nDiwali greetings from ..."} />
           <div className="wa-row"><button className="rd-btn" disabled={busy} onClick={saveTexts}>Save messages</button><button className="rd-btn is-quiet" disabled={busy} onClick={useStarter}>Use the 25 We Three quotes</button><span className="wa-muted">{boxToTexts(texts).length} in the box</span></div>
           {unsaved
             ? <p className="wa-warn">Not saved yet: the box has {boxToTexts(texts).length} message{boxToTexts(texts).length === 1 ? "" : "s"}, but {savedCount} {savedCount === 1 ? "is" : "are"} saved on the server. Press <b>Save messages</b>, or they are lost when you refresh the page.</p>
@@ -691,7 +699,7 @@ export default function WhatsAppSender() {
 
       <RestDays rhythm={data.rhythm} testMode={s.testMode} onChanged={load} />
 
-      <Section title="Limits" subtitle="Each day picks its own number of messages (a little under the limit), its own start and stop time inside the window, and a different gap after every message, with a longer break now and then.">
+      <Section title="Limits" subtitle="Each day picks its own number of messages (a little under the limit), a first message at a random time after From (up to 90 minutes later) and a stop at a random time before To (up to an hour earlier), a lunch break, and a few rounds spread over the day. Inside a round the gap is different every time, and the tablet waits a few seconds on each chat before pressing Send, like a person.">
         <div className="wa-form">
           <label>Most messages a day<input className="wa-input" type="number" min="0" max="60" value={settings.dailyLimit} onFocus={() => { editing.current = true; }} onChange={(e) => setSettings({ ...settings, dailyLimit: e.target.value })} /></label>
           <label>From<input className="wa-input" type="time" value={settings.from} onChange={(e) => setSettings({ ...settings, from: e.target.value })} /></label>
