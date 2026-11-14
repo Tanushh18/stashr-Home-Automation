@@ -38,7 +38,9 @@ const bearer = (t) => ({ Authorization: `Bearer ${t}` });
 const hubReport = (token, acks = []) => request(app).post("/home/agent/report").set(bearer(token)).send({ status: { agent: "stashr-hub" }, acks });
 const owner = async () => (await User.findOne({}))._id;
 // Noon on a weekday, India time: inside the 10:00 to 19:00 window.
-const NOON = Date.parse("2026-11-12T06:30:00Z");
+// Today's date in India: the overview and "Send the report now" use the real day, so the tests must run on it too.
+const DAY = new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
+const NOON = Date.parse(`${DAY}T06:30:00Z`);
 // The tablet counts as online when it spoke recently relative to the time a test pretends it is.
 const seenAt = (t) => HomeDevice.updateMany({}, { $set: { lastSeen: new Date(t), online: true } });
 
@@ -145,7 +147,7 @@ describe("the sender", () => {
 
     test("outside the window nothing goes out", async () => {
         const { o } = await setup();
-        const night = Date.parse("2026-11-12T20:30:00Z");            // 02:00 India time
+        const night = Date.parse(`${DAY}T20:30:00Z`);            // 02:00 India time
         await seenAt(night);
         const r = await sender.tickOwner(o, night, () => 0);
         expect(r.status).toMatch(/Outside/);
@@ -244,7 +246,7 @@ describe("the sender", () => {
     test("test mode ignores the window, the gap and the daily limit", async () => {
         const { auth, hub, o } = await setup();
         await request(app).put("/wa/settings").set(auth).send({ testMode: true, dailyLimit: 0 });
-        const night = Date.parse("2026-11-12T20:30:00Z");
+        const night = Date.parse(`${DAY}T20:30:00Z`);
         await seenAt(night);
         expect((await sender.tickOwner(o, night, () => 0)).did).toBe("queued");
         const cmd = (await hubReport(hub.token)).body.commands[0];
@@ -311,7 +313,7 @@ describe("the nightly report", () => {
         await sender.tickOwner(o, NOON, () => 0);
         await answer(hub, await cmdOf(hub));
         await request(app).put("/wa/settings").set(auth).send({ enabled: false });
-        const evening = Date.parse("2026-11-12T14:00:00Z");                    // 19:30 India time
+        const evening = Date.parse(`${DAY}T14:00:00Z`);                    // 19:30 India time
         await seenAt(evening);
         expect((await sender.tickOwner(o, evening, () => 0)).did).toBe("report");
         // A different day with no sends: nothing to report.

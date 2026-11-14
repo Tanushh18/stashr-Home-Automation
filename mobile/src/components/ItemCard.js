@@ -5,7 +5,7 @@ import { useTheme, alpha } from "../lib/theme";
 import { strengthColor } from "../lib/strength";
 import { domainOf, openableUrl, typeOf, FIELD_DEFS, TYPE_LABELS } from "../lib/items";
 import { useToast } from "./Toast";
-import { Badge, Card, IconButton, tap } from "./ui";
+import { Badge, Card, ExpandableText, IconButton, tap } from "./ui";
 import ItemAvatar from "./ItemAvatar";
 import TotpCode from "./TotpCode";
 import Icon from "./Icon";
@@ -121,7 +121,7 @@ export default function ItemCard({ item, info, icons, onEdit, onFavorite, select
               );
             })}
             {kind === "note" && item.notes ? (
-              <Text numberOfLines={4} style={{ color: theme.textMuted, fontFamily: theme.font.body, fontSize: 13, marginTop: 10 }}>{item.notes}</Text>
+              <View style={{ marginTop: 10 }}><ExpandableText lines={4} style={{ color: theme.textMuted, fontFamily: theme.font.body, fontSize: 13, lineHeight: 19 }}>{item.notes}</ExpandableText></View>
             ) : null}
           </>
         ) : null}

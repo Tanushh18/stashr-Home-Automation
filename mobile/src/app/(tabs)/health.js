@@ -1,6 +1,6 @@
 import { fx } from "../../lib/fx";
-import React, { useMemo } from "react";
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+import React, { useMemo, useState } from "react";
+import { LayoutAnimation, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import Aurora from "../../components/Aurora";
@@ -8,7 +8,7 @@ import Icon from "../../components/Icon";
 import HealthRing from "../../components/HealthRing";
 import ItemAvatar from "../../components/ItemAvatar";
 import { useToast } from "../../components/Toast";
-import { Badge, Bounce, Card, FadeIn, GhostButton, GradientText } from "../../components/ui";
+import { Badge, Bounce, Card, Chevron, FadeIn, GhostButton, GradientText, tap } from "../../components/ui";
 import { useTheme, alpha } from "../../lib/theme";
 import { useVault } from "../../lib/vault";
 import { strengthColor } from "../../lib/strength";
@@ -18,6 +18,12 @@ export default function Health() {
   const { health, items: vaultItems, syncing, refresh, runBreachCheck, breachChecked, breachProgress, prefs } = useVault();
   const toast = useToast();
   const insights = health;
+  const [closed, setClosed] = useState({});
+  const toggle = (k) => {
+    tap();
+    LayoutAnimation.configureNext(LayoutAnimation.create(200, "easeInEaseOut", "opacity"));
+    setClosed((c) => ({ ...c, [k]: !c[k] }));
+  };
 
   const byId = useMemo(() => {
     const m = {};
@@ -98,7 +104,7 @@ export default function Health() {
           {sections.map((s, si) =>
             s.list.length ? (
               <FadeIn key={s.key} delay={160 + si * 80} style={{ marginTop: 18 }}>
-                <View style={styles.sectionHead}>
+                <Pressable onPress={() => toggle(s.key)} accessibilityRole="button" accessibilityState={{ expanded: !closed[s.key] }} style={styles.sectionHead}>
                   <View style={[styles.sectionIcon, { backgroundColor: alpha(s.color, 0.16) }]}>
                     <Icon name={s.icon} size={16} color={s.color} strokeWidth={2.2} />
                   </View>
@@ -108,8 +114,9 @@ export default function Health() {
                     </Text>
                     <Text style={{ color: theme.textFaint, fontFamily: theme.font.body, fontSize: 12 }}>{s.hint}</Text>
                   </View>
-                </View>
-                <Card style={{ padding: 6 }}>
+                  <Chevron open={!closed[s.key]} />
+                </Pressable>
+                {closed[s.key] ? null : <Card style={{ padding: 6 }}>
                   {s.list.map((i, idx) => {
                     const entry = byId[i.id];
                     return (
@@ -133,7 +140,7 @@ export default function Health() {
                       </Bounce>
                     );
                   })}
-                </Card>
+                </Card>}
               </FadeIn>
             ) : null
           )}
