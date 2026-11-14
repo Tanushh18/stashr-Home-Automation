@@ -7,7 +7,7 @@ import * as SecureStore from "expo-secure-store";
  * (client/src/styles/theme.css), tuned for native.
  */
 const shared = {
-  radius: { sm: 8, md: 10, lg: 12, xl: 14, pill: 999 },
+  radius: { sm: 8, md: 12, lg: 16, xl: 20, pill: 999 },
   font: {
     display: "Inter_700Bold",
     displayHeavy: "Inter_700Bold",

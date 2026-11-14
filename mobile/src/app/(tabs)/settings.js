@@ -10,7 +10,7 @@ import Aurora from "../../components/Aurora";
 import Icon from "../../components/Icon";
 import StatusPill from "../../components/StatusPill";
 import { useToast } from "../../components/Toast";
-import { Bounce, Card, Chip, FadeIn, GhostButton, GradientText, tap } from "../../components/ui";
+import { Bounce, Card, Chip, Collapsible, ExpandableText, FadeIn, GhostButton, GradientText, Select, tap } from "../../components/ui";
 import { useTheme, alpha } from "../../lib/theme";
 import { useVault } from "../../lib/vault";
 import { api, activeServer } from "../../lib/api";
@@ -50,7 +50,13 @@ function Row({ icon, title, subtitle, right, onPress, color }) {
       </View>
       <View style={{ flex: 1 }}>
         <Text style={{ color: theme.heading, fontFamily: theme.font.bodySemi, fontSize: 15 }}>{title}</Text>
-        {subtitle ? <Text style={{ color: theme.textFaint, fontFamily: theme.font.body, fontSize: 12, marginTop: 2 }}>{subtitle}</Text> : null}
+        {subtitle ? (
+          onPress ? (
+            <Text style={{ color: theme.textFaint, fontFamily: theme.font.body, fontSize: 12, lineHeight: 17, marginTop: 2 }} numberOfLines={2}>{subtitle}</Text>
+          ) : (
+            <ExpandableText lines={2} style={{ color: theme.textFaint, fontFamily: theme.font.body, fontSize: 12, lineHeight: 17, marginTop: 2 }}>{subtitle}</ExpandableText>
+          )
+        ) : null}
       </View>
       {right !== undefined ? right : onPress ? <Icon name="arrow" size={16} color={theme.textFaint} /> : null}
     </View>
@@ -58,12 +64,17 @@ function Row({ icon, title, subtitle, right, onPress, color }) {
   return onPress ? <Bounce onPress={onPress} scaleTo={0.98}>{body}</Bounce> : body;
 }
 
-function Section({ title, children, delay }) {
-  const { theme } = useTheme();
+const SECTION_ICONS = { WORKSPACE: "grid", SECURITY: "shield", AUTOFILL: "key", APPEARANCE: "sun", FUN: "sparkle", "WEEKLY CHECK": "shieldCheck", "YOUR DATA": "download", APP: "phone" };
+
+/** A settings group as a dropdown card: tap the header to open or close it. */
+function Section({ title, children, delay, defaultOpen = true }) {
+  const count = React.Children.toArray(children).filter(Boolean).length;
+  const label = title.charAt(0) + title.slice(1).toLowerCase();
   return (
     <FadeIn delay={delay}>
-      <Text style={[styles.section, { color: theme.textFaint, fontFamily: theme.font.bodySemi }]}>{title}</Text>
-      <Card style={{ gap: 16 }}>{children}</Card>
+      <Collapsible title={label} icon={SECTION_ICONS[title]} count={count} defaultOpen={defaultOpen} subtitle={`${count} option${count === 1 ? "" : "s"}`}>
+        {children}
+      </Collapsible>
     </FadeIn>
   );
 }
@@ -274,9 +285,14 @@ export default function Settings() {
             {biometric ? (
               <View>
                 <Row icon="timer" title="Auto-lock" subtitle="Ask for a fingerprint again after the app has been in the background" color={theme.accent3} right={null} />
-                <View style={styles.chips}>
-                  {LOCK_OPTIONS.map((o) => <Chip key={o.v} label={o.label} active={prefs.autoLock === o.v} onPress={() => setPrefs({ autoLock: o.v })} />)}
-                </View>
+                <Select
+                  label="Lock after"
+                  icon="timer"
+                  value={prefs.autoLock}
+                  options={LOCK_OPTIONS.map((o) => ({ value: o.v, label: o.label === "Never" ? "Never" : `After ${o.label} in the background` }))}
+                  onChange={(v) => setPrefs({ autoLock: v })}
+                  style={styles.select}
+                />
               </View>
             ) : null}
             <Row icon="shieldCheck" title="Two-factor login" subtitle={profile?.twoFactorEnabled ? `On · ${profile.recoveryCodesLeft} recovery codes left` : "Off — add a second step to sign in"} color={profile?.twoFactorEnabled ? theme.ok : theme.warn} onPress={() => router.push("/account/twofactor")} />
@@ -349,9 +365,18 @@ export default function Settings() {
           <Section title="APPEARANCE" delay={140}>
             <View>
               <Row icon={theme.mode === "dark" ? "moon" : "sun"} title="Theme" subtitle="Dark, light, or follow your phone" right={null} />
-              <View style={styles.chips}>
-                {["system", "dark", "light"].map((p) => <Chip key={p} label={p[0].toUpperCase() + p.slice(1)} active={preference === p} onPress={() => setPreference(p)} />)}
-              </View>
+              <Select
+                label="Theme"
+                icon={theme.mode === "dark" ? "moon" : "sun"}
+                value={preference}
+                options={[
+                  { value: "system", label: "System", description: "Follow your phone's setting" },
+                  { value: "dark", label: "Dark" },
+                  { value: "light", label: "Light" },
+                ]}
+                onChange={setPreference}
+                style={styles.select}
+              />
             </View>
             <Row
               icon="globe"
@@ -361,7 +386,7 @@ export default function Settings() {
             />
           </Section>
 
-          <Section title="FUN" delay={165}>
+          <Section title="FUN" delay={165} defaultOpen={false}>
             <Row
               icon="sparkle"
               title="Fun effects"
@@ -370,7 +395,7 @@ export default function Settings() {
             />
           </Section>
 
-          <Section title="WEEKLY CHECK" delay={170}>
+          <Section title="WEEKLY CHECK" delay={170} defaultOpen={false}>
             <Row
               icon="shield"
               title="Weekly breach check"
@@ -379,7 +404,7 @@ export default function Settings() {
             />
           </Section>
 
-          <Section title="YOUR DATA" delay={180}>
+          <Section title="YOUR DATA" delay={180} defaultOpen={false}>
             <Row icon="download" title="Export & import" subtitle="Encrypted backups, CSV, and imports from other managers" onPress={() => router.push("/account/data")} />
             <Row icon="note" title="Privacy policy" onPress={() => Linking.openURL(`${WEBSITE}/privacy`)} />
           </Section>
@@ -390,9 +415,12 @@ export default function Settings() {
             <Row
               icon="refresh"
               title="Check for updates"
-              subtitle={`App ${releaseInfo.version} · Build ${releaseInfo.build}\nDelivery: complete APK from Stashr server\nChannel: ${releaseInfo.channel} · ${releaseInfo.launch}\n${updateStatus}`}
+              subtitle={`App ${releaseInfo.version} · Build ${releaseInfo.build}`}
               onPress={checkUpdates}
             />
+            <ExpandableText lines={2} style={{ color: theme.textMuted, fontFamily: theme.font.body, fontSize: 12, lineHeight: 18, marginLeft: 50 }}>
+              {`${updateStatus}\nDelivery: complete APK from Stashr server\nChannel: ${releaseInfo.channel} · ${releaseInfo.launch}`}
+            </ExpandableText>
             {updateProgress ? (
               <View style={{ gap: 4 }}>
                 <View style={{ height: 8, borderRadius: 4, backgroundColor: alpha(theme.accent, 0.2), overflow: "hidden" }}>
@@ -435,5 +463,6 @@ const styles = StyleSheet.create({
   section: { fontSize: 12, letterSpacing: 0.4, marginBottom: 8, marginLeft: 4 },
   row: { flexDirection: "row", alignItems: "center", gap: 12 },
   rowIcon: { width: 38, height: 38, borderRadius: 13, alignItems: "center", justifyContent: "center" },
+  select: { marginTop: 10, marginLeft: 50 },
   chips: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 10, marginLeft: 50 },
 });

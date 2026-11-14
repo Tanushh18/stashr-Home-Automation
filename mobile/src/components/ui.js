@@ -1,10 +1,15 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Animated, Easing, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Animated, Easing, LayoutAnimation, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, UIManager, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import * as Haptics from "expo-haptics";
 import { useTheme, alpha } from "../lib/theme";
 import { strengthColor } from "../lib/strength";
 import Icon from "./Icon";
+
+if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
+  try { UIManager.setLayoutAnimationEnabledExperimental(true); } catch (_) { /* new architecture: already on */ }
+}
+const smooth = () => LayoutAnimation.configureNext(LayoutAnimation.create(200, "easeInEaseOut", "opacity"));
 
 export const tap = () => Haptics.selectionAsync().catch(() => {});
 
@@ -21,10 +26,10 @@ export function Card({ style, children, glow = false }) {
           borderColor: glow ? theme.lineStrong : theme.line,
           padding: 16,
           shadowColor: theme.shadow,
-          shadowOpacity: theme.mode === "dark" ? 0.25 : 0.06,
-          shadowRadius: 6,
-          shadowOffset: { width: 0, height: 2 },
-          elevation: theme.mode === "dark" ? 0 : 1,
+          shadowOpacity: theme.mode === "dark" ? 0.3 : 0.07,
+          shadowRadius: 10,
+          shadowOffset: { width: 0, height: 3 },
+          elevation: theme.mode === "dark" ? 0 : 2,
         },
         style,
       ]}
@@ -233,10 +238,176 @@ export function FadeIn({ delay = 0, children, style, from = 6 }) {
   return <Animated.View style={[style, { opacity: v, transform: [{ translateY }] }]}>{children}</Animated.View>;
 }
 
+/* ── Rotating chevron for dropdowns ── */
+export function Chevron({ open, color, size = 18 }) {
+  const { theme } = useTheme();
+  const r = useRef(new Animated.Value(open ? 1 : 0)).current;
+  useEffect(() => {
+    Animated.timing(r, { toValue: open ? 1 : 0, duration: 200, useNativeDriver: true }).start();
+  }, [open, r]);
+  const rotate = r.interpolate({ inputRange: [0, 1], outputRange: ["0deg", "180deg"] });
+  return (
+    <Animated.View style={{ transform: [{ rotate }] }}>
+      <Icon name="chevronDown" size={size} color={color || theme.textMuted} strokeWidth={2} />
+    </Animated.View>
+  );
+}
+
+/* ── Collapsible section: a tappable header that opens and closes its body (dropdown / accordion) ── */
+export function Collapsible({ title, subtitle, icon, count, defaultOpen = true, right, children, card = true, style }) {
+  const { theme } = useTheme();
+  const [open, setOpen] = useState(defaultOpen);
+  const toggle = () => {
+    tap();
+    smooth();
+    setOpen((o) => !o);
+  };
+  const header = (
+    <Pressable
+      onPress={toggle}
+      accessibilityRole="button"
+      accessibilityState={{ expanded: open }}
+      android_ripple={{ color: alpha(theme.accent, 0.08) }}
+      style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: card ? 14 : 8, paddingHorizontal: card ? 16 : 4 }}
+    >
+      {icon ? (
+        <View style={{ width: 30, height: 30, borderRadius: 9, alignItems: "center", justifyContent: "center", backgroundColor: alpha(theme.accent, 0.14) }}>
+          <Icon name={icon} size={16} color={theme.accentSoft} />
+        </View>
+      ) : null}
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: card ? theme.heading : theme.textMuted, fontFamily: theme.font.bodySemi, fontSize: card ? 15 : 12, letterSpacing: card ? 0 : 0.6 }}>
+          {card ? title : String(title).toUpperCase()}
+        </Text>
+        {subtitle && !open ? <Text style={{ color: theme.textFaint, fontFamily: theme.font.body, fontSize: 12, marginTop: 2 }} numberOfLines={1}>{subtitle}</Text> : null}
+      </View>
+      {count !== undefined ? (
+        <View style={{ minWidth: 22, height: 22, borderRadius: 11, paddingHorizontal: 6, alignItems: "center", justifyContent: "center", backgroundColor: alpha(theme.accent, 0.14) }}>
+          <Text style={{ color: theme.accentSoft, fontFamily: theme.font.bodyBold, fontSize: 11 }}>{count}</Text>
+        </View>
+      ) : null}
+      {right}
+      <Chevron open={open} />
+    </Pressable>
+  );
+  if (!card) {
+    return (
+      <View style={style}>
+        {header}
+        {open ? <View style={{ gap: 14, marginTop: 6 }}>{children}</View> : null}
+      </View>
+    );
+  }
+  return (
+    <Card style={[{ padding: 0, overflow: "hidden" }, style]}>
+      {header}
+      {open ? <View style={{ paddingHorizontal: 16, paddingBottom: 16, paddingTop: 2, gap: 16, borderTopWidth: 1, borderColor: theme.line }}><View style={{ height: 12 }} />{children}</View> : null}
+    </Card>
+  );
+}
+
+/* ── Long text: shows a few lines with "Show more" / "Show less" ── */
+export function ExpandableText({ children, lines = 3, style }) {
+  const { theme } = useTheme();
+  const [open, setOpen] = useState(false);
+  const [long, setLong] = useState(false);
+  const text = children == null ? "" : String(children);
+  if (!text) return null;
+  return (
+    <View>
+      <Text style={style} numberOfLines={open ? undefined : lines}>{text}</Text>
+      {/* Invisible full copy, laid out once, tells us whether the text is longer than `lines`. */}
+      {!long ? (
+        <Text
+          style={[style, { position: "absolute", opacity: 0, left: 0, right: 0 }]}
+          pointerEvents="none"
+          onTextLayout={(e) => e.nativeEvent.lines.length > lines && setLong(true)}
+        >
+          {text}
+        </Text>
+      ) : null}
+      {long ? (
+        <Pressable
+          hitSlop={8}
+          onPress={() => {
+            tap();
+            smooth();
+            setOpen((o) => !o);
+          }}
+          style={{ flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4, alignSelf: "flex-start" }}
+        >
+          <Text style={{ color: theme.accentSoft, fontFamily: theme.font.bodySemi, fontSize: 12 }}>{open ? "Show less" : "Show more"}</Text>
+          <Chevron open={open} color={theme.accentSoft} size={14} />
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+/* ── Dropdown picker: shows the chosen option, opens a scrollable sheet of choices ── */
+export function Select({ label, value, options, onChange, placeholder = "Choose…", icon, style }) {
+  const { theme } = useTheme();
+  const [open, setOpen] = useState(false);
+  const list = (options || []).map((o) => (typeof o === "object" ? o : { value: o, label: String(o) }));
+  const current = list.find((o) => o.value === value);
+  return (
+    <View style={style}>
+      {label ? <Text style={[styles.label, { color: theme.textFaint, fontFamily: theme.font.bodySemi }]}>{label}</Text> : null}
+      <Pressable
+        onPress={() => {
+          tap();
+          setOpen(true);
+        }}
+        accessibilityRole="button"
+        style={[styles.field, { borderColor: open ? theme.accent : theme.line, backgroundColor: theme.surface }]}
+      >
+        {icon ? <Icon name={icon} size={18} color={theme.textFaint} /> : null}
+        <Text style={{ flex: 1, color: current ? theme.text : theme.textFaint, fontFamily: theme.font.bodyMedium, fontSize: 15 }} numberOfLines={1}>
+          {current ? current.label : placeholder}
+        </Text>
+        <Chevron open={open} />
+      </Pressable>
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)", justifyContent: "flex-end" }} onPress={() => setOpen(false)}>
+          <Pressable style={{ backgroundColor: theme.surfaceRaised, borderTopLeftRadius: 22, borderTopRightRadius: 22, paddingBottom: 28, maxHeight: "70%" }}>
+            <View style={{ alignItems: "center", paddingTop: 10 }}>
+              <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: theme.lineStrong }} />
+            </View>
+            {label ? <Text style={{ color: theme.heading, fontFamily: theme.font.display, fontSize: 17, paddingHorizontal: 20, paddingTop: 14, paddingBottom: 8 }}>{label}</Text> : null}
+            <ScrollView contentContainerStyle={{ paddingHorizontal: 12, paddingTop: label ? 0 : 12 }}>
+              {list.map((o) => {
+                const active = o.value === value;
+                return (
+                  <Pressable
+                    key={String(o.value)}
+                    onPress={() => {
+                      tap();
+                      setOpen(false);
+                      if (!active) onChange?.(o.value);
+                    }}
+                    android_ripple={{ color: alpha(theme.accent, 0.1) }}
+                    style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 14, paddingHorizontal: 12, borderRadius: 12, backgroundColor: active ? alpha(theme.accent, 0.12) : "transparent" }}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ color: active ? theme.heading : theme.text, fontFamily: active ? theme.font.bodySemi : theme.font.body, fontSize: 15 }}>{o.label}</Text>
+                      {o.description ? <Text style={{ color: theme.textFaint, fontFamily: theme.font.body, fontSize: 12, marginTop: 2 }}>{o.description}</Text> : null}
+                    </View>
+                    {active ? <Icon name="check" size={18} color={theme.accent} strokeWidth={2.2} /> : null}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   btn: {
     height: 50,
-    borderRadius: 10,
+    borderRadius: 12,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -248,7 +419,7 @@ const styles = StyleSheet.create({
   btnText: { color: "#fff", fontSize: 15 },
   ghost: {
     height: 50,
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
     flexDirection: "row",
     alignItems: "center",
@@ -262,9 +433,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    height: 48,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    height: 50,
   },
   input: { flex: 1, fontSize: 15, height: "100%" },
   badge: { flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 },

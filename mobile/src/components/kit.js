@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, RefreshControl, ScrollView, Text, View } 
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import Icon from "./Icon";
-import { Card, IconButton } from "./ui";
+import { Card, Collapsible, ExpandableText, IconButton } from "./ui";
 import { useTheme, alpha } from "../lib/theme";
 
 /* Plain building blocks for the workspace screens: a header, flat cards, list rows and status text. */
@@ -18,18 +18,45 @@ export function Page({ title, subtitle, onRefresh, refreshing = false, back = tr
           keyboardShouldPersistTaps="handled"
           refreshControl={onRefresh ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.accent} /> : undefined}
         >
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingBottom: 4 }}>
             {back ? <IconButton name="back" onPress={() => (router.canGoBack() ? router.back() : router.replace("/settings"))} /> : null}
             <View style={{ flex: 1 }}>
-              <Text style={{ color: theme.heading, fontFamily: theme.font.display, fontSize: 24 }}>{title}</Text>
-              {subtitle ? <Text style={{ color: theme.textMuted, fontFamily: theme.font.body, fontSize: 13, marginTop: 2 }}>{subtitle}</Text> : null}
+              <Text style={{ color: theme.heading, fontFamily: theme.font.display, fontSize: 24, letterSpacing: -0.3 }} numberOfLines={1}>{title}</Text>
+              {subtitle ? <ExpandableText lines={2} style={{ color: theme.textMuted, fontFamily: theme.font.body, fontSize: 13, lineHeight: 18, marginTop: 2 }}>{subtitle}</ExpandableText> : null}
             </View>
             {right}
           </View>
-          {children}
+          {sectioned(children)}
         </ScrollView>
       </SafeAreaView>
     </View>
+  );
+}
+
+/**
+ * Turns every top-level <Heading> on a Page into a dropdown: the heading and everything after it (up to the next
+ * Heading) open and close together. Screens get collapsible sections without changing their own code.
+ */
+function sectioned(children) {
+  const items = React.Children.toArray(children);
+  if (!items.some((c) => c?.type === Heading)) return children;
+  const out = [];
+  let cur = null;
+  items.forEach((c, i) => {
+    if (c?.type === Heading) {
+      cur = { key: c.key || `h${i}`, title: c.props.children, action: c.props.action, body: [] };
+      out.push(cur);
+    } else if (cur) cur.body.push(c);
+    else out.push(c);
+  });
+  return out.map((x) =>
+    x && x.body ? (
+      <Collapsible key={x.key} card={false} title={x.title} right={x.action}>
+        {x.body}
+      </Collapsible>
+    ) : (
+      x
+    )
   );
 }
 
@@ -46,11 +73,17 @@ export function Heading({ children, action }) {
 export function Line({ title, subtitle, right, onPress, icon, last }) {
   const { theme } = useTheme();
   const body = (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12, borderBottomWidth: last ? 0 : 1, borderColor: theme.line }}>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 14, borderBottomWidth: last ? 0 : 1, borderColor: theme.line }}>
       {icon ? <Icon name={icon} size={18} color={theme.textMuted} /> : null}
       <View style={{ flex: 1 }}>
         <Text style={{ color: theme.heading, fontFamily: theme.font.bodyMedium, fontSize: 15 }} numberOfLines={1}>{title}</Text>
-        {subtitle ? <Text style={{ color: theme.textMuted, fontFamily: theme.font.body, fontSize: 12, marginTop: 2 }} numberOfLines={2}>{subtitle}</Text> : null}
+        {subtitle ? (
+          onPress ? (
+            <Text style={{ color: theme.textMuted, fontFamily: theme.font.body, fontSize: 12, marginTop: 2 }} numberOfLines={2}>{subtitle}</Text>
+          ) : (
+            <ExpandableText lines={2} style={{ color: theme.textMuted, fontFamily: theme.font.body, fontSize: 12, lineHeight: 17, marginTop: 2 }}>{subtitle}</ExpandableText>
+          )
+        ) : null}
       </View>
       {right}
       {onPress && right === undefined ? <Icon name="arrow" size={16} color={theme.textFaint} /> : null}
@@ -62,7 +95,7 @@ export function Line({ title, subtitle, right, onPress, icon, last }) {
 /** A card whose children are Line rows (the last row loses its divider). */
 export function Group({ children }) {
   const items = React.Children.toArray(children).filter(Boolean);
-  return <Card style={{ paddingVertical: 4, paddingHorizontal: 14 }}>{items.map((c, i) => React.cloneElement(c, { last: i === items.length - 1 }))}</Card>;
+  return <Card style={{ paddingVertical: 2, paddingHorizontal: 16 }}>{items.map((c, i) => React.cloneElement(c, { last: i === items.length - 1 }))}</Card>;
 }
 
 const TONES = (theme) => ({ ok: theme.ok, warn: theme.warn, bad: theme.danger, mute: theme.textMuted });
@@ -81,8 +114,12 @@ export function Note({ children, tone = "mute" }) {
   const { theme } = useTheme();
   const c = TONES(theme)[tone] || theme.textMuted;
   return (
-    <View style={{ borderLeftWidth: 3, borderColor: c, paddingLeft: 12, paddingVertical: 2 }}>
-      <Text style={{ color: theme.text, fontFamily: theme.font.body, fontSize: 13, lineHeight: 19 }}>{children}</Text>
+    <View style={{ borderLeftWidth: 3, borderColor: c, paddingLeft: 12, paddingVertical: 8, paddingRight: 10, backgroundColor: alpha(c, 0.07), borderRadius: 8 }}>
+      {typeof children === "string" ? (
+        <ExpandableText lines={4} style={{ color: theme.text, fontFamily: theme.font.body, fontSize: 13, lineHeight: 19 }}>{children}</ExpandableText>
+      ) : (
+        <Text style={{ color: theme.text, fontFamily: theme.font.body, fontSize: 13, lineHeight: 19 }}>{children}</Text>
+      )}
     </View>
   );
 }

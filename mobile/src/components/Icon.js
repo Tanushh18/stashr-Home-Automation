@@ -40,6 +40,7 @@ const P = {
   sun: [<Circle key="a" cx="12" cy="12" r="4" />, <Path key="b" d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />],
   phone: [<Rect key="a" x="6.5" y="2.5" width="11" height="19" rx="2.5" />, <Path key="b" d="M11 18.5h2" />],
   refresh: [<Path key="a" d="M20 11a8 8 0 0 0-14.8-3.5L4 9M4 4v5h5M4 13a8 8 0 0 0 14.8 3.5L20 15M20 20v-5h-5" />],
+  chevronDown: [<Path key="a" d="m6 9 6 6 6-6" />],
   arrow: [<Path key="a" d="M5 12h14M13 6l6 6-6 6" />],
   back: [<Path key="a" d="M19 12H5M11 18l-6-6 6-6" />],
   mail: [<Rect key="a" x="3" y="5" width="18" height="14" rx="3" />, <Path key="b" d="m4 7 8 6 8-6" />],
