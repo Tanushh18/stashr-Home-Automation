@@ -2,7 +2,8 @@
  * The WhatsApp sender's website API (signed-in owner) and the tablet's picture download (device token).
  *
  *   GET    /wa/overview                 settings, the tablet, every sheet with its counts, the last messages
- *   PUT    /wa/settings                 on/off, daily limit, window, gaps, test mode
+ *   PUT    /wa/settings                 on/off, daily limit, window, gaps, rest days a week, test mode
+ *   POST   /wa/rest-days/shuffle        picks the rest days again (what is left of this week, and next week)
  *   POST   /wa/sheets                   a new sheet (a list with its own messages and picture)
  *   PATCH  /wa/sheets/:id               name, on/off, limit, messages, picture
  *   DELETE /wa/sheets/:id
@@ -73,6 +74,7 @@ router.get("/wa/overview", authenticate, async (req, res) => {
         const owner = req.rootUser._id;
         const settings = await sender.settingsOf(owner);
         const local = automation.localParts(Date.now(), settings.timezone);
+        const day = await sender.rhythmOf(owner, settings, local);
         const sheets = await WaSheet.find({ owner }).select("-image").sort({ name: 1 }).lean();
         const imageCounts = {};
         for (const row of await WaSheet.aggregate([{ $match: { owner } }, { $project: { n: { $cond: [{ $gt: [{ $size: { $ifNull: ["$images", []] } }, 0] }, { $size: "$images" }, { $cond: [{ $ne: ["$image", ""] }, 1, 0] }] } } }])) imageCounts[String(row._id)] = row.n;
@@ -84,9 +86,11 @@ router.get("/wa/overview", authenticate, async (req, res) => {
         const pendingBy = {};
         for (const id of Object.keys(bySheet)) pendingBy[id] = (bySheet[id] || {}).pending || 0;
         const waiting = Boolean(await WaSend.exists({ owner, status: "queued" }));
-        const schedule = sender.schedulePlan({ settings, local, now: Date.now(), tablet, sentToday, waiting, sheets, today, pendingBy });
+        const schedule = sender.schedulePlan({ settings, local, now: Date.now(), tablet, sentToday, waiting, sheets, today, pendingBy, day });
+        const { restWeeks, dayPlan, ...shown } = settings;          // the raw picks; `rhythm` below is what the website shows
         res.json({
-            settings, today: local.date, sentToday, tablet: tablet ? { id: tablet._id, name: tablet.name } : null, next: schedule.next,
+            settings: shown, today: local.date, sentToday, tablet: tablet ? { id: tablet._id, name: tablet.name } : null, next: schedule.next,
+            rhythm: sender.rhythmForWeb(day, settings),
             sheets: sheets.map((s) => {
                 const c = bySheet[String(s._id)] || {};
                 return { ...s, hasImage: withImage.has(String(s._id)), imageCount: imageCounts[String(s._id)] || 0, counts: { pending: c.pending || 0, queued: c.queued || 0, sent: c.sent || 0, failed: c.failed || 0, skipped: c.skipped || 0 }, sentToday: today[String(s._id)] || 0, plan: schedule.sheets[String(s._id)] || null };
@@ -110,6 +114,7 @@ router.put("/wa/settings", authenticate, writeLimiter, async (req, res) => {
             if (raw.some((n) => String(n).trim()) && !nums.length) return res.status(400).json({ error: "Enter valid mobile numbers for the report." });
             set.reportNumbers = nums;
         }
+        if (b.restDaysPerWeek !== undefined) set.restDaysPerWeek = clamp(b.restDaysPerWeek, 0, 3, 2);
         if (b.gapMin !== undefined) set.gapMin = clamp(b.gapMin, 1, 120, 6);
         if (b.gapMax !== undefined) set.gapMax = clamp(b.gapMax, 1, 240, 12);
         for (const k of ["from", "to"]) if (b[k] !== undefined) { if (!automation.okTime(b[k])) return res.status(400).json({ error: `"${k}" must be a time like 10:00.` }); set[k] = b[k]; }
@@ -118,9 +123,22 @@ router.put("/wa/settings", authenticate, writeLimiter, async (req, res) => {
         if (next.gapMax < next.gapMin) return res.status(400).json({ error: "The longest gap must not be shorter than the shortest." });
         if (sender.windowMinutes(next) <= 0) return res.status(400).json({ error: "The end time must be later than the start time." });
         if (set.enabled === true && !cur.enabled) set.nextDueAt = null;           // turning on: the first message may go now
-        const doc = await WaSettings.findOneAndUpdate({ owner }, { $set: set }, { new: true, upsert: true }).lean();
+        let doc = await WaSettings.findOneAndUpdate({ owner }, { $set: set }, { new: true, upsert: true }).lean();
+        // A new number of rest days a week: what is left of this week and next week are picked again.
+        if (set.restDaysPerWeek !== undefined && set.restDaysPerWeek !== sender.restPerWeek(cur)) { await sender.replanRest(owner); doc = await WaSettings.findOne({ owner }).lean(); }
         res.json(doc);
     } catch (e) { fail(res, e, "Could not save the settings."); }
+});
+
+// "Pick other days": new random rest days for what is left of this week and for next week (days that are over stay as they were).
+router.post("/wa/rest-days/shuffle", authenticate, writeLimiter, async (req, res) => {
+    try {
+        const owner = req.rootUser._id;
+        await sender.replanRest(owner);
+        const s = await sender.settingsOf(owner);
+        const local = automation.localParts(Date.now(), s.timezone);
+        res.json({ rhythm: sender.rhythmForWeb(await sender.rhythmOf(owner, s, local), s) });
+    } catch (e) { fail(res, e, "Could not pick new rest days."); }
 });
 
 router.post("/wa/sheets", authenticate, writeLimiter, async (req, res) => {

@@ -70,3 +70,17 @@
 .wa-person em { font-style: normal; opacity: .7; margin-left: 6px; }
 .wa-stage { font-size: .78rem; padding: 2px 8px; border-radius: 999px; background: rgba(31,143,106,.18); white-space: nowrap; }
 .wa-stage.is-none { background: rgba(127,127,127,.18); }
+
+/* Rest days: this week and next week, the days off marked */
+.wa-week { display: grid; grid-template-columns: 84px minmax(0, 1fr); align-items: center; gap: 8px; margin: 6px 0; }
+@media (max-width: 520px) { .wa-week { grid-template-columns: minmax(0, 1fr); gap: 4px; } }
+.wa-week__name { font-size: .82rem; opacity: .8; }
+.wa-days { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.wa-day { display: flex; flex-direction: column; align-items: center; padding: 6px 2px; border-radius: 10px; background: rgba(31,157,85,.13); font-size: .76rem; line-height: 1.25; min-width: 0; }
+.wa-day b { font-size: 1rem; }
+.wa-day small { font-size: .7rem; opacity: .8; }
+.wa-day.is-rest { background: rgba(214,150,45,.24); }
+.wa-day.is-rest small { font-weight: 700; opacity: 1; }
+.wa-day.is-today { outline: 2px solid var(--accent, #1f8f6a); outline-offset: -2px; }
+.wa-day.is-past { opacity: .45; }
+.wa-inline { display: inline-flex; align-items: center; gap: 8px; font-size: .88rem; }

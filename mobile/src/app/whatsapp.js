@@ -29,6 +29,7 @@ export default function WhatsApp() {
       {data ? (
         <View style={{ gap: 14 }}>
           <Boundary name="Sending"><Sending data={data} set={set} /></Boundary>
+          <Boundary name="Rest days"><RestDays rhythm={data.rhythm} testMode={data.settings.testMode} set={set} act={act} reload={load} /></Boundary>
           <Boundary name="Limits"><Limits settings={data.settings} set={set} act={act} reload={load} /></Boundary>
           <Boundary name="Test"><TestSend sheets={data.sheets} reload={load} /></Boundary>
           <Heading>Sheets</Heading>
@@ -52,12 +53,53 @@ function Sending({ data, set }) {
       right={null}>
       <Toggle label="Sending" value={s.enabled} onChange={(v) => set({ enabled: v }, v ? "Sending is on." : "Sending is off.")} />
       <Row gap={14}>
-        <Txt bold>{data.sentToday} sent today of {s.dailyLimit}</Txt>
+        <Txt bold>{data.rhythm && data.rhythm.rest && !s.testMode ? `${data.sentToday} sent today (rest day)` : `${data.sentToday} sent today of ${data.rhythm ? data.rhythm.today.target : s.dailyLimit}`}</Txt>
         {data.tablet ? <Good>Tablet online</Good> : <Bad>Tablet offline</Bad>}
       </Row>
       {!data.tablet ? <Bad>The tablet is offline, so nothing can be sent. Check that Stashr Hub is open, on charge and on Wi-Fi.</Bad> : null}
-      {s.testMode ? <Bad>Test mode is on: the time window, the gap and the daily limit are ignored. Turn it off before real sending.</Bad> : null}
+      {s.testMode ? <Bad>Test mode is on: the time window, the gap, the daily limit and the rest days are ignored. Turn it off before real sending.</Bad> : null}
       {data.next ? <Txt>{`Next message: ${nextText(data.next, sheetName)}`}</Txt> : null}
+    </Box>
+  );
+}
+
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+/** The rest days: this week and next week with the days off marked, today's own plan, and how many rest days a week (same as the website). */
+function RestDays({ rhythm, testMode, set, act, reload }) {
+  const { theme } = useTheme();
+  if (!rhythm) return null;
+  const t = rhythm.today;
+  const today = rhythm.rest ? `Rest day, nothing goes out. Sending again ${rhythm.nextSendLabel}.`
+    : t.limit > 0 ? `${plural(t.target, "message")} (a random number, the limit is ${t.limit}), starting at ${t.start} and stopping by ${t.end}.`
+    : "The daily limit is 0, so nothing goes out.";
+  return (
+    <Box title="Rest days" subtitle={rhythm.perWeek > 0 ? `Each week ${plural(rhythm.perWeek, "day")} ${rhythm.perWeek === 1 ? "is" : "are"} picked at random when nothing goes out. They change every week and never fall on the same weekdays as the week before.` : "Off: messages go out every day."}>
+      {rhythm.weeks.map((w, i) => (
+        <View key={w.week} style={{ gap: 4 }}>
+          <Dim>{i === 0 ? "This week" : "Next week"}</Dim>
+          <Row gap={4} wrap={false}>
+            {w.days.map((d) => {
+              const [name, num] = d.label.split(" ");
+              return (
+                <View key={d.date} accessibilityLabel={`${d.label}${d.today ? ", today" : ""}: ${d.rest ? "rest day" : "sends"}`}
+                  style={{ flex: 1, alignItems: "center", paddingVertical: 6, borderRadius: 10, backgroundColor: d.rest ? theme.warn + "40" : theme.ok + "22", borderWidth: 2, borderColor: d.today ? theme.accent : "transparent", opacity: d.past ? 0.45 : 1 }}>
+                  <Dim style={{ fontSize: 11, lineHeight: 14 }}>{name}</Dim>
+                  <Txt bold style={{ fontSize: 15, lineHeight: 19 }}>{num}</Txt>
+                  <Dim style={{ fontSize: 10.5, lineHeight: 13, color: d.rest ? theme.text : theme.textMuted }}>{d.rest ? "Off" : "Sends"}</Dim>
+                </View>
+              );
+            })}
+          </Row>
+        </View>
+      ))}
+      <Txt>{`Today: ${today}`}</Txt>
+      {testMode ? <Bad>Test mode is on, so the rest days are ignored.</Bad> : null}
+      <Dim>Rest days a week</Dim>
+      <Row>
+        {[0, 1, 2, 3].map((n) => <Btn key={n} kind={rhythm.perWeek === n ? "primary" : "quiet"} label={n === 0 ? "None" : String(n)} onPress={() => { if (rhythm.perWeek !== n) set({ restDaysPerWeek: n }, "Rest days saved."); }} />)}
+      </Row>
+      <Btn label="Pick other days" disabled={rhythm.perWeek === 0} onPress={async () => { if (await act(() => wa.shuffleRest(), "New rest days picked.")) reload(); }} />
     </Box>
   );
 }
@@ -71,8 +113,8 @@ function Limits({ settings: s, set, act, reload }) {
     <View style={{ flex: 1, minWidth: 110, gap: 3 }}><Dim>{label}</Dim><Input value={f[k]} onChangeText={(v) => setF({ ...f, [k]: v })} keyboardType={kb} /></View>
   );
   return (
-    <Box title="Limits" subtitle="The daily limit is spread over the sending window with a random gap each time.">
-      <Row>{field("dailyLimit", "Messages a day", "number-pad")}{field("from", "From (10:00)")}{field("to", "To (19:00)")}</Row>
+    <Box title="Limits" subtitle="Each day picks its own number of messages (a little under the limit), its own start and stop time inside the window, and a different gap after every message, with a longer break now and then.">
+      <Row>{field("dailyLimit", "Most messages a day", "number-pad")}{field("from", "From (10:00)")}{field("to", "To (19:00)")}</Row>
       <Row>{field("gapMin", "Shortest gap (min)", "number-pad")}{field("gapMax", "Longest gap (min)", "number-pad")}</Row>
       <Btn kind="primary" label="Save limits" onPress={save} />
       <Toggle label="Test mode (ignores the limits)" value={s.testMode} onChange={(v) => set({ testMode: v }, v ? "Test mode is on." : "Test mode is off.")} />
@@ -113,7 +155,7 @@ function TestSend({ sheets, reload }) {
       <Input value={phone} onChangeText={setPhone} placeholder="Number, e.g. 98100 12345" keyboardType="phone-pad" />
       <Row>
         <Btn kind="primary" label="Send a test to this number" onPress={() => go(true)} disabled={!phone.trim()} />
-        <Btn label="Send to the next person now" onPress={async () => { if (await ask("Send to the next person?", "This messages the next real person in line right now, ignoring the window and the gap.", "Send")) go(false); }} />
+        <Btn label="Send to the next person now" onPress={async () => { if (await ask("Send to the next person?", "This messages one of the next real people in line (picked at random) right now, ignoring the window, the gap and the rest days.", "Send")) go(false); }} />
       </Row>
       {sheets.length > 1 ? <Row>{sheets.map((s) => <Btn key={s._id} label={`${sheet === s._id ? "✓ " : ""}${s.name}`} onPress={() => setSheet(sheet === s._id ? "" : s._id)} />)}</Row> : null}
       {note ? <Dim>{note}</Dim> : null}

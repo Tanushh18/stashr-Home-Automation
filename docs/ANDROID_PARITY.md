@@ -21,6 +21,7 @@ round, ⛔ = not on the app (with the reason).
 | WhatsApp sender: **next message time** per sheet and for the whole sender | 🆕 |
 | WhatsApp sender: **steps of every message** and who stopped a failed one (server, tablet, WhatsApp) | 🆕 |
 | WhatsApp sender: **use a saved picture** from another sheet | 🆕 |
+| WhatsApp sender: **rest days** (this week and next week with the days off, today's random plan, rest days a week, "Pick other days") | 🆕 Rest days box under "Sending is on" |
 | **App updates** (who is offered each new APK) | 🆕 App updates (administrators) |
 | **Admin panel** (users, features, delete account) | 🆕 Admin (administrators) |
 | **Apps** (download Hub, TV, Location, Cast) | 🆕 Apps screen opens each download |

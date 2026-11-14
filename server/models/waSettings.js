@@ -13,7 +13,13 @@ const waSettingsSchema = new mongoose.Schema({
     reportNowDay: { type: String, default: "" },                  // set by "Send the report now": that day's report goes out at once
     reportEnabled: { type: Boolean, default: true },              // a WhatsApp report each night when the day's sending is done
     reportNumbers: { type: [String], default: ["918130483894", "919310994032"] },
-    testMode: { type: Boolean, default: false },                  // ignores the window, the daily limit and the gap (for testing)
+    testMode: { type: Boolean, default: false },                  // ignores the window, the daily limit, the gap and the rest days (for testing)
+    // Rest days: each week this many days are picked at random when nothing goes out (see utils/waRhythm.js).
+    restDaysPerWeek: { type: Number, default: 2, min: 0, max: 3 },
+    // The picked weeks, oldest first (the last 8 are kept, so a new week can avoid the days of the weeks before it).
+    restWeeks: { type: [{ week: String, days: [String], perWeek: Number, count: Number, _id: false }], default: [] },
+    // Today's own plan: how many messages and when sending starts and stops (minutes since midnight), picked once a day.
+    dayPlan: { type: new mongoose.Schema({ day: String, target: Number, start: Number, end: Number, basis: String }, { _id: false }), default: null },
     nextDueAt: { type: Date, default: null },
     lastTickAt: { type: Date, default: null },
     status: { type: String, default: "" }                         // what the sender is doing now, shown on the website
