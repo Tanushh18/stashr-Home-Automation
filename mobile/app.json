@@ -3,7 +3,7 @@
     "name": "Stashr",
     "slug": "aurelia-vault",
     "scheme": "stashr",
-    "version": "2.6.3",
+    "version": "2.7.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",

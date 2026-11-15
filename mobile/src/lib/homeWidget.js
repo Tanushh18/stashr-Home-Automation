@@ -4,7 +4,7 @@ import { home } from "./homeApi";
 import { money } from "./moneyApi";
 import { healthItems } from "./smartHome";
 import { widgetSnapshot, scenesOf, moneyLines, netLines } from "./widgetText";
-import { setSnapshot, widgetCount, widgetCounts, actionKey, setShortcuts, requestPin, widgetSupported } from "../../modules/stashr-widget";
+import { setSnapshot, widgetCount, widgetCounts, actionKey, setShortcuts, requestPin, pinShortcut, widgetSupported } from "../../modules/stashr-widget";
 
 /*
  * The Stashr home-screen widgets (Home, Scenes, TV remote, Quick actions, Money, Network) and the long-press shortcuts.
@@ -13,7 +13,7 @@ import { setSnapshot, widgetCount, widgetCounts, actionKey, setShortcuts, reques
  * every 15 minutes in the background, and only while a widget is placed.
  */
 export const HOME_WIDGET_TASK = "stashr-home-widget";
-export { widgetSupported, widgetCount, widgetCounts, actionKey, requestPin };
+export { widgetSupported, widgetCount, widgetCounts, actionKey, requestPin, pinShortcut };
 
 /** Long-press shortcuts. Each link is a route in this app; the lock screen still comes first when the vault is locked. */
 export const SHORTCUTS = [

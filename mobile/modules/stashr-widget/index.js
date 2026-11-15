@@ -45,3 +45,9 @@ export const setShortcuts = (list) => {
   if (!native) return false;
   try { return Boolean(native.setShortcuts(JSON.stringify(list || []))); } catch (e) { return false; }
 };
+
+/** Asks the launcher to put one stashr:// button on the home screen (Android 8+): { id, label, url, icon }. false when it cannot. */
+export const pinShortcut = ({ id, label, url, icon }) => {
+  if (!native) return false;
+  try { return Boolean(native.pinShortcut(String(id), String(label), String(url), String(icon || "home"))); } catch (e) { return false; }
+};

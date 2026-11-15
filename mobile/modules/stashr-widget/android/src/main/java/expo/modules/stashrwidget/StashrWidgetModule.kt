@@ -23,6 +23,7 @@ class StashrWidgetModule : Module() {
     "camera" -> R.drawable.stashr_sc_camera
     "money" -> R.drawable.stashr_sc_money
     "key" -> R.drawable.stashr_sc_key
+    "lock" -> R.drawable.stashr_sc_lock
     else -> R.drawable.stashr_sc_home
   }
 
@@ -63,6 +64,23 @@ class StashrWidgetModule : Module() {
       val manager = AppWidgetManager.getInstance(context)
       if (!manager.isRequestPinAppWidgetSupported) return@Function false
       manager.requestPinAppWidget(ComponentName(context, StashrHomeWidget::class.java), null, null)
+    }
+
+    // One button on the home screen (a pinned shortcut): the launcher asks the person first. Only stashr:// links, only this app.
+    Function("pinShortcut") { id: String, label: String, url: String, icon: String ->
+      if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return@Function false
+      val manager = context.getSystemService(ShortcutManager::class.java) ?: return@Function false
+      if (!manager.isRequestPinShortcutSupported) return@Function false
+      require(url.startsWith("stashr://")) { "Shortcuts only open stashr:// links." }
+      val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).setPackage(context.packageName)
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+      val info = ShortcutInfo.Builder(context, id.take(60))
+        .setShortLabel(label.take(24))
+        .setLongLabel(label.take(40))
+        .setIcon(Icon.createWithResource(context, icon(icon)))
+        .setIntent(intent)
+        .build()
+      manager.requestPinShortcut(info, null)
     }
 
     // Long-press shortcuts on the Stashr icon: [{ id, label, url, icon }]. Each opens a stashr:// link inside this app only.

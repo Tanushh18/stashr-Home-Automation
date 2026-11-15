@@ -133,6 +133,8 @@ class MainActivity : Activity() {
 
         body.addView(permissionsCard())
 
+        body.addView(remoteLockCard())
+
         val room = ui.card("Room Lab", "Kamre ki pehchan: har kamre mein khade hoke phone ko sikhao, phir Stashr bata sakta hai ki aap kaun se kamre mein ho.")
         room.addView(ui.primary("Room Lab kholo") { startActivity(Intent(this, RoomLabActivity::class.java)) })
         body.addView(room)
@@ -157,6 +159,21 @@ class MainActivity : Activity() {
 
         body.addView(ui.danger("Disconnect") { confirmDisconnect() })
         body.addView(ui.dim("Version ${BuildConfig.VERSION_NAME}"))
+    }
+
+    /** Remote lock: the owner allows it here, once, through Android's own screen. Off by default. */
+    private fun remoteLockCard(): View {
+        val on = com.tanush.stashr.where.work.RemoteLock.isOn(this)
+        val card = ui.card("Remote lock", if (on) "ON: the Lock button in Stashr can lock this phone's screen." else "OFF: Stashr cannot lock this phone.")
+        card.addView(ui.dim("Lets you press Lock in Stashr on your other phone to lock this one's screen. It can only lock the screen: it cannot erase, reset or read anything. You can switch it off here any time."))
+        val last = prefs.lastLockAt
+        if (last > 0) card.addView(ui.dim("Last request: " + Logic.ago(last) + " · " + if (prefs.lastLockOk) "locked" else "not locked (${prefs.lastLockReason})"))
+        if (on) {
+            card.addView(ui.quiet("Switch off Remote lock") { com.tanush.stashr.where.work.RemoteLock.turnOff(this); render() })
+        } else {
+            card.addView(ui.primary("Allow Remote lock") { open(com.tanush.stashr.where.work.RemoteLock.askIntent(this)) })
+        }
+        return card
     }
 
     /** The same four items the website's Health tab checks for this app, in the same order (see core/Health.kt). */

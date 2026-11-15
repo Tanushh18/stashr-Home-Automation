@@ -6,6 +6,7 @@ import { GhostButton } from "../components/ui";
 import { useTheme } from "../lib/theme";
 import { home } from "../lib/homeApi";
 import { actionKey } from "../lib/homeWidget";
+import { lockPlan } from "../lib/lockText";
 
 /*
  * Runs a one-tap action from a Stashr home-screen widget (Scenes, TV remote, Quick actions).
@@ -23,6 +24,7 @@ function planOf(p, key) {
     return { kind: "tv", type: p.type, args: p.type === "key" ? { key: p.a } : { action: p.a }, label: `TV: ${TV_WORDS[p.a]}` };
   }
   if (p.do === "camera") return { kind: "camera", label: "Taking a camera photo" };
+  if (p.do === "lock") { const l = lockPlan(p); return l ? { kind: "lock", id: l.id, label: "Locking the phone" } : { error: "This lock button is not valid. Add it again from Smart home → Lock a phone." }; }
   return { error: "This widget button is not known to this version of Stashr." };
 }
 
@@ -32,6 +34,11 @@ async function run(plan) {
     const sent = Number(r && r.sent) || 0;
     if (!sent) throw new Error("No device in this scene could take the command (the TV or tablet may be offline).");
     return `Sent ${sent} command${sent > 1 ? "s" : ""} to your devices. They run within a few seconds.`;
+  }
+  if (plan.kind === "lock") {
+    // The server only says the lock was SENT; the phone confirms later (Smart home → Lock a phone shows when it did).
+    const r = await home.lockPhone(plan.id);
+    return `Lock sent to ${(r && r.device) || "the phone"}. It locks within a few seconds if Remote lock is on there.`;
   }
   const { devices } = await home.devices();
   if (plan.kind === "tv") {

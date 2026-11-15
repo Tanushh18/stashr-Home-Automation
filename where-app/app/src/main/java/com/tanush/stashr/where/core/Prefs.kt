@@ -44,6 +44,10 @@ class Prefs(ctx: Context) {
 
     /** Always-on mode: a foreground service keeps location working in the background. On by default for every phone; the person can switch it off on this phone only. */
     var alwaysOn: Boolean get() = p.getBoolean("alwaysOn", true); set(v) = p.edit().putBoolean("alwaysOn", v).apply()
+    /** What happened to the last remote lock request (sent to Stashr with the next report). */
+    var lastLockAt: Long get() = p.getLong("lastLockAt", 0L); set(v) = p.edit().putLong("lastLockAt", v).apply()
+    var lastLockOk: Boolean get() = p.getBoolean("lastLockOk", false); set(v) = p.edit().putBoolean("lastLockOk", v).apply()
+    var lastLockReason: String get() = p.getString("lastLockReason", "") ?: ""; set(v) = p.edit().putString("lastLockReason", v).apply()
 
     /** Room location: the checks also carry what this phone hears (Wi-Fi networks, optionally Bluetooth), so Stashr can say which room it is in. */
     var roomOn: Boolean get() = p.getBoolean("roomOn", false); set(v) = p.edit().putBoolean("roomOn", v).apply()

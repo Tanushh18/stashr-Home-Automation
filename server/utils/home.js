@@ -123,7 +123,7 @@ function scrub(value, depth = 0) {
  * What an app says about its own state ("health"): which permissions and switches it has and its last error. Only these keys, with
  * these types, are kept, so the website can show a checklist without trusting anything else in the report.
  */
-const HEALTH_BOOLS = ["overlay", "accessibility", "batteryUnrestricted", "notifications", "camera", "microphone", "gpsEnabled", "usbStorage", "wifi", "serverReachable"];
+const HEALTH_BOOLS = ["overlay", "accessibility", "batteryUnrestricted", "notifications", "camera", "microphone", "gpsEnabled", "usbStorage", "wifi", "serverReachable", "remoteLock"];
 function cleanHealth(h) {
     if (!h || typeof h !== "object" || Array.isArray(h)) return undefined;
     const out = { v: 1 };
@@ -133,6 +133,10 @@ function cleanHealth(h) {
     for (const k of ["versionCode", "sdk"]) if (Number.isFinite(Number(h[k]))) out[k] = Math.round(Number(h[k]));
     if (typeof h.model === "string") out.model = h.model.slice(0, 40);
     if (typeof h.brand === "string") out.brand = h.brand.replace(/[^\w .-]/g, "").slice(0, 30);
+    // The phone's own word on the last remote lock: when, and whether it really locked (or why not).
+    if (h.lastLock && typeof h.lastLock === "object" && Number.isFinite(Number(h.lastLock.at))) {
+        out.lastLock = { at: Math.round(Number(h.lastLock.at)), ok: h.lastLock.ok === true, reason: String(h.lastLock.reason || "").slice(0, 80) };
+    }
     if (h.lastError && typeof h.lastError === "object" && typeof h.lastError.text === "string" && Number.isFinite(Number(h.lastError.at))) {
         out.lastError = { at: Math.round(Number(h.lastError.at)), where: String(h.lastError.where || "").slice(0, 40), text: h.lastError.text.slice(0, 400) };
     }

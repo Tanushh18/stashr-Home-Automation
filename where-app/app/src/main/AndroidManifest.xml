@@ -61,6 +61,11 @@
         <service android:name=".work.StatusService" android:exported="false" android:foregroundServiceType="location|specialUse">
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="Shows that Stashr Location is connected to the family's own home server" />
         </service>
+        <!-- Remote lock: lets Stashr lock this phone's screen when the owner presses Lock. Off until the owner allows it on this phone. -->
+        <receiver android:name=".work.LockAdmin" android:exported="true" android:permission="android.permission.BIND_DEVICE_ADMIN">
+            <meta-data android:name="android.app.device_admin" android:resource="@xml/lock_admin" />
+            <intent-filter><action android:name="android.app.action.DEVICE_ADMIN_ENABLED" /></intent-filter>
+        </receiver>
         <service android:name=".work.FcmService" android:exported="false">
             <intent-filter>
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />

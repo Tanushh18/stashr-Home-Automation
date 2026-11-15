@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { home } from "../../lib/homeApi";
+import { lockLink, lockState, remoteLockLine } from "../../lib/lockText";
+import { actionKey, pinShortcut, widgetSupported } from "../../lib/homeWidget";
 import {
   STATE_LABEL, TAG_LABEL, ago, batteryOf, fmtBytes, groupByRoom, lanName, nowPlaying, signalWord, splitStale, stateOf,
 } from "../../lib/smartHome";
@@ -201,6 +203,49 @@ function PeopleCard({ people }) {
   );
 }
 
+/** Lock another family phone's screen: a button here, and a one-tap Lock icon for this phone's home screen. */
+function LockPhonesCard({ phones, reload }) {
+  const act = useAct();
+  const lockable = phones.filter((p) => p.status?.agent === "stashr-where");
+  if (!lockable.length) return null;
+  return (
+    <Box title="Lock a phone" subtitle="Lock another family phone's screen from here. That phone must have Remote lock switched on in Stashr Location (once, on that phone).">
+      {lockable.map((p) => {
+        const st = lockState(p.status?.health);
+        return (
+          <View key={p.id} style={{ gap: 4, paddingVertical: 6 }}>
+            <Txt bold>{p.name}{p.person && p.person !== p.name ? ` · ${p.person}` : ""}</Txt>
+            <Dim>{p.online ? `reported ${ago(p.lastSeen)}` : `last report ${ago(p.lastSeen)}`} · {remoteLockLine(st)}</Dim>
+            {st.last ? <Dim>Last lock request {st.last.ageMin < 1 ? "just now" : `${st.last.ageMin} min ago`}: {st.last.ok ? "locked ✓" : `not locked: ${st.last.why}`}</Dim> : null}
+            <Row>
+              <Btn
+                label="🔒 Lock now"
+                kind="danger"
+                disabled={st.remote === "off"}
+                onPress={async () => {
+                  if (!(await ask(`Lock ${p.name}?`, "Its screen locks within a few seconds. Whoever uses it then needs the PIN or fingerprint.", "Lock", true))) return;
+                  if (await act(() => home.lockPhone(p.id), `Lock sent to ${p.name}. The phone confirms when it has locked.`)) setTimeout(reload, 8000);
+                }}
+              />
+              {widgetSupported ? (
+                <Btn
+                  label="Lock button on my home screen"
+                  onPress={() => {
+                    const key = actionKey();
+                    if (!key) return;
+                    // The launcher asks before it places the icon.
+                    pinShortcut({ id: `lock-${p.id}`, label: `Lock ${p.name}`.slice(0, 24), url: lockLink(p.id, key), icon: "lock" });
+                  }}
+                />
+              ) : null}
+            </Row>
+          </View>
+        );
+      })}
+    </Box>
+  );
+}
+
 function PhonesCard({ phones, reload }) {
   const act = useAct();
   const [who, setWho] = useState({});
@@ -340,6 +385,7 @@ export default function Devices({ ctx }) {
       ))}
       <Boundary name="Family locations"><LocationsCard settings={settings} save={save} /></Boundary>
       <Boundary name="Live map"><LiveMapCard /></Boundary>
+      <Boundary name="Lock a phone"><LockPhonesCard phones={phones} reload={reload} /></Boundary>
       <Boundary name="Family phones"><PhonesCard phones={phones} reload={reload} /></Boundary>
       <Boundary name="Link"><LinkCard /></Boundary>
     </>

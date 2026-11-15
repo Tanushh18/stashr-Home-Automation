@@ -35,6 +35,18 @@ placed) and *Stashr Network* (last speed test, devices on the Wi-Fi, health of t
 Buttons that act open `stashr://action?…&k=<key>`: the app asks for the unlock, checks the per-install secret key every widget button
 carries (so no other app can fire them), sends only whitelisted commands and shows what the server answered (`src/app/action.js`).
 
+## Remote lock (Stashr 2.7.0, Stashr Location 1.11.0)
+Lock a family phone's screen from another phone or the website's server. Smart home → Devices → **Lock a phone** lists the phones that run Stashr
+Location, with **Lock now** and **Lock button on my home screen** (a pinned icon that locks that phone in one tap, behind the unlock).
+How it works: the server (`POST /home/devices/:id/lock`) sends a Firebase push `{type:"lock"}` with a 2-minute life; Stashr Location locks the screen
+through Android's device-admin *force-lock* policy, which is the only policy it asks for (it cannot erase, reset or read anything). The phone's owner
+switches it on once, on that phone: Stashr Location → Remote lock → Allow. Off by default; switch it off the same way.
+The server only says the lock was *sent*. The phone reports `health.remoteLock` and `health.lastLock {at, ok, reason}` (reasons: `admin_off`,
+`stale`, `not_linked`, `lock_failed`) with its next report, which it triggers right after the attempt, so the app shows "locked ✓" or why not.
+A push that sat in a queue for over 2 minutes is ignored. Needs the Firebase key on the server (`STASHR_FIREBASE_KEY`) and the phone's push address
+(it appears after Stashr Location 1.9+ has run once). Tests: `server/tests/remoteLock.test.js`, `where-app` `LockLogicTest`, `mobile/scripts/lockText.test.mjs`.
+Not possible: answering or talking on a SIM call from a second phone (Android does not let apps carry call audio).
+
 ## Health check
 Every app (Hub 1.9, TV 1.3, Location 1.5) sends `status.health` with each report: app version, Android version, "Display over other
 apps", accessibility, battery limits, notifications, camera and microphone (tablet), location "all the time" (phone), USB drive (TV), and its
