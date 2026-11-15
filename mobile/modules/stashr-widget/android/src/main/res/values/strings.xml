@@ -1,4 +1,5 @@
 <resources>
   <string name="stashr_home_widget_label">Stashr Home</string>
+  <string name="stashr_home_widget_title">STASHR · HOME</string>
   <string name="stashr_home_widget_description">Who is home, who is on the way, the weather and the TV</string>
 </resources>

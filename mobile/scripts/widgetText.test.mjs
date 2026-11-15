@@ -3,17 +3,17 @@ import assert from "node:assert/strict";
 import { comingLine, peopleLine, weatherLine, tvLine, widgetSnapshot } from "../src/lib/widgetText.js";
 
 test("coming: minutes, 'almost there', companions and at most two people", () => {
-  assert.equal(comingLine([{ person: "Papa", minutes: 10 }]), "🚗 Papa 10 min mein aa rahe hain");
-  assert.equal(comingLine([{ person: "Mummy", minutes: 1, with: ["Riya"] }]), "🚗 Mummy + Riya bas pahunchne wale hain");
-  assert.equal(comingLine([{ person: "A", minutes: 5 }, { person: "B", minutes: 7 }, { person: "C", minutes: 9 }]), "🚗 A 5 min mein aa rahe hain · B 7 min mein aa rahe hain");
+  assert.equal(comingLine([{ person: "Papa", minutes: 10 }]), "Papa · 10 min");
+  assert.equal(comingLine([{ person: "Mummy", minutes: 1, with: ["Riya"] }]), "Mummy + Riya · arriving");
+  assert.equal(comingLine([{ person: "A", minutes: 5 }, { person: "B", minutes: 7 }, { person: "C", minutes: 9 }]), "A · 5 min  B · 7 min");
   assert.equal(comingLine([]), "");
   assert.equal(comingLine(null), "");
 });
 
 test("people: everyone home, nobody home, mixed, none", () => {
-  assert.equal(peopleLine([{ person: "Mummy", home: true }, { person: "Papa", home: true }]), "🏠 Everyone is home: Mummy, Papa");
-  assert.equal(peopleLine([{ person: "Tanush", home: false }]), "🏠 Nobody is home · Out: Tanush");
-  assert.equal(peopleLine([{ person: "Mummy", home: true }, { person: "Tanush", home: false }]), "🏠 Home: Mummy · Out: Tanush");
+  assert.equal(peopleLine([{ person: "Mummy", home: true }, { person: "Papa", home: true }]), "All in · Mummy, Papa");
+  assert.equal(peopleLine([{ person: "Tanush", home: false }]), "Nobody · out: Tanush");
+  assert.equal(peopleLine([{ person: "Mummy", home: true }, { person: "Tanush", home: false }]), "Mummy · out: Tanush");
   assert.equal(peopleLine(undefined), "");
 });
 
@@ -25,9 +25,9 @@ test("weather: city short name, range, rain only when likely", () => {
 });
 
 test("tv: off, standby, on with app and title", () => {
-  assert.equal(tvLine([{ name: "Living room", online: false }]), "📺 Living room: off");
-  assert.equal(tvLine([{ name: "Living room", online: true, screen: "off" }]), "📺 Living room: standby");
-  assert.equal(tvLine([{ name: "Living room", online: true, screen: "on", app: "YouTube", title: "Song" }]), "📺 Living room: on · YouTube · Song");
+  assert.equal(tvLine([{ name: "Living room", online: false }]), "Living room · off");
+  assert.equal(tvLine([{ name: "Living room", online: true, screen: "off" }]), "Living room · standby");
+  assert.equal(tvLine([{ name: "Living room", online: true, screen: "on", app: "YouTube", title: "Song" }]), "Living room · on · YouTube · Song");
   assert.equal(tvLine([]), "");
 });
 

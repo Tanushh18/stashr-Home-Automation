@@ -5,26 +5,26 @@
 
 const clean = (v) => String(v == null ? "" : v).replace(/\s+/g, " ").trim();
 
-/** "Papa 10 minute mein aa rahe hain" — the same words the tablet and the app use. */
+/** "Papa · 10 min" (the board's ETA row); "Papa · arriving" when a minute or less away. */
 export function comingLine(list) {
   const rows = (Array.isArray(list) ? list : []).filter((c) => c && clean(c.person));
   if (!rows.length) return "";
-  return "🚗 " + rows.slice(0, 2).map((c) => {
+  return rows.slice(0, 2).map((c) => {
     const who = [clean(c.person), ...(Array.isArray(c.with) ? c.with.map(clean).filter(Boolean) : [])].join(" + ");
     const m = Number(c.minutes);
-    return !Number.isFinite(m) || m <= 1 ? `${who} bas pahunchne wale hain` : `${who} ${Math.round(m)} min mein aa rahe hain`;
-  }).join(" · ");
+    return !Number.isFinite(m) || m <= 1 ? `${who} · arriving` : `${who} · ${Math.round(m)} min`;
+  }).join("  ");
 }
 
-/** "Home: Mummy, Papa · Out: Tanush" */
+/** "Mummy, Papa · out: Tanush" (the board's HOME row). */
 export function peopleLine(people) {
   const rows = (Array.isArray(people) ? people : []).filter((p) => p && clean(p.person));
   if (!rows.length) return "";
   const home = rows.filter((p) => p.home).map((p) => clean(p.person));
   const out = rows.filter((p) => !p.home).map((p) => clean(p.person));
-  if (!out.length) return `🏠 Everyone is home: ${home.join(", ")}`;
-  if (!home.length) return `🏠 Nobody is home · Out: ${out.join(", ")}`;
-  return `🏠 Home: ${home.join(", ")} · Out: ${out.join(", ")}`;
+  if (!out.length) return `All in · ${home.join(", ")}`;
+  if (!home.length) return `Nobody · out: ${out.join(", ")}`;
+  return `${home.join(", ")} · out: ${out.join(", ")}`;
 }
 
 /** "Gurugram 31°C · clear ☀️ · 24–33°C · ☔ 60%" (rain only when it is likely). */
@@ -38,13 +38,13 @@ export function weatherLine(w) {
   return parts.join(" · ");
 }
 
-/** "📺 Living room: on · YouTube" for the first TV. */
+/** "Living room · on · YouTube" for the first TV (the board's TV row). */
 export function tvLine(tvs) {
   const t = (Array.isArray(tvs) ? tvs : [])[0];
   if (!t) return "";
   const name = clean(t.name) || "TV";
   const state = !t.online ? "off" : t.screen === "off" ? "standby" : ["on", clean(t.app), clean(t.title)].filter(Boolean).join(" · ");
-  return `📺 ${name}: ${state}`;
+  return `${name} · ${state}`;
 }
 
 /** The whole snapshot the widget stores. `now` is when it was made. */
@@ -52,7 +52,7 @@ export function widgetSnapshot(d, now = Date.now()) {
   const dash = d || {};
   return {
     coming: comingLine(dash.coming),
-    people: peopleLine(dash.people) || "🏠 Give a Wi-Fi device a person in Smart home",
+    people: peopleLine(dash.people) || "Give a Wi-Fi device a person in Smart home",
     weather: weatherLine(dash.weather),
     tv: tvLine(dash.tvs),
     updatedAt: now

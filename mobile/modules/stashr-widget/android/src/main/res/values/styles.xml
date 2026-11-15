@@ -1,0 +1,30 @@
+<resources>
+  <!-- One row of the departure board: a short amber label and its value. -->
+  <style name="StashrBoardRow">
+    <item name="android:layout_width">match_parent</item>
+    <item name="android:layout_height">wrap_content</item>
+    <item name="android:orientation">horizontal</item>
+    <item name="android:paddingTop">3dp</item>
+    <item name="android:paddingBottom">3dp</item>
+  </style>
+  <style name="StashrBoardLabel">
+    <item name="android:layout_width">44dp</item>
+    <item name="android:layout_height">wrap_content</item>
+    <item name="android:textColor">#F5C86A</item>
+    <item name="android:textSize">11sp</item>
+    <item name="android:fontFamily">monospace</item>
+    <item name="android:letterSpacing">0.12</item>
+    <item name="android:textStyle">bold</item>
+    <item name="android:maxLines">1</item>
+  </style>
+  <style name="StashrBoardValue">
+    <item name="android:layout_width">0dp</item>
+    <item name="android:layout_height">wrap_content</item>
+    <item name="android:layout_weight">1</item>
+    <item name="android:textColor">#F2F0E6</item>
+    <item name="android:textSize">13sp</item>
+    <item name="android:fontFamily">monospace</item>
+    <item name="android:maxLines">2</item>
+    <item name="android:ellipsize">end</item>
+  </style>
+</resources>
