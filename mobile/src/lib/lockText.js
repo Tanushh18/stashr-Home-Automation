@@ -34,7 +34,7 @@ export function lockState(health, now = Date.now()) {
 /** The line under the phone's name. */
 export function remoteLockLine(state) {
   if (state.remote === "on") return "Remote lock is on";
-  // The phone's last report can be old (it reports every few minutes): say so, and let the person try anyway.
-  if (state.remote === "off") return "Remote lock shows OFF in its last report. If you just switched it on, wait a minute; you can also press Lock to try";
-  return "Remote lock: not reported yet (update Stashr Location on that phone to see it)";
+  // No Lock button is shown until the phone itself says Remote lock is on.
+  if (state.remote === "off") return "Remote lock is not switched on. On that phone: Stashr Location → Remote lock → Allow";
+  return "Remote lock: not reported yet. Update Stashr Location on that phone (1.11.1 or newer), then switch Remote lock on there";
 }

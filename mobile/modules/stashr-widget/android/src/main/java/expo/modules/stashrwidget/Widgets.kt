@@ -47,6 +47,8 @@ class StashrPhonesWidget : AppWidgetProvider() {
           v.setOnClickPendingIntent(LOCKS[i], Board.action(context, "do=lock&id=$id", 700 + i))
         } else v.setViewVisibility(LOCKS[i], View.GONE)
       }
+      // Never loaded -> "open Stashr"; loaded but nobody has Remote lock on -> say how to switch it on.
+      v.setTextViewText(R.id.phones_empty, if (o?.has("phones") == true) "No phone has Remote lock on yet. On a phone: Stashr Location → Remote lock → Allow" else "Open Stashr to load your phones")
       v.setViewVisibility(R.id.phones_empty, if (n == 0) View.VISIBLE else View.GONE)
       v.setOnClickPendingIntent(R.id.widget_root, Board.link(context, "stashr://home?tab=devices", 709))
       Board.clock(context, v, R.id.widget_updated, o)

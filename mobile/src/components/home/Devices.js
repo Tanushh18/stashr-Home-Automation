@@ -206,10 +206,19 @@ function PeopleCard({ people }) {
 /** Lock another family phone's screen: a button here, and a one-tap Lock icon for this phone's home screen. */
 function LockPhonesCard({ phones, reload }) {
   const act = useAct();
-  const lockable = phones.filter((p) => p.status?.agent === "stashr-where");
-  if (!lockable.length) return null;
+  const withLocation = phones.filter((p) => p.status?.agent === "stashr-where");
+  // Only phones that have Remote lock switched on are listed: a phone without it cannot be locked, so it is not shown here.
+  const lockable = withLocation.filter((p) => lockState(p.status?.health).remote === "on");
+  if (!withLocation.length) return null;
+  if (!lockable.length) {
+    return (
+      <Box title="Lock a phone" subtitle="No phone has Remote lock switched on yet.">
+        <Dim>On the phone you want to be able to lock: open Stashr Location → Remote lock → Allow (needs Stashr Location 1.11.1 or newer). It then appears here.</Dim>
+      </Box>
+    );
+  }
   return (
-    <Box title="Lock a phone" subtitle="Lock another family phone's screen from here. That phone must have Remote lock switched on in Stashr Location (once, on that phone).">
+    <Box title="Lock a phone" subtitle="Lock another family phone's screen from here. Only phones with Remote lock switched on are listed.">
       {lockable.map((p) => {
         const st = lockState(p.status?.health);
         return (

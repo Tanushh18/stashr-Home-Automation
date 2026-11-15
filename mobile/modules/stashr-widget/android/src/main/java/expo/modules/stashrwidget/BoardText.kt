@@ -72,14 +72,15 @@ internal object BoardText {
     return "${round(down)}↓ ${round(num(s, "up") ?: 0.0)}↑ · ${round(num(s, "ping") ?: 0.0)} ms"
   }
 
-  /** The family phones for the Phones widget: [{ id, line, canLock }], at most three. "Tanush A38 · 87%⚡ · online". */
+  /** The phones for the Phones widget (only those with Remote lock on): [{ id, line, canLock }], at most three. "Tanush A38 · 87%⚡ · online". */
   fun phonesOf(a: JSONArray?): JSONArray {
     val out = JSONArray()
     for (i in 0 until (a?.length() ?: 0)) {
       val p = a?.optJSONObject(i) ?: continue
       val id = clean(p.optString("id", ""))
       val name = clean(p.optString("name", ""))
-      if (id.isEmpty() || name.isEmpty() || out.length() >= 3) continue
+      // only phones that have Remote lock switched on are listed
+      if (id.isEmpty() || name.isEmpty() || out.length() >= 3 || !p.optBoolean("canLock")) continue
       val bat = num(p, "battery")
       val parts = mutableListOf(name.take(16))
       if (bat != null) parts.add("${round(bat)}%${if (p.optBoolean("charging")) "⚡" else ""}")

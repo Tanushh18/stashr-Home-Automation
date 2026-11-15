@@ -46,14 +46,14 @@ class BoardTextTest {
     assertEquals(0, BoardText.scenesOf(null).length())
   }
 
-  @Test fun phonesNameBatteryBoltOnlineAtMostThreeAndLockOnlyWhenItCanWork() {
+  @Test fun phonesOnlyThoseWithRemoteLockOnNameBatteryBoltOnlineAtMostThree() {
     val a = "a".repeat(24)
-    val r = BoardText.phonesOf(arr("""[{"id":"$a","name":"Tanush A38","online":true,"battery":87.4,"charging":true,"canLock":true},{"id":"${"b".repeat(24)}","name":"F21 Pro","online":false,"canLock":false},{"id":"${"c".repeat(24)}","name":"Tablet test","online":true,"battery":100},{"id":"${"d".repeat(24)}","name":"Fourth","online":true}]"""))
+    val r = BoardText.phonesOf(arr("""[{"id":"$a","name":"Tanush A38","online":true,"battery":87.4,"charging":true,"canLock":true},{"id":"${"b".repeat(24)}","name":"F21 Pro","online":false,"canLock":false},{"id":"${"c".repeat(24)}","name":"Tablet test","online":true,"battery":100},{"id":"${"d".repeat(24)}","name":"Second","online":false,"canLock":true},{"id":"${"e".repeat(24)}","name":"Third","online":true,"canLock":true},{"id":"${"f".repeat(24)}","name":"Fourth","online":true,"canLock":true}]"""))
     assertEquals(3, r.length())
     assertEquals("Tanush A38 · 87%⚡ · online", r.getJSONObject(0).getString("line"))
-    assertEquals(true, r.getJSONObject(0).getBoolean("canLock"))
-    assertEquals("F21 Pro · offline", r.getJSONObject(1).getString("line"))
-    assertEquals(false, r.getJSONObject(2).getBoolean("canLock"))
+    assertEquals("Second · offline", r.getJSONObject(1).getString("line"))
+    assertEquals("Third · online", r.getJSONObject(2).getString("line"))
+    assertEquals(0, BoardText.phonesOf(arr("""[{"id":"${"b".repeat(24)}","name":"F21","online":true,"canLock":false}]""")).length())
     assertEquals(0, BoardText.phonesOf(null).length())
   }
 

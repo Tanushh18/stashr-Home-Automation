@@ -433,13 +433,13 @@ async function buildDashboardNow(owner) {
         const p = homeRouter.publicDevice(d);
         return { name: p.name, online: p.online, screen: (p.status || {}).screen || "", app: ((p.status || {}).app || {}).label || "", title: ((p.status || {}).media || {}).title || "" };
     });
-    // The family phones, for the phone widgets: who is online, battery, and Remote lock as the phone last reported it (it can be a few minutes old, so the
-    // Lock button is offered for every phone that runs Stashr Location and the phone itself decides; a stale 'off' must never hide it).
+    // The family phones, for the phone widgets: who is online, battery, and Remote lock as the phone last reported it (so the
+    // Lock button is offered ONLY for a phone that says Remote lock is on (Stashr Location 1.11.1 reports the moment it is switched on or off).
     const phones = devices.filter((d) => d.kind === "phone").map((d) => {
         const p = homeRouter.publicDevice(d);
         const st = p.status || {};
         const bat = home.batteryOf(st);
-        return { id: String(d._id), name: p.name, person: p.person || "", online: Boolean(p.online), battery: bat ? bat.pct : null, charging: Boolean(bat && bat.charging), wifi: Boolean(st.wifi), canLock: st.agent === "stashr-where", remoteLock: st.health && typeof st.health.remoteLock === "boolean" ? st.health.remoteLock : null };
+        return { id: String(d._id), name: p.name, person: p.person || "", online: Boolean(p.online), battery: bat ? bat.pct : null, charging: Boolean(bat && bat.charging), wifi: Boolean(st.wifi), canLock: st.agent === "stashr-where" && Boolean(st.health && st.health.remoteLock === true), remoteLock: st.health && typeof st.health.remoteLock === "boolean" ? st.health.remoteLock : null };
     }).slice(0, 6);
     return {
         time: new Date().toISOString(), timezone: s.timezone, weather: w.value, tvs, phones, tvMinutesToday: today,

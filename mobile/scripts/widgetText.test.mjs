@@ -78,18 +78,18 @@ test("network: speed, live Wi-Fi devices only, health wording", () => {
   assert.equal(netLines({}, null, {}).speed, "No speed test yet");
 });
 
-test("phones: name, battery with a charging bolt, online/offline, at most three, Lock only when it can work", () => {
+test("phones: only phones with Remote lock on are listed (name, battery with a charging bolt, online/offline, at most three)", () => {
   const r = phonesOf({ phones: [
     { id: "a".repeat(24), name: "Tanush A38", online: true, battery: 87.4, charging: true, canLock: true },
     { id: "b".repeat(24), name: "F21 Pro", online: false, battery: null, charging: false, canLock: false },
-    { id: "c".repeat(24), name: "Tablet test", online: true, battery: 100, charging: false },
-    { id: "d".repeat(24), name: "Fourth", online: true }
+    { id: "c".repeat(24), name: "Tablet test", online: true, battery: 100 },
+    { id: "d".repeat(24), name: "Second", online: false, canLock: true },
+    { id: "e".repeat(24), name: "Third", online: true, canLock: true },
+    { id: "f".repeat(24), name: "Fourth", online: true, canLock: true }
   ] });
-  assert.equal(r.length, 3);
-  assert.deepEqual(r[0], { id: "a".repeat(24), line: "Tanush A38 · 87%⚡ · online", canLock: true });
-  assert.equal(r[1].line, "F21 Pro · offline");
-  assert.equal(r[1].canLock, false);
-  assert.equal(r[2].canLock, false);                       // not promised unless the server said so
+  assert.deepEqual(r.map((x) => x.line), ["Tanush A38 · 87%⚡ · online", "Second · offline", "Third · online"]);
+  assert.ok(r.every((x) => x.canLock === true));
+  assert.deepEqual(phonesOf({ phones: [{ id: "b".repeat(24), name: "F21 Pro", online: true, canLock: false }] }), []);   // nobody has it on: nothing listed
   assert.deepEqual(phonesOf(null), []);
-  assert.deepEqual(phonesOf({ phones: [{ id: "", name: "x" }, { id: "z", name: "" }] }), []);
+  assert.deepEqual(phonesOf({ phones: [{ id: "", name: "x", canLock: true }, { id: "z", name: "", canLock: true }] }), []);
 });

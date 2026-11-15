@@ -61,12 +61,13 @@ export function widgetSnapshot(d, now = Date.now()) {
 
 /* ───────── the other home-screen widgets (Scenes, TV remote, Money, Network) ───────── */
 
-/** The family phones for the Phones widget: [{ id, line, canLock }], at most three. "Tanush A38 · 87%⚡ · online". */
+/** The phones for the Phones widget: only those with Remote lock on, [{ id, line, canLock }], at most three. "Tanush A38 · 87%⚡ · online". */
 export function phonesOf(dash) {
   const out = [];
   for (const p of Array.isArray(dash && dash.phones) ? dash.phones : []) {
     const id = clean(p && p.id), name = clean(p && p.name);
-    if (!id || !name || out.length >= 3) continue;
+    // only phones that have Remote lock switched on are listed (the others cannot be locked, so they are not shown)
+    if (!id || !name || out.length >= 3 || !p || p.canLock !== true) continue;
     const parts = [name.slice(0, 16)];
     if (p.battery != null && Number.isFinite(Number(p.battery))) parts.push(`${Math.round(Number(p.battery))}%${p.charging ? "⚡" : ""}`);
     parts.push(p.online ? "online" : "offline");

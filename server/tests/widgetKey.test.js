@@ -89,10 +89,12 @@ describe("read-only keys for the home-screen widgets", () => {
         const a38 = phones.find((p) => p.name === "Tanush A38");
         expect(a38).toMatchObject({ online: true, battery: 87, charging: true, wifi: true, canLock: true, remoteLock: true });
         expect(a38.id).toMatch(/^[a-f0-9]{24}$/);
-        // an old "off" report must not hide the button (the phone may have just been switched on): offered, with the state kept for display
-        expect(phones.find((p) => p.name === "F21 Pro")).toMatchObject({ canLock: true, remoteLock: false });
+        // no Lock button where Remote lock is not switched on (the state is kept for display)
+        expect(phones.find((p) => p.name === "F21 Pro")).toMatchObject({ canLock: false, remoteLock: false });
         // a phone in Stashr Hub's phone mode cannot be locked at all
         expect(phones.find((p) => p.name === "Hub phone")).toMatchObject({ canLock: false, remoteLock: null });
+        // an older Stashr Location that reports nothing about Remote lock: no button either
+        await HomeDevice.create({ owner, name: "Old Location", kind: "phone", person: "Y", tokenHash: "p4", lastSeen: new Date(), status: { agent: "stashr-where", battery: 70 } });
     });
 
     test("removing a key stops it at once; someone else cannot remove it; at most ten keys", async () => {
