@@ -4,6 +4,7 @@
   "main": "expo-router/entry",
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",
+    "@expo-google-fonts/plus-jakarta-sans": "^0.4.2",
     "@expo-google-fonts/sora": "^0.4.2",
     "expo": "~57.0.30",
     "expo-background-task": "~57.0.0",

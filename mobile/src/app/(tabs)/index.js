@@ -128,7 +128,7 @@ export default function Vault() {
         <View style={{ width: 10 }} />
         <Bounce onPress={() => router.navigate("/settings")}>
           <LinearGradient colors={theme.brand} style={styles.me}>
-            <Text style={{ color: "#fff", fontFamily: theme.font.display, fontSize: 18 }}>{firstName.charAt(0).toUpperCase()}</Text>
+            <Text style={{ color: theme.onAccent, fontFamily: theme.font.display, fontSize: 18 }}>{firstName.charAt(0).toUpperCase()}</Text>
           </LinearGradient>
         </Bounce>
       </FadeIn>

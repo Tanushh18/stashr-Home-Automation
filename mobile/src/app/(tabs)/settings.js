@@ -215,7 +215,7 @@ export default function Settings() {
             <Card glow style={{ gap: 14 }}>
               <View style={styles.profile}>
                 <LinearGradient colors={theme.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.avatar}>
-                  <Text style={{ color: "#fff", fontFamily: theme.font.displayHeavy, fontSize: 26 }}>{(profile?.name || "?").charAt(0).toUpperCase()}</Text>
+                  <Text style={{ color: theme.onAccent, fontFamily: theme.font.displayHeavy, fontSize: 26 }}>{(profile?.name || "?").charAt(0).toUpperCase()}</Text>
                 </LinearGradient>
                 <View style={{ flex: 1 }}>
                   <Text style={{ color: theme.heading, fontFamily: theme.font.display, fontSize: 19 }}>{profile?.name || "Your vault"}</Text>

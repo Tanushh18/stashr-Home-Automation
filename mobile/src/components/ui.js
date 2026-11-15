@@ -26,10 +26,10 @@ export function Card({ style, children, glow = false }) {
           borderColor: glow ? theme.lineStrong : theme.line,
           padding: 16,
           shadowColor: theme.shadow,
-          shadowOpacity: theme.mode === "dark" ? 0.3 : 0.07,
-          shadowRadius: 10,
-          shadowOffset: { width: 0, height: 3 },
-          elevation: theme.mode === "dark" ? 0 : 2,
+          shadowOpacity: theme.mode === "dark" ? 0 : 0.05,
+          shadowRadius: 12,
+          shadowOffset: { width: 0, height: 4 },
+          elevation: theme.mode === "dark" ? 0 : 1,
         },
         style,
       ]}
@@ -63,6 +63,8 @@ export function Bounce({ onPress, style, outerStyle, children, disabled, haptic 
 /* ── Primary button (solid; `colors[0]` picks the fill) ── */
 export function GradientButton({ title, onPress, loading, disabled, icon, colors, style, small }) {
   const { theme } = useTheme();
+  // Custom fills (e.g. danger) keep white text; the brand fill uses the theme's onAccent colour.
+  const fg = colors ? "#fff" : theme.onAccent;
   return (
     <Bounce onPress={onPress} disabled={disabled || loading} outerStyle={style} style={{ opacity: disabled ? 0.6 : 1 }}>
       <LinearGradient
@@ -72,11 +74,11 @@ export function GradientButton({ title, onPress, loading, disabled, icon, colors
         style={[styles.btn, small && styles.btnSmall]}
       >
         {loading ? (
-          <ActivityIndicator color="#fff" />
+          <ActivityIndicator color={fg} />
         ) : (
           <>
-            {icon ? <Icon name={icon} size={small ? 16 : 18} color="#fff" strokeWidth={2} /> : null}
-            <Text style={[styles.btnText, small && { fontSize: 14 }, { fontFamily: theme.font.bodySemi }]}>{title}</Text>
+            {icon ? <Icon name={icon} size={small ? 16 : 18} color={fg} strokeWidth={2} /> : null}
+            <Text style={[styles.btnText, small && { fontSize: 14 }, { color: fg, fontFamily: theme.font.bodySemi }]}>{title}</Text>
           </>
         )}
       </LinearGradient>
@@ -95,7 +97,7 @@ export function GhostButton({ title, onPress, icon, color, style, small, disable
   );
 }
 
-export function IconButton({ name, onPress, color, bg, size = 40, iconSize = 18, active }) {
+export function IconButton({ name, onPress, color, bg, size = 44, iconSize = 20, active }) {
   const { theme } = useTheme();
   return (
     <Bounce
@@ -215,7 +217,7 @@ export function Chip({ label, active, onPress, count, color }) {
       <Text style={{ color: active ? theme.heading : theme.textMuted, fontFamily: theme.font.bodySemi, fontSize: 13 }}>{label}</Text>
       {count !== undefined ? (
         <View style={[styles.chipCount, { backgroundColor: active ? c : theme.line }]}>
-          <Text style={{ color: active ? "#fff" : theme.textMuted, fontSize: 11, fontFamily: theme.font.bodyBold }}>{count}</Text>
+          <Text style={{ color: active ? (color ? "#fff" : theme.onAccent) : theme.textMuted, fontSize: 11, fontFamily: theme.font.bodyBold }}>{count}</Text>
         </View>
       ) : null}
     </Bounce>
@@ -406,8 +408,8 @@ export function Select({ label, value, options, onChange, placeholder = "Choose�
 
 const styles = StyleSheet.create({
   btn: {
-    height: 50,
-    borderRadius: 12,
+    height: 52,
+    borderRadius: 14,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -415,11 +417,11 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     paddingHorizontal: 20,
   },
-  btnSmall: { height: 40, borderRadius: 8, paddingHorizontal: 14 },
-  btnText: { color: "#fff", fontSize: 15 },
+  btnSmall: { height: 44, borderRadius: 12, paddingHorizontal: 16 },
+  btnText: { fontSize: 15, letterSpacing: 0.1 },
   ghost: {
-    height: 50,
-    borderRadius: 12,
+    height: 52,
+    borderRadius: 14,
     borderWidth: 1,
     flexDirection: "row",
     alignItems: "center",
@@ -435,10 +437,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 12,
     paddingHorizontal: 14,
-    height: 50,
+    height: 52,
   },
   input: { flex: 1, fontSize: 15, height: "100%" },
-  badge: { flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 },
-  chip: { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8 },
+  badge: { flexDirection: "row", alignItems: "center", gap: 4, borderWidth: 1, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 3 },
+  chip: { flexDirection: "row", alignItems: "center", gap: 8, borderWidth: 1, borderRadius: 999, paddingHorizontal: 16, minHeight: 40 },
   chipCount: { minWidth: 20, height: 20, borderRadius: 10, alignItems: "center", justifyContent: "center", paddingHorizontal: 5 },
 });

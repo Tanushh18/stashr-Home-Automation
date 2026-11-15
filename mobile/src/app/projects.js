@@ -196,7 +196,7 @@ export default function Projects() {
           <View style={styles.fabWrap}>
             <Bounce onPress={() => router.push("/project-editor")} scaleTo={0.9}>
               <View style={[styles.fab, { backgroundColor: theme.accent, shadowColor: theme.accent }]}>
-                <Icon name="plus" size={24} color="#fff" strokeWidth={2.4} />
+                <Icon name="plus" size={24} color={theme.onAccent} strokeWidth={2.4} />
               </View>
             </Bounce>
           </View>
