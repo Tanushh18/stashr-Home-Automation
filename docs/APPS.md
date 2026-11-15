@@ -20,6 +20,14 @@ search an address), TV time, insights, speed chart, movies from Drive and the he
 Ask Stashr, times are typed as HH:MM, and the maps are schematic drawings (home, distance rings, route line) rather than street maps.
 It updates through the usual Settings → Check for updates (GitHub release built by `android-apk.yml`).
 
+**Home-screen widget and shortcuts (2.6.0):** the *Stashr Home* widget (any launcher: long-press the home screen → Widgets → Stashr, or
+Smart home → Overview → *Add to phone's home screen*) shows who is on the way, who is home, the weather (rain when likely) and the TV, from
+`GET /home/dashboard`. It stores display text only (no token) and refreshes when Smart home loads and about every 15 minutes in the
+background, only while a widget is placed; it is cleared on sign-out. Long-press the Stashr icon for *Smart home*, *TV remote*, *Camera*,
+*Money* and *Passwords*. Both open `stashr://` links; Smart home and Money are behind the unlock, and a link tapped while locked opens right
+after the unlock. Code: `mobile/modules/stashr-widget`, `src/lib/homeWidget.js`, `src/lib/widgetText.js` (tests:
+`node --test scripts/widgetText.test.mjs`).
+
 ## Health check
 Every app (Hub 1.9, TV 1.3, Location 1.5) sends `status.health` with each report: app version, Android version, "Display over other
 apps", accessibility, battery limits, notifications, camera and microphone (tablet), location "all the time" (phone), USB drive (TV), and its

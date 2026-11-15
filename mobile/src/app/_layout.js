@@ -1,6 +1,7 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { AppState, View } from "react-native";
-import { Stack } from "expo-router";
+import { Stack, router } from "expo-router";
+import * as Linking from "expo-linking";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
 import * as SystemUI from "expo-system-ui";
@@ -26,6 +27,7 @@ import "../lib/photoBackground";
 import "../lib/moneyBackground";
 import { syncIfStale } from "../lib/moneySync";
 import { startAutoBackup } from "../lib/photoAuto";
+import { LINK_PATHS, installShortcuts, syncHomeWidgetTask, refreshHomeWidget, clearHomeWidget } from "../lib/homeWidget";
 
 // Load the latest server list from the registry in the background.
 refreshServers().catch(() => {});
@@ -45,6 +47,38 @@ function RootStack({ fontsReady }) {
   useEffect(() => {
     if (booted) SplashScreen.hideAsync().catch(() => {});
   }, [booted]);
+
+  // A shortcut or the home-screen widget opened a stashr:// link while the vault was locked (or still starting):
+  // remember it and open that screen right after the unlock, instead of dropping the person on the vault.
+  const url = Linking.useLinkingURL();
+  const pending = useRef(null);
+  useEffect(() => {
+    if (!url || status === "ready") return;
+    try {
+      const { path, queryParams } = Linking.parse(url);
+      const route = "/" + String(path || "").replace(/^\/+|\/+$/g, "");
+      if (!LINK_PATHS.includes(route)) return;
+      const q = new URLSearchParams(Object.entries(queryParams || {}).filter(([, v]) => typeof v === "string")).toString();
+      pending.current = q ? `${route}?${q}` : route;
+    } catch (e) { /* not a link we open */ }
+  }, [url, status]);
+  useEffect(() => {
+    if (status !== "ready" || !pending.current) return;
+    const href = pending.current;
+    pending.current = null;
+    if (href !== "/") setTimeout(() => { try { router.navigate(href); } catch (e) { /* stay on the vault */ } }, 0);
+  }, [status]);
+
+  // Home-screen widget and long-press shortcuts: set up once signed in; the widget forgets the home on sign-out.
+  useEffect(() => {
+    if (status === "ready") {
+      installShortcuts();
+      syncHomeWidgetTask();
+      refreshHomeWidget().catch(() => {});
+    } else if (status === "signedOut") {
+      clearHomeWidget();
+    }
+  }, [status]);
 
   // Once the vault is unlocked, keep camera-roll backup going while the app is open.
   useEffect(() => {
@@ -103,6 +137,9 @@ function RootStack({ fontsReady }) {
           <Stack.Screen name="scan" options={{ presentation: "fullScreenModal", animation: "fade" }} />
           <Stack.Screen name="account" options={{ animation: "slide_from_right" }} />
           <Stack.Screen name="photo-viewer" options={{ presentation: "fullScreenModal", animation: "fade" }} />
+          {/* Opened by the long-press shortcuts and the home-screen widget: never without the unlock. */}
+          <Stack.Screen name="home" />
+          <Stack.Screen name="money" />
         </Stack.Protected>
       </Stack>
       {status === "ready" ? <SkyFx /> : null}

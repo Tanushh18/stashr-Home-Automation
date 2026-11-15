@@ -1,0 +1,16 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <application>
+    <!-- The "Stashr Home" home-screen widget. It only draws a snapshot the app saved (no token, no network of its own). -->
+    <receiver
+      android:name=".StashrHomeWidget"
+      android:label="@string/stashr_home_widget_label"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/stashr_home_widget_info" />
+    </receiver>
+  </application>
+</manifest>

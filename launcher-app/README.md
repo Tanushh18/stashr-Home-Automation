@@ -43,5 +43,5 @@ If anything looks wrong, Settings → Apps → Default apps → Home app → pic
 |---|---|---|
 | Stashr name, icon, green accent | **Done** in `apply.py` and `overlay/` | Built by the workflow above |
 | Cleaner OPPO setup | **Done as the checklist above** | A first-run reminder screen would need code inside the launcher: fork work |
-| Stashr card on the home screen (who is home, today's spend, vault button) | **Not built yet** | The card needs the family's Stashr login, which a launcher does not have. Build it as a home-screen **widget in the main Stashr app** (it already has the login); it then shows on this launcher and any other |
-| Stashr shortcuts on the dock (Money, Smart home, Passwords) | **Not built yet** | Add them as app shortcuts to the main Stashr app; long-pressing its icon in the dock then shows them, in this launcher and any other |
+| Stashr card on the home screen (who is home, who is on the way, weather, TV) | **Done** as the *Stashr Home* widget in the main Stashr app 2.6.0 (`mobile/modules/stashr-widget`) | Long-press the home screen → Widgets → Stashr, or Smart home → Overview → *Add to phone's home screen*. Shows on this launcher and any other |
+| Stashr shortcuts (Smart home, TV remote, Camera, Money, Passwords) | **Done** in the main Stashr app 2.6.0 | Long-press the Stashr icon; drag a shortcut onto the home screen or dock to keep it there. The lock screen still comes first |
