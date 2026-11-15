@@ -12,42 +12,43 @@ import org.json.JSONObject
  * The other Stashr board widgets. Each draws from the snapshot the app saved (WidgetStore) and never calls the network itself.
  * A button that does something (scene, TV, camera) opens a signed stashr://action link: the app asks for the unlock, checks the
  * per-install key and only then calls the Stashr server, showing the server's real answer.
- * Request codes: Home 100, Scenes 200+, TV 300+, Quick 400+, Money 500, Network 600 (one per button, so taps never mix).
+ * Request codes: Home 100, TV 300+, Quick 400+, Money 500, Network 600, Phones 700+ (one per button, so taps never mix).
  */
 
 private fun obj(o: JSONObject?, key: String): JSONObject? = o?.optJSONObject(key)
 private fun str(o: JSONObject?, key: String, max: Int = 120): String = o?.optString(key, "")?.trim()?.take(max) ?: ""
 
-/** Up to four scenes; one tap runs the scene through the app. */
-class StashrScenesWidget : AppWidgetProvider() {
+/** Both phones: battery, charging, online, and a one-tap Lock for each (through the app's unlock). */
+class StashrPhonesWidget : AppWidgetProvider() {
   override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
     for (id in ids) manager.updateAppWidget(id, views(context))
   }
 
   companion object {
-    private val BUTTONS = intArrayOf(R.id.scene_0, R.id.scene_1, R.id.scene_2, R.id.scene_3)
+    private val ROWS = intArrayOf(R.id.phone_row_0, R.id.phone_row_1, R.id.phone_row_2)
+    private val LABELS = intArrayOf(R.id.phone_label_0, R.id.phone_label_1, R.id.phone_label_2)
+    private val LOCKS = intArrayOf(R.id.phone_lock_0, R.id.phone_lock_1, R.id.phone_lock_2)
 
     internal fun views(context: Context): RemoteViews {
-      val v = RemoteViews(context.packageName, R.layout.stashr_scenes_widget)
+      val v = RemoteViews(context.packageName, R.layout.stashr_phones_widget)
       val o = WidgetStore.json(context)
-      val scenes = o?.optJSONArray("scenes")
-      val n = minOf(scenes?.length() ?: 0, BUTTONS.size)
-      for (i in BUTTONS.indices) {
-        val s = if (i < n) scenes?.optJSONObject(i) else null
-        val id = str(s, "id", 60)
-        val name = str(s, "name", 24)
-        if (id.isEmpty() || name.isEmpty()) {
-          v.setViewVisibility(BUTTONS[i], View.INVISIBLE)
-          continue
-        }
-        v.setViewVisibility(BUTTONS[i], View.VISIBLE)
-        v.setTextViewText(BUTTONS[i], name.uppercase())
-        v.setOnClickPendingIntent(BUTTONS[i], Board.action(context, "do=scene&id=${Uri.encode(id)}", 200 + i))
+      val phones = o?.optJSONArray("phones")
+      val n = minOf(phones?.length() ?: 0, ROWS.size)
+      for (i in ROWS.indices) {
+        val p = if (i < n) phones?.optJSONObject(i) else null
+        val line = str(p, "line", 60)
+        if (p == null || line.isEmpty()) { v.setViewVisibility(ROWS[i], View.GONE); continue }
+        v.setViewVisibility(ROWS[i], View.VISIBLE)
+        v.setTextViewText(LABELS[i], line)
+        val id = str(p, "id", 24)
+        // The Lock button only appears when that phone has Remote lock switched on (otherwise it could not work).
+        if (p.optBoolean("canLock") && id.matches(Regex("^[a-f0-9]{24}$"))) {
+          v.setViewVisibility(LOCKS[i], View.VISIBLE)
+          v.setOnClickPendingIntent(LOCKS[i], Board.action(context, "do=lock&id=$id", 700 + i))
+        } else v.setViewVisibility(LOCKS[i], View.GONE)
       }
-      v.setViewVisibility(R.id.scenes_row_0, if (n > 0) View.VISIBLE else View.GONE)
-      v.setViewVisibility(R.id.scenes_row_1, if (n > 2) View.VISIBLE else View.GONE)
-      v.setViewVisibility(R.id.scenes_empty, if (n == 0) View.VISIBLE else View.GONE)
-      if (n == 0) v.setOnClickPendingIntent(R.id.widget_root, Board.link(context, "stashr://stashr-home", 209))
+      v.setViewVisibility(R.id.phones_empty, if (n == 0) View.VISIBLE else View.GONE)
+      v.setOnClickPendingIntent(R.id.widget_root, Board.link(context, "stashr://home?tab=devices", 709))
       Board.clock(context, v, R.id.widget_updated, o)
       return v
     }

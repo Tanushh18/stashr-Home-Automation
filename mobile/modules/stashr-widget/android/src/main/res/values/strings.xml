@@ -2,9 +2,9 @@
   <string name="stashr_home_widget_label">Stashr Home</string>
   <string name="stashr_home_widget_title">STASHR · HOME</string>
   <string name="stashr_home_widget_description">Who is home, who is on the way, the weather and the TV</string>
-  <string name="stashr_scenes_label">Stashr Scenes</string>
-  <string name="stashr_scenes_title">STASHR · SCENES</string>
-  <string name="stashr_scenes_description">Run a home scene with one tap (after the unlock)</string>
+  <string name="stashr_phones_label">Stashr Phones</string>
+  <string name="stashr_phones_title">STASHR · PHONES</string>
+  <string name="stashr_phones_description">Both phones: battery, online, and a one-tap Lock (after the unlock)</string>
   <string name="stashr_tv_label">Stashr TV remote</string>
   <string name="stashr_tv_title">STASHR · TV</string>
   <string name="stashr_tv_description">Play, pause, volume, mute and Home for the living-room TV</string>

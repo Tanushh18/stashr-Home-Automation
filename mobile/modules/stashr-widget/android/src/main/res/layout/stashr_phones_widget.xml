@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Stashr Phones: both phones at a glance (battery, charging, online) with a Lock button each. Board style, see stashr_home_widget.xml. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+  android:id="@+id/widget_root"
+  android:layout_width="match_parent"
+  android:layout_height="match_parent"
+  android:orientation="vertical"
+  android:background="@drawable/stashr_widget_bg"
+  android:paddingStart="14dp"
+  android:paddingEnd="14dp"
+  android:paddingTop="12dp"
+  android:paddingBottom="10dp">
+
+  <LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:gravity="center_vertical"
+    android:orientation="horizontal">
+    <ImageView android:layout_width="8dp" android:layout_height="8dp" android:layout_marginEnd="8dp" android:src="@drawable/stashr_widget_dot" android:importantForAccessibility="no" />
+    <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="@string/stashr_phones_title"
+      android:textColor="#F5C86A" android:textSize="12sp" android:fontFamily="monospace" android:letterSpacing="0.2" android:textStyle="bold" android:maxLines="1" />
+    <TextView android:id="@+id/widget_updated" android:layout_width="wrap_content" android:layout_height="wrap_content" android:background="@drawable/stashr_widget_tile"
+      android:paddingStart="6dp" android:paddingEnd="6dp" android:paddingTop="1dp" android:paddingBottom="1dp" android:textColor="#F2F0E6" android:textSize="12sp"
+      android:fontFamily="monospace" android:letterSpacing="0.1" android:maxLines="1" />
+  </LinearLayout>
+
+  <ImageView android:layout_width="match_parent" android:layout_height="1dp" android:importantForAccessibility="no" android:layout_marginTop="8dp" android:layout_marginBottom="6dp" android:background="#1A262D" />
+
+  <TextView android:id="@+id/phones_empty" style="@style/StashrBoardValue" android:layout_width="match_parent" android:text="Open Stashr to load your phones" android:visibility="gone" />
+
+  <LinearLayout android:id="@+id/phone_row_0" android:layout_width="match_parent" android:layout_height="40dp" android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginBottom="4dp">
+    <TextView android:id="@+id/phone_label_0" style="@style/StashrBoardValue" android:maxLines="1" />
+    <TextView android:id="@+id/phone_lock_0" style="@style/StashrBoardButton" android:layout_width="64dp" android:layout_weight="0" android:minHeight="34dp" android:text="LOCK" />
+  </LinearLayout>
+  <LinearLayout android:id="@+id/phone_row_1" android:layout_width="match_parent" android:layout_height="40dp" android:orientation="horizontal" android:gravity="center_vertical" android:layout_marginBottom="4dp">
+    <TextView android:id="@+id/phone_label_1" style="@style/StashrBoardValue" android:maxLines="1" />
+    <TextView android:id="@+id/phone_lock_1" style="@style/StashrBoardButton" android:layout_width="64dp" android:layout_weight="0" android:minHeight="34dp" android:text="LOCK" />
+  </LinearLayout>
+  <LinearLayout android:id="@+id/phone_row_2" android:layout_width="match_parent" android:layout_height="40dp" android:orientation="horizontal" android:gravity="center_vertical">
+    <TextView android:id="@+id/phone_label_2" style="@style/StashrBoardValue" android:maxLines="1" />
+    <TextView android:id="@+id/phone_lock_2" style="@style/StashrBoardButton" android:layout_width="64dp" android:layout_weight="0" android:minHeight="34dp" android:text="LOCK" />
+  </LinearLayout>
+</LinearLayout>

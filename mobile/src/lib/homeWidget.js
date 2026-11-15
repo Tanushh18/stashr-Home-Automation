@@ -1,10 +1,10 @@
 import { Platform } from "react-native";
-import { loadSavedToken, refreshServers } from "./api";
+import { loadSavedToken, refreshServers, serverList } from "./api";
 import { home } from "./homeApi";
 import { money } from "./moneyApi";
 import { healthItems } from "./smartHome";
-import { widgetSnapshot, scenesOf, moneyLines, netLines } from "./widgetText";
-import { setSnapshot, widgetCount, widgetCounts, actionKey, setShortcuts, requestPin, pinShortcut, widgetSupported } from "../../modules/stashr-widget";
+import { widgetSnapshot, scenesOf, phonesOf, moneyLines, netLines } from "./widgetText";
+import { setSnapshot, widgetCount, widgetCounts, actionKey, setShortcuts, requestPin, pinShortcut, widgetSupported, setLiveConfig, setLiveServers, startLive, liveInfo } from "../../modules/stashr-widget";
 
 /*
  * The Stashr home-screen widgets (Home, Scenes, TV remote, Quick actions, Money, Network) and the long-press shortcuts.
@@ -67,7 +67,7 @@ async function loadExtras(dash, counts) {
 export function pushHomeWidget(dashboard) {
   if (!widgetSupported || !dashboard || widgetCount() === 0) return;
   if (extras === null) { refreshHomeWidget().catch(() => {}); return; }
-  setSnapshot({ ...widgetSnapshot(dashboard), scenes: scenesOf(dashboard), ...extras });
+  setSnapshot({ ...widgetSnapshot(dashboard), scenes: scenesOf(dashboard), phones: phonesOf(dashboard), ...extras });
 }
 
 /** Loads the dashboard (and Money / network when those widgets are placed) and updates every widget. */
@@ -76,8 +76,27 @@ export async function refreshHomeWidget() {
   const counts = widgetCounts();
   const dash = await home.dashboard();
   extras = await loadExtras(dash, counts);
-  setSnapshot({ ...widgetSnapshot(dash), scenes: scenesOf(dash), ...extras });
+  setSnapshot({ ...widgetSnapshot(dash), scenes: scenesOf(dash), phones: phonesOf(dash), ...extras });
+  await ensureLive();
   return true;
+}
+
+/**
+ * The 15-second live refresh (while the screen is on): the phone gets its own read-only widget key (it can read the dashboard
+ * and nothing else; revocable on the server), hands it and the server list to the native service, and starts it.
+ */
+export async function ensureLive() {
+  if (!widgetSupported || widgetCount() === 0) return false;
+  let info = liveInfo();
+  if (!info.hasKey || info.bad) {
+    const made = await home.makeWidgetKey(`Widgets ${Platform.OS}`);
+    if (!made || !made.key) return false;
+    setLiveConfig(made.key, serverList());
+    info = liveInfo();
+  } else {
+    setLiveServers(serverList());     // the registry can change the list; the key stays
+  }
+  return startLive();
 }
 
 /** After sign-out: the widget forgets the home and says to open Stashr. */

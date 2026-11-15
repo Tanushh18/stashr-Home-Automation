@@ -38,7 +38,7 @@ test("snapshot never carries anything but display text and the time", () => {
   assert.match(s.people, /Give a Wi-Fi device a person/);
 });
 
-import { scenesOf, inr, moneyLines, netLines } from "../src/lib/widgetText.js";
+import { scenesOf, inr, moneyLines, netLines, phonesOf } from "../src/lib/widgetText.js";
 
 test("scenes: at most four, only real ids and names", () => {
   const s = scenesOf({ scenes: [{ id: "a", name: "Movie night" }, { id: "", name: "x" }, { id: "b", name: "Quiet" }, { id: "c", name: "Good night" }, { id: "d", name: "D" }, { id: "e", name: "E" }] });
@@ -76,4 +76,20 @@ test("network: speed, live Wi-Fi devices only, health wording", () => {
   assert.equal(netLines({}, null, { bad: 2 }).health, "2 need fixing");
   assert.equal(netLines({}, null, { warn: 1 }).health, "1 to check");
   assert.equal(netLines({}, null, {}).speed, "No speed test yet");
+});
+
+test("phones: name, battery with a charging bolt, online/offline, at most three, Lock only when it can work", () => {
+  const r = phonesOf({ phones: [
+    { id: "a".repeat(24), name: "Tanush A38", online: true, battery: 87.4, charging: true, canLock: true },
+    { id: "b".repeat(24), name: "F21 Pro", online: false, battery: null, charging: false, canLock: false },
+    { id: "c".repeat(24), name: "Tablet test", online: true, battery: 100, charging: false },
+    { id: "d".repeat(24), name: "Fourth", online: true }
+  ] });
+  assert.equal(r.length, 3);
+  assert.deepEqual(r[0], { id: "a".repeat(24), line: "Tanush A38 · 87%⚡ · online", canLock: true });
+  assert.equal(r[1].line, "F21 Pro · offline");
+  assert.equal(r[1].canLock, false);
+  assert.equal(r[2].canLock, false);                       // not promised unless the server said so
+  assert.deepEqual(phonesOf(null), []);
+  assert.deepEqual(phonesOf({ phones: [{ id: "", name: "x" }, { id: "z", name: "" }] }), []);
 });

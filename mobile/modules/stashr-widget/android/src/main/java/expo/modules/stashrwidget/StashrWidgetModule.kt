@@ -45,7 +45,7 @@ class StashrWidgetModule : Module() {
     Function("widgetCounts") {
       mapOf(
         "home" to Board.ids(context, StashrHomeWidget::class.java).size,
-        "scenes" to Board.ids(context, StashrScenesWidget::class.java).size,
+        "phones" to Board.ids(context, StashrPhonesWidget::class.java).size,
         "tv" to Board.ids(context, StashrTvWidget::class.java).size,
         "quick" to Board.ids(context, StashrQuickWidget::class.java).size,
         "money" to Board.ids(context, StashrMoneyWidget::class.java).size,
@@ -65,6 +65,16 @@ class StashrWidgetModule : Module() {
       if (!manager.isRequestPinAppWidgetSupported) return@Function false
       manager.requestPinAppWidget(ComponentName(context, StashrHomeWidget::class.java), null, null)
     }
+
+    // The 15-second live refresh. setLiveConfig(key, serversJson) saves the read-only widget key and the server list; startLive/stopLive run it.
+    Function("setLiveConfig") { key: String, servers: String ->
+      require(key.matches(Regex("^wk_[a-f0-9]{48}$"))) { "That is not a widget key." }
+      WidgetStore.setLive(context, key, servers)
+    }
+    Function("setLiveServers") { servers: String -> WidgetStore.setLiveServers(context, servers) }
+    Function("startLive") { LiveService.start(context) }
+    Function("stopLive") { LiveService.stop(context) }
+    Function("liveInfo") { mapOf("hasKey" to WidgetStore.liveKey(context).isNotEmpty(), "bad" to WidgetStore.keyBad(context)) }
 
     // One button on the home screen (a pinned shortcut): the launcher asks the person first. Only stashr:// links, only this app.
     Function("pinShortcut") { id: String, label: String, url: String, icon: String ->

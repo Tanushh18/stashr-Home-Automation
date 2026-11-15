@@ -9,3 +9,8 @@ export interface WidgetCounts { home: number; scenes: number; tv: number; quick:
 export declare function widgetCounts(): WidgetCounts;
 export declare function actionKey(): string;
 export declare function pinShortcut(s: { id: string; label: string; url: string; icon?: "home" | "tv" | "camera" | "money" | "key" | "lock" }): boolean;
+export declare function setLiveConfig(key: string, servers: string[]): boolean;
+export declare function startLive(): boolean;
+export declare function stopLive(): void;
+export declare function liveInfo(): { hasKey: boolean; bad: boolean };
+export declare function setLiveServers(servers: string[]): boolean;

@@ -47,6 +47,8 @@ export const setToken = (t) => {
   token = t || null;
 };
 export const activeServer = () => SERVERS[active];
+/** Every server the app knows, the one in use first (the home-screen widgets try them in this order). */
+export const serverList = () => [SERVERS[active], ...SERVERS.filter((_, i) => i !== active)].filter(Boolean);
 /** Headers for loading an image or video straight from the API (the Smart home camera pictures). */
 export const authHeaders = () => (token ? { Authorization: `Bearer ${token}`, "X-Client": "mobile" } : { "X-Client": "mobile" });
 export const setActiveServer = (url) => {

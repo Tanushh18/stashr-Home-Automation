@@ -23,6 +23,8 @@ class StashrHomeWidget : AppWidgetProvider() {
       Board.row(v, R.id.row_weather, R.id.widget_weather, s?.weather ?: "")
       Board.row(v, R.id.row_tv, R.id.widget_tv, s?.tv ?: "")
       Board.clock(context, v, R.id.widget_updated, o)
+      // the world behind the board: follows the clock and the weather; redrawn only when the look changes
+      v.setImageViewBitmap(R.id.scenery, Scenery.bitmap(java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY), s?.weather ?: ""))
       v.setOnClickPendingIntent(R.id.widget_root, Board.link(context, "stashr://stashr-home", 100))
       return v
     }

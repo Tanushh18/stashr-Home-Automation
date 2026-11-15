@@ -25,6 +25,20 @@ internal object WidgetStore {
 
   fun load(context: Context): Snapshot? = json(context)?.let { Snapshot.of(it) }
 
+  // ── the 15-second live refresh: a read-only widget key (GET /home/widget/dashboard only) and the server list ──
+  fun setLive(context: Context, key: String, serversJson: String) {
+    context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("live_key", key).putString("live_servers", serversJson).putBoolean("live_bad", false).apply()
+  }
+  fun setLiveServers(context: Context, serversJson: String) { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("live_servers", serversJson).apply() }
+  fun liveKey(context: Context): String = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("live_key", "") ?: ""
+  fun liveServers(context: Context): List<String> = try {
+    val a = org.json.JSONArray(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString("live_servers", "[]"))
+    (0 until a.length()).map { a.getString(it) }.filter { it.startsWith("https://") }
+  } catch (e: Exception) { emptyList() }
+  /** The server said the key is not allowed (removed): stop asking until the app makes a new one. */
+  fun markKeyBad(context: Context) { context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean("live_bad", true).apply() }
+  fun keyBad(context: Context): Boolean = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("live_bad", false)
+
   /**
    * A random secret made once per install. Every widget button carries it, and the app only runs a widget action when the
    * link has it, so another app cannot fire your TV, camera or scenes through a stashr:// link.

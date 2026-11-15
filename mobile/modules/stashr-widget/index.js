@@ -51,3 +51,13 @@ export const pinShortcut = ({ id, label, url, icon }) => {
   if (!native) return false;
   try { return Boolean(native.pinShortcut(String(id), String(label), String(url), String(icon || "home"))); } catch (e) { return false; }
 };
+
+/** The 15-second live refresh (only while the screen is on): the read-only widget key and the server list, then start/stop. */
+export const setLiveConfig = (key, servers) => {
+  if (!native) return false;
+  try { native.setLiveConfig(String(key), JSON.stringify(servers || [])); return true; } catch (e) { return false; }
+};
+export const startLive = () => { if (!native) return false; try { return Boolean(native.startLive()); } catch (e) { return false; } };
+export const stopLive = () => { if (native) { try { native.stopLive(); } catch (e) { /* not running */ } } };
+export const liveInfo = () => { if (!native) return { hasKey: false, bad: false }; try { return native.liveInfo(); } catch (e) { return { hasKey: false, bad: false }; } };
+export const setLiveServers = (servers) => { if (!native) return false; try { native.setLiveServers(JSON.stringify(servers || [])); return true; } catch (e) { return false; } };

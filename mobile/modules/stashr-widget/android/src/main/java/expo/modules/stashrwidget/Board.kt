@@ -16,9 +16,12 @@ import java.util.Date
 /** Shared pieces of the Stashr board widgets: opening links inside Stashr, signed actions, rows and the clock tile. */
 internal object Board {
   val PROVIDERS: List<Class<out AppWidgetProvider>> = listOf(
-    StashrHomeWidget::class.java, StashrScenesWidget::class.java, StashrTvWidget::class.java,
+    StashrHomeWidget::class.java, StashrPhonesWidget::class.java, StashrTvWidget::class.java,
     StashrQuickWidget::class.java, StashrMoneyWidget::class.java, StashrNetWidget::class.java
   )
+
+  /** How many Stashr widgets of any kind are on the home screen. */
+  fun total(context: Context): Int = PROVIDERS.sumOf { ids(context, it).size }
 
   fun ids(context: Context, cls: Class<out AppWidgetProvider>): IntArray =
     AppWidgetManager.getInstance(context).getAppWidgetIds(ComponentName(context, cls))
@@ -51,7 +54,7 @@ internal object Board {
       if (ids.isEmpty()) continue
       val v = when (cls) {
         StashrHomeWidget::class.java -> StashrHomeWidget.views(context)
-        StashrScenesWidget::class.java -> StashrScenesWidget.views(context)
+        StashrPhonesWidget::class.java -> StashrPhonesWidget.views(context)
         StashrTvWidget::class.java -> StashrTvWidget.views(context)
         StashrQuickWidget::class.java -> StashrQuickWidget.views(context)
         StashrMoneyWidget::class.java -> StashrMoneyWidget.views(context)

@@ -35,6 +35,20 @@ placed) and *Stashr Network* (last speed test, devices on the Wi-Fi, health of t
 Buttons that act open `stashr://action?…&k=<key>`: the app asks for the unlock, checks the per-install secret key every widget button
 carries (so no other app can fire them), sends only whitelisted commands and shows what the server answered (`src/app/action.js`).
 
+## Widgets: live every 15 seconds, the Stashr world behind them (Stashr 2.8.0)
+Widgets: **Stashr Home** (board + a jungle, river and waterfall scene that follows the clock and the weather), **TV remote**, **Quick actions**,
+**Money**, **Network**, and **Phones** (every family phone's battery, charging and online state, with a one-tap **Lock** that only appears when that
+phone has Remote lock on). The Scenes widget was removed.
+**Live refresh:** a small foreground service (`LiveService`, notification "Stashr widgets are live") asks the server for the dashboard every 15 seconds
+**only while the screen is on and a Stashr widget is on the home screen**; screen off = no timer and no network. After failures it backs off to
+once a minute and the widgets keep their last lines. It restarts after a reboot or an app update. Each phone makes its own **read-only widget key**
+(`POST /home/widget-keys`; only the SHA-256 is stored; it can call `GET /home/widget/dashboard` and nothing else, so it is not a login; list and
+revoke with `GET/DELETE /home/widget-keys`). The service works the lines out natively (`BoardText.kt`, a copy of `src/lib/widgetText.js`; both are
+tested with the same cases) and merges them into what the app saved (Money and the Network widget's Wi-Fi/health lines still refresh every 15
+minutes from the app). A key the server refuses stops the service until the app opens and makes a new one.
+**Scenery:** `Scenery.kt` draws the picture once per look (dawn, day, dusk, night with stars and a moon; clear, cloudy, rain) and reuses it: no
+animation loop, no timer, so it costs no battery between changes.
+
 ## Remote lock (Stashr 2.7.0, Stashr Location 1.11.0)
 Lock a family phone's screen from another phone or the website's server. Smart home → Devices → **Lock a phone** lists the phones that run Stashr
 Location, with **Lock now** and **Lock button on my home screen** (a pinned icon that locks that phone in one tap, behind the unlock).

@@ -37,6 +37,7 @@ export const home = {
   saveSchedules: (schedules) => j("/home/schedules", "PUT", { schedules }),
   saveScenes: (scenes) => j("/home/scenes", "PUT", { scenes }),
   runScene: (id) => j(`/home/scenes/${id}/run`, "POST", {}),
+  makeWidgetKey: (name) => j("/home/widget-keys", "POST", { name }),
   lockPhone: (id) => j(`/home/devices/${id}/lock`, "POST", {}, 20000),
   usage: (days = 14) => request(`/home/usage?days=${days}`),
   speed: (days = 7) => request(`/home/speed?days=${days}`),

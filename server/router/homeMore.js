@@ -24,6 +24,7 @@ const HomeEvent = require("../models/homeEvent");
 const HomeSettings = require("../models/homeSettings");
 const HomePairCode = require("../models/homePairCode");
 const HomeSpeed = require("../models/homeSpeed");
+const HomeWidgetKey = require("../models/homeWidgetKey");
 const HomeLiveFrame = require("../models/homeLiveFrame");
 const home = require("../utils/home");
 const automation = require("../utils/homeAutomation");
@@ -432,8 +433,15 @@ async function buildDashboardNow(owner) {
         const p = homeRouter.publicDevice(d);
         return { name: p.name, online: p.online, screen: (p.status || {}).screen || "", app: ((p.status || {}).app || {}).label || "", title: ((p.status || {}).media || {}).title || "" };
     });
+    // The family phones, for the phone widgets: who is online, battery, and whether Remote lock is on (so a Lock button is only offered when it can work).
+    const phones = devices.filter((d) => d.kind === "phone").map((d) => {
+        const p = homeRouter.publicDevice(d);
+        const st = p.status || {};
+        const bat = home.batteryOf(st);
+        return { id: String(d._id), name: p.name, person: p.person || "", online: Boolean(p.online), battery: bat ? bat.pct : null, charging: Boolean(bat && bat.charging), wifi: Boolean(st.wifi), canLock: Boolean(st.agent === "stashr-where" && st.health && st.health.remoteLock === true) };
+    }).slice(0, 6);
     return {
-        time: new Date().toISOString(), timezone: s.timezone, weather: w.value, tvs, tvMinutesToday: today,
+        time: new Date().toISOString(), timezone: s.timezone, weather: w.value, tvs, phones, tvMinutesToday: today,
         people: home.presence(devices.filter((d) => d.kind === "hub"), devices.filter((d) => d.kind === "phone"), Date.now(), s.homeSpot),
         coming: automation.comingList(s),
         events: events.map((e) => ({ text: e.text, at: e.at })), speed: speed ? { down: speed.down, up: speed.up, ping: speed.ping, at: speed.at } : null,
@@ -448,6 +456,53 @@ async function buildDashboardNow(owner) {
 router.get("/home/agent/dashboard", agentLimiter, agentAuth, async (req, res) => {
     try { res.set("Cache-Control", "no-store"); return res.json(await buildDashboard(req.device.owner)); }
     catch (e) { return fail(res, e, "Could not load the dashboard."); }
+});
+
+/* ───────── widget keys: read-only access to the dashboard for the phone's home-screen widgets ───────── */
+
+const WIDGET_KEY = /^wk_[a-f0-9]{48}$/;
+const MAX_WIDGET_KEYS = 10;
+const hashKey = (k) => crypto.createHash("sha256").update(k).digest("hex");
+
+router.post("/home/widget-keys", authenticate, writeLimiter, async (req, res) => {
+    try {
+        const owner = req.rootUser._id;
+        if ((await HomeWidgetKey.countDocuments({ owner })) >= MAX_WIDGET_KEYS) return res.status(429).json({ error: "Too many widget keys. Remove one you do not use." });
+        const key = "wk_" + crypto.randomBytes(24).toString("hex");
+        const name = String((req.body && req.body.name) || "Phone widgets").replace(/[^\w .-]/g, "").trim().slice(0, 60) || "Phone widgets";
+        const doc = await HomeWidgetKey.create({ owner, name, hash: hashKey(key), hint: key.slice(-4) });
+        // The key is shown once, here; only its hash is kept.
+        return res.status(201).json({ id: String(doc._id), key, name });
+    } catch (e) { return fail(res, e, "Could not make a widget key."); }
+});
+
+router.get("/home/widget-keys", authenticate, async (req, res) => {
+    try {
+        const list = await HomeWidgetKey.find({ owner: req.rootUser._id }).sort({ createdAt: -1 }).lean();
+        return res.json({ keys: list.map((k) => ({ id: String(k._id), name: k.name, hint: k.hint, createdAt: k.createdAt, lastUsedAt: k.lastUsedAt })) });
+    } catch (e) { return fail(res, e, "Could not list the widget keys."); }
+});
+
+router.delete("/home/widget-keys/:id", authenticate, writeLimiter, async (req, res) => {
+    try {
+        if (!/^[a-f0-9]{24}$/.test(req.params.id)) return res.status(404).json({ error: "Not found." });
+        const r = await HomeWidgetKey.deleteOne({ _id: req.params.id, owner: req.rootUser._id });
+        return r.deletedCount ? res.json({ ok: true }) : res.status(404).json({ error: "Not found." });
+    } catch (e) { return fail(res, e, "Could not remove the widget key."); }
+});
+
+// What the widgets show, the same picture as the tablet and the app: asked every 15 seconds while the phone's screen is on.
+router.get("/home/widget/dashboard", agentLimiter, async (req, res) => {
+    try {
+        res.set("Cache-Control", "no-store");
+        const key = String(req.get("x-widget-key") || "");
+        if (!WIDGET_KEY.test(key)) return res.status(401).json({ error: "Not allowed." });
+        const doc = await HomeWidgetKey.findOne({ hash: hashKey(key) }).lean();
+        if (!doc) return res.status(401).json({ error: "Not allowed." });
+        // Note when it was last used, at most once a minute (the list in the app shows it).
+        if (!doc.lastUsedAt || Date.now() - new Date(doc.lastUsedAt).getTime() > 60_000) void HomeWidgetKey.updateOne({ _id: doc._id }, { $set: { lastUsedAt: new Date() } }).catch(() => {});
+        return res.json(await buildDashboard(doc.owner));
+    } catch (e) { return fail(res, e, "Could not load the dashboard."); }
 });
 
 router.get("/home/dashboard", authenticate, async (req, res) => {
