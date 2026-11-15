@@ -165,7 +165,14 @@ Adb access gives only a terminal on your computer. The app still talks to the St
 - [ ] "Delete here and in We Three" asks you to type the sheet name; the sheet disappears at once and its leads leave We Three within a few minutes (the Stashr server removes them a few at a time). A plain "Delete sheet" leaves We Three alone.
 - [ ] Unplug the tablet at more than 20% battery: after 10 minutes the WhatsApp sender page still shows it online (Stashr Hub 1.9.4, battery exemption allowed).
 
-## 7o. WhatsApp sender rhythm and rest days (added 2026-11-14)
+## 7o. SMS sender (Shine One SMS, managed in Stashr)
+- [ ] Needs We Three with the "console with an admin login" change deployed, and the We Three link on the WhatsApp sender page (an admin account).
+- [ ] Stashr → SMS sender loads: On/Pause, sent today, phones online, limits (safe defaults / my numbers), lunch and night times, days.
+- [ ] A sheet: copy messages from a WhatsApp sheet, Save messages, switch Auto-send on (optionally only new leads); the phone sends at lunch/night with one of the messages picked at random; counts go up; Latest messages shows them.
+- [ ] Test SMS to your own number arrives at once. A phone set to GGN Home only does not send Shine One messages.
+- [ ] ggnHome SMS console → Shine One Estate tab only points to Stashr; its Phones and Log tabs still work.
+
+## 7p. WhatsApp sender rhythm and rest days (added 2026-11-14)
 - [ ] WhatsApp sender → "Rest days" shows this week and next week; next week has 2 days marked Off, on other weekdays than this week's. The week the change was deployed only gets its fair share (a Saturday deploy: Sunday is off about 3 times in 10).
 - [ ] On a rest day the status says "Rest day today (picked at random)… Sending again …", the tablet gets no message all day, and there is no nightly report. Test mode still sends.
 - [ ] "Pick other days" changes what is left of this week and next week; a rest day that is over stays. Rest days a week = None: every day sends; 3: next week has 3 days off.

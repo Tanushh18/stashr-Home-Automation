@@ -26,6 +26,7 @@ const ServiceMap = lazy(() => import("./Pages/Services/ServiceMap"));
 const Cron = lazy(() => import("./Pages/Cron/Cron"));
 const SmartHome = lazy(() => import("./Pages/SmartHome/SmartHome"));
 const WhatsAppSender = lazy(() => import("./Pages/WhatsApp/WhatsAppSender"));
+const SmsSender = lazy(() => import("./Pages/Sms/SmsSender"));
 const Money = lazy(() => import("./Pages/Money/Money"));
 const Forgot = lazy(() => import("./Pages/Forgot/Forgot"));
 const RenderDashboard = lazy(() => import("./Pages/Render/RenderDashboard"));
@@ -143,6 +144,7 @@ export default function App() {
           <Route path="/money" element={<RequireVault><Suspense fallback={<Splash />}><Money /></Suspense></RequireVault>} />
           <Route path="/smart-home" element={<RequireVault><Suspense fallback={<Splash />}><SmartHome /></Suspense></RequireVault>} />
           <Route path="/whatsapp" element={<RequireVault><Suspense fallback={<Splash />}><WhatsAppSender /></Suspense></RequireVault>} />
+          <Route path="/sms" element={<RequireVault><Suspense fallback={<Splash />}><SmsSender /></Suspense></RequireVault>} />
           <Route path="/security-center" element={<RequireVault><Suspense fallback={<Splash />}><SecurityCenter /></Suspense></RequireVault>} />
           <Route path="/app-updates" element={<RequireVault><RequireAdmin><Suspense fallback={<Splash />}><AppUpdates /></Suspense></RequireAdmin></RequireVault>} />
           <Route path="/servers" element={<RequireVault><RequireAdmin><Servers /></RequireAdmin></RequireVault>} />
