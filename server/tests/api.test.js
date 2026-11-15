@@ -445,7 +445,7 @@ describe("server registry", () =>
 
         expect((await request(app).get("/registry/dealradar")).body.urls.join(",")).toBe("https://one.example.com,https://two.example.com/api");
         const all = await request(app).get("/registry").set(auth(token));
-        expect(all.body.apps.length).toBe(4);   // stashr, dealradar, wethree, shineoneestate
+        expect(all.body.apps.length).toBe(5);   // stashr, ggnhome, dealradar, wethree, shineoneestate
     });
 });
 
