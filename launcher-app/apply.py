@@ -6,7 +6,7 @@
 What it does, and nothing else:
   1. edits a few lines of Lawnchair's own files (name, package id, version, default accent colour). Every edit says exactly which text it
      expects to find; if Lawnchair has changed that text, this script stops with a message instead of guessing, so a wrong build is never made;
-  2. renames "Lawnchair" to "Stashr" in the text the person sees (strings.xml in every language), except the lines in KEEP_NAME;
+  2. renames "Lawnchair" to "Stashr" in the text the person sees (strings.xml in every language; web links untouched); the revenue-share notice is rewritten without any name;
   3. copies launcher-app/overlay/ over the checkout (the Stashr icon and colour).
 
 It only changes data (strings, resources, Gradle constants). It does not touch Lawnchair's Kotlin or Java code. See launcher-app/README.md.
@@ -39,26 +39,44 @@ EDITS = [
      f'<string name="config_default_accent_color" translatable="false">custom|{STASHR_GREEN}</string>'),
 ]
 
-# Strings that must keep saying "Lawnchair" because they are about the Lawnchair project itself, not this app
-# (the search-provider revenue share is Lawnchair's agreement; saying "Stashr" there would be untrue).
-KEEP_NAME = {"search_provider_sponsored_description"}
+# The search-provider revenue-share notice names the Lawnchair project's own agreement, which Stashr does not have, so it must not
+# say "Stashr". It is rewritten without any name (English), and its translations are removed so every language shows the English text.
+SPONSORED = "search_provider_sponsored_description"
+SPONSORED_TEXT = "%1$s shares revenue with the open-source project this launcher is built on.\\n\\nSearching with %1$s helps support that project."
 STRING = re.compile(r'(<string name="([^"]+)"[^>]*>)(.*?)(</string>)', re.S)
-WORD = re.compile(r"\bLawnchair\b")
+URL = re.compile(r"(https?://\S+|lawnchair://\S+)")
+NAME = re.compile(r"lawnchair", re.I)
+
+
+def _swap_name(text):
+    """Lawnchair -> Stashr (lawnchair -> stashr) in the words people read, in every language, including forms like "Lawnchairin"
+    and "Lawnchairが". Web addresses and app links are left alone so nothing breaks."""
+    parts = URL.split(text)          # odd positions are the URLs
+    count = 0
+    for i in range(0, len(parts), 2):
+        parts[i], n = NAME.subn(lambda m: "Stashr" if m.group(0)[0].isupper() else "stashr", parts[i])
+        count += n
+    return "".join(parts), count
 
 
 def rename_strings(root):
-    """Replace the word Lawnchair with Stashr inside the visible text of every strings.xml. Resource names, class names and
-    comments are untouched (only the text between <string ...> and </string> changes, and only the whole word)."""
+    """Replace the name in the visible text of every strings.xml (all languages). Resource names, class names and comments are
+    untouched (only the text between <string ...> and </string> changes)."""
     total = 0
     for path in sorted((root / "lawnchair" / "res").glob("values*/strings.xml")):
         text = path.read_text(encoding="utf-8")
+        english = path.parent.name == "values"
         count = 0
 
         def swap(m):
             nonlocal count
-            if m.group(2) in KEEP_NAME or "app.lawnchair" in m.group(3):
+            name, body = m.group(2), m.group(3)
+            if name == SPONSORED:
+                count += 1
+                return (m.group(1) + SPONSORED_TEXT + m.group(4)) if english else ""
+            if "app.lawnchair" in body:
                 return m.group(0)
-            new, n = WORD.subn("Stashr", m.group(3))
+            new, n = _swap_name(body)
             count += n
             return m.group(1) + new + m.group(4)
 
