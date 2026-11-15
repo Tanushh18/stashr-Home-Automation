@@ -12,7 +12,7 @@
 | password-manager-server-xxdr.onrender.com /health | 200 OK (DB connected) |
 | dealradar-0oza.onrender.com | 200 OK |
 | password-manager-server.onrender.com /health | 503, Render says `suspend-by-user` (suspended on purpose) |
-| password-manager-server-8gvj.onrender.com /health | 404, deleted on Render but STILL in the live server registry (`/registry/stashr`): remove it on the Servers page |
+| password-manager-server-8gvj.onrender.com /health | 404, deleted on Render. Removed from the code and from every app's server list (2026-11-15); the live registry no longer lists it |
 | password-website.onrender.com | 404 (service gone; still listed in the API's CORS list in `server/app.js`) |
 | stashr.ggnhome.com, dealradar.ggnhome.com | 403 from Cloudflare to a script (bot challenge; probably fine in a browser) |
 | GitHub "Monitor tick" workflow | last 10 runs: 9 success, 1 cancelled; GitHub fires it every 2 to 6 hours, not every 5 minutes. The in-server scheduler is the real 5-minute cron |
@@ -35,7 +35,7 @@ Cron page now has a "Combined status report" (200 OK vs failed, copy and CSV).
 
 ## Shipped 15 Oct (v2.1) — verify live
 - [ ] Server scheduler runs every 5 min (Cron page → "Background scheduler: Ran Xm ago"). GitHub's schedule only fired every 2–5 h.
-- [ ] Dead backup server …-8gvj (deleted on Render) — remove it from the Servers page registry too.
+- [x] Dead backup server …-8gvj (deleted on Render): removed from all apps, the website and the registry list.
 - [ ] Render → Services: Board view (health, deploy, CPU/memory/latency graphs, actions), bulk Restart/Deploy/Suspend/Resume.
 - [ ] Monitoring: every app is a ready-made group; crashes / restarts / deploys from Render's event log; peaks.
 - [ ] Cron page: ping jobs, /health scan, "Add /health + merge" (opens a PR and merges it), Render cron jobs.

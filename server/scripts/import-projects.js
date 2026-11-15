@@ -202,7 +202,7 @@ async function main() {
     process.exit(1);
   }
 
-  const baseUrl = (await ask("Stashr API URL [https://password-manager-server-8gvj.onrender.com]: ")) || "https://password-manager-server-8gvj.onrender.com";
+  const baseUrl = (await ask("Stashr API URL [https://password-manager-server-xxdr.onrender.com]: ")) || "https://password-manager-server-xxdr.onrender.com";
   const email = await ask("Email: ");
   const password = await ask("Master password: ", { hidden: true });
 

@@ -23,7 +23,7 @@ const SOURCE = /\.(?:[cm]?jsx?|tsx?|py|html?|yml|yaml)$|(^|\/)\.env\.example$/i;
 const LOCKFILE = /(^|\/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml)$/;
 const LIKELY = /(api|client|config|env|server|url|base|registry|service|index|main|app|constants|axios|fetch|render|bootstrap)/i;
 
-const STASHR_HOST = /(password-manager-server|xxdr\.onrender\.com|8gvj\.onrender\.com)/i;
+const STASHR_HOST = /(password-manager-server|xxdr\.onrender\.com)/i;
 const ENV_NAME = /(?:process\.env|import\.meta\.env)\.((?:REACT_APP|VITE|NEXT_PUBLIC|EXPO_PUBLIC|GATSBY)_[A-Za-z0-9_]*?(?:API|URL|URI|BASE|SERVER|BACKEND|HOST)[A-Za-z0-9_]*)/g;
 const ONRENDER = /https?:\/\/[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.onrender\.com(?:\/[^\s"'`)<>]*)?/g;
 const origin = (value) => { try { return new URL(String(value || "")).origin.toLowerCase(); } catch (e) { return ""; } };
