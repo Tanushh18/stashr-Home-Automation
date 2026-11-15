@@ -9,7 +9,13 @@ import com.tanush.stashr.where.core.LockLogic
 import com.tanush.stashr.where.core.Prefs
 
 /** Android's "device admin" hook. It is only here so the phone may lock its own screen on request; see res/xml/lock_admin.xml. */
-class LockAdmin : DeviceAdminReceiver()
+class LockAdmin : DeviceAdminReceiver() {
+    // The moment the owner switches Remote lock on or off, tell Stashr (the app and the widgets show this state; waiting for the
+    // next timed report left an old "off" on screen after it had been switched on).
+    override fun onEnabled(context: Context, intent: Intent) { reportNow(context) }
+    override fun onDisabled(context: Context, intent: Intent) { reportNow(context) }
+    private fun reportNow(context: Context) { if (Prefs(context.applicationContext).linked) Scheduler.pushed(context.applicationContext, force = true) }
+}
 
 object RemoteLock {
     private fun dpm(ctx: Context) = ctx.applicationContext.getSystemService(Context.DEVICE_POLICY_SERVICE) as? DevicePolicyManager

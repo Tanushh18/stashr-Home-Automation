@@ -216,12 +216,12 @@ function LockPhonesCard({ phones, reload }) {
           <View key={p.id} style={{ gap: 4, paddingVertical: 6 }}>
             <Txt bold>{p.name}{p.person && p.person !== p.name ? ` · ${p.person}` : ""}</Txt>
             <Dim>{p.online ? `reported ${ago(p.lastSeen)}` : `last report ${ago(p.lastSeen)}`} · {remoteLockLine(st)}</Dim>
+            {!p.online ? <Dim>This phone is not reporting right now. A lock only works if it reaches the phone within 2 minutes.</Dim> : null}
             {st.last ? <Dim>Last lock request {st.last.ageMin < 1 ? "just now" : `${st.last.ageMin} min ago`}: {st.last.ok ? "locked ✓" : `not locked: ${st.last.why}`}</Dim> : null}
             <Row>
               <Btn
                 label="🔒 Lock now"
                 kind="danger"
-                disabled={st.remote === "off"}
                 onPress={async () => {
                   if (!(await ask(`Lock ${p.name}?`, "Its screen locks within a few seconds. Whoever uses it then needs the PIN or fingerprint.", "Lock", true))) return;
                   if (await act(() => home.lockPhone(p.id), `Lock sent to ${p.name}. The phone confirms when it has locked.`)) setTimeout(reload, 8000);

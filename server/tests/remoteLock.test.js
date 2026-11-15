@@ -24,10 +24,11 @@ const TOKEN = "f".repeat(60) + ":APA91b" + "x".repeat(100);
 let mongo;
 const sent = [];
 let fcmStatus = 200;
+let fcmBodyOverride = null;
 const reply = (status, body) => ({ ok: status < 400, status, json: async () => body, text: async () => JSON.stringify(body) });
 const fakeFetch = async (url, opts) => {
     if (String(url).startsWith("https://oauth2.googleapis.com/token")) return reply(200, { access_token: "ya29.fake", expires_in: 3600 });
-    if (fcmStatus >= 400) return reply(fcmStatus, { error: { status: "UNREGISTERED" } });
+    if (fcmStatus >= 400) return reply(fcmStatus, fcmBodyOverride || { error: { status: "UNREGISTERED" } });
     sent.push(JSON.parse(opts.body).message);
     return reply(200, { name: "projects/stashr-home/messages/1" });
 };
@@ -83,7 +84,7 @@ describe("lock a family phone from Stashr", () => {
         expect(sent).toHaveLength(0);
     });
 
-    test("no push address yet: 409 with a plain reason; Firebase not set up: 503; both say nothing was sent", async () => {
+    test("no push address yet: 409 with a plain reason; Firebase not set up: 501 (never 502-504, which the apps read as the server being asleep); both say nothing was sent", async () => {
         const auth = await signUp(); const owner = await ownerOf();
         const p = await phone(owner, { fcmToken: "", fcmSet: false });
         const r = await request(app).post(`/home/devices/${p._id}/lock`).set(auth).send({});
@@ -92,19 +93,39 @@ describe("lock a family phone from Stashr", () => {
         delete process.env.STASHR_FIREBASE_KEY;
         const q = await phone(owner, { name: "Other" });
         const r2 = await request(app).post(`/home/devices/${q._id}/lock`).set(auth).send({});
-        expect(r2.status).toBe(503);
+        expect(r2.status).toBe(501);
+        expect(r2.body.error).toMatch(/STASHR_FIREBASE_KEY/);
         expect(sent).toHaveLength(0);
     });
 
-    test("Firebase refuses it: 502, never a success; a dead push address is forgotten", async () => {
+    test("Firebase refuses it: 424, never a success; a dead push address is forgotten", async () => {
         const auth = await signUp(); const p = await phone(await ownerOf());
         fcmStatus = 404;
         const r = await request(app).post(`/home/devices/${p._id}/lock`).set(auth).send({});
-        expect(r.status).toBe(502);
+        expect(r.status).toBe(424);
         expect(r.body.sent).toBeUndefined();
+        expect(r.body.error).toMatch(/no longer valid/);
         const after = await HomeDevice.findById(p._id).select("+fcmToken");
         expect(after.fcmToken).toBe("");
         expect((await HomeEvent.find({ device: p._id })).length).toBe(0);
+    });
+
+    test("a Firebase refusal says why in plain words, for the likely mistakes, without echoing Firebase's answer", async () => {
+        const auth = await signUp(); const p = await phone(await ownerOf());
+        const cases = [
+            [403, { error: { status: "PERMISSION_DENIED", message: "Firebase Cloud Messaging API has not been used in project 123 before or it is disabled." } }, /project stashr-where.*API \(V1\) is enabled/],
+            [400, { error: { status: "INVALID_ARGUMENT", message: "SenderId mismatch SENDER_ID_MISMATCH" } }, /no longer valid|different project/],
+            [500, { error: { status: "INTERNAL" } }, /try again in a minute/],
+        ];
+        for (const [status, body, want] of cases) {
+            fcmStatus = status; fcmBodyOverride = body;
+            const r = await request(app).post(`/home/devices/${p._id}/lock`).set(auth).send({});
+            expect(r.status).toBe(424);
+            expect(r.body.error).toMatch(want);
+            expect(r.body.error).not.toMatch(/project 123/);
+            await HomeDevice.updateOne({ _id: p._id }, { $set: { fcmToken: TOKEN, fcmSet: true } });
+        }
+        fcmBodyOverride = null;
     });
 
     test("needs a signed-in user", async () => {

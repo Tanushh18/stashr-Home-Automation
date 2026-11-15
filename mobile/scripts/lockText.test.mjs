@@ -44,6 +44,7 @@ test("lock state: Remote lock on, off or not known, and the last request in word
 
 test("the line under the phone's name never claims more than is known", () => {
   assert.equal(remoteLockLine({ remote: "on" }), "Remote lock is on");
-  assert.match(remoteLockLine({ remote: "off" }), /OFF/);
-  assert.match(remoteLockLine({ remote: "unknown" }), /not known yet/);
+  assert.match(remoteLockLine({ remote: "off" }), /OFF in its last report/);
+  assert.match(remoteLockLine({ remote: "off" }), /try/);                 // never a dead end
+  assert.match(remoteLockLine({ remote: "unknown" }), /not reported yet/);
 });

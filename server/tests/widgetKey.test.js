@@ -82,13 +82,17 @@ describe("read-only keys for the home-screen widgets", () => {
         const auth = await signUp(); const owner = (await User.findOne({ email: "ana@example.com" }))._id;
         await HomeDevice.create({ owner, name: "Tanush A38", kind: "phone", person: "Tanush", tokenHash: "p1", lastSeen: new Date(), status: { agent: "stashr-where", battery: 87, charging: true, wifi: true, health: { remoteLock: true } } });
         await HomeDevice.create({ owner, name: "F21 Pro", kind: "phone", person: "Tanush", tokenHash: "p2", lastSeen: new Date(), status: { agent: "stashr-where", battery: 54, charging: false, wifi: false, health: { remoteLock: false } } });
+        await HomeDevice.create({ owner, name: "Hub phone", kind: "phone", person: "X", tokenHash: "p3", lastSeen: new Date(), status: { agent: "stashr-hub", battery: 40 } });
         const { key } = await makeKey(auth);
         const phones = (await request(app).get("/home/widget/dashboard").set("X-Widget-Key", key)).body.phones;
-        expect(phones.map((p) => p.name).sort()).toEqual(["F21 Pro", "Tanush A38"]);
+        expect(phones.map((p) => p.name).sort()).toEqual(["F21 Pro", "Hub phone", "Tanush A38"]);
         const a38 = phones.find((p) => p.name === "Tanush A38");
-        expect(a38).toMatchObject({ online: true, battery: 87, charging: true, wifi: true, canLock: true });
+        expect(a38).toMatchObject({ online: true, battery: 87, charging: true, wifi: true, canLock: true, remoteLock: true });
         expect(a38.id).toMatch(/^[a-f0-9]{24}$/);
-        expect(phones.find((p) => p.name === "F21 Pro").canLock).toBe(false);   // Remote lock is off there: no Lock button promised
+        // an old "off" report must not hide the button (the phone may have just been switched on): offered, with the state kept for display
+        expect(phones.find((p) => p.name === "F21 Pro")).toMatchObject({ canLock: true, remoteLock: false });
+        // a phone in Stashr Hub's phone mode cannot be locked at all
+        expect(phones.find((p) => p.name === "Hub phone")).toMatchObject({ canLock: false, remoteLock: null });
     });
 
     test("removing a key stops it at once; someone else cannot remove it; at most ten keys", async () => {
