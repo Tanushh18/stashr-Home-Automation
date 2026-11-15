@@ -20,6 +20,47 @@ search an address), TV time, insights, speed chart, movies from Drive and the he
 Ask Stashr, times are typed as HH:MM, and the maps are schematic drawings (home, distance rings, route line) rather than street maps.
 It updates through the usual Settings → Check for updates (GitHub release built by `android-apk.yml`).
 
+**Home-screen widget and shortcuts (2.6.0):** the *Stashr Home* widget (any launcher: long-press the home screen → Widgets → Stashr, or
+Smart home → Overview → *Add to phone's home screen*) shows who is on the way, who is home, the weather (rain when likely) and the TV, from
+`GET /home/dashboard`. It stores display text only (no token) and refreshes when Smart home loads and about every 15 minutes in the
+background, only while a widget is placed; it is cleared on sign-out. Long-press the Stashr icon for *Smart home*, *TV remote*, *Camera*,
+*Money* and *Passwords*. Both open `stashr://` links; Smart home and Money are behind the unlock, and a link tapped while locked opens right
+after the unlock. Code: `mobile/modules/stashr-widget`, `src/lib/homeWidget.js`, `src/lib/widgetText.js` (tests:
+`node --test scripts/widgetText.test.mjs`).
+
+**More widgets (2.6.3), all in the website's departure-board style:** *Stashr Scenes* (up to four scenes, one tap runs one),
+*Stashr TV remote* (TV state; ⏯, VOL −, VOL +, MUTE, HOME), *Stashr Quick actions* (Ask Stashr, Camera photo, Money, Passwords),
+*Stashr Money* (spent today and this month, top category, entries to check; from `GET /expenses`, loaded only while this widget is
+placed) and *Stashr Network* (last speed test, devices on the Wi-Fi, health of the Stashr devices; loaded only while placed).
+Buttons that act open `stashr://action?…&k=<key>`: the app asks for the unlock, checks the per-install secret key every widget button
+carries (so no other app can fire them), sends only whitelisted commands and shows what the server answered (`src/app/action.js`).
+
+## Widgets: live every 15 seconds, the Stashr world behind them (Stashr 2.8.0)
+Widgets: **Stashr Home** (board + a jungle, river and waterfall scene that follows the clock and the weather), **TV remote**, **Quick actions**,
+**Money**, **Network**, and **Phones** (every family phone's battery, charging and online state, with a one-tap **Lock** that only appears when that
+phone has Remote lock on). The Scenes widget was removed.
+**Live refresh:** a small foreground service (`LiveService`, notification "Stashr widgets are live") asks the server for the dashboard every 15 seconds
+**only while the screen is on and a Stashr widget is on the home screen**; screen off = no timer and no network. After failures it backs off to
+once a minute and the widgets keep their last lines. It restarts after a reboot or an app update. Each phone makes its own **read-only widget key**
+(`POST /home/widget-keys`; only the SHA-256 is stored; it can call `GET /home/widget/dashboard` and nothing else, so it is not a login; list and
+revoke with `GET/DELETE /home/widget-keys`). The service works the lines out natively (`BoardText.kt`, a copy of `src/lib/widgetText.js`; both are
+tested with the same cases) and merges them into what the app saved (Money and the Network widget's Wi-Fi/health lines still refresh every 15
+minutes from the app). A key the server refuses stops the service until the app opens and makes a new one.
+**Scenery:** `Scenery.kt` draws the picture once per look (dawn, day, dusk, night with stars and a moon; clear, cloudy, rain) and reuses it: no
+animation loop, no timer, so it costs no battery between changes.
+
+## Remote lock (Stashr 2.7.0, Stashr Location 1.11.0)
+Lock a family phone's screen from another phone or the website's server. Smart home → Devices → **Lock a phone** lists the phones that run Stashr
+Location, with **Lock now** and **Lock button on my home screen** (a pinned icon that locks that phone in one tap, behind the unlock).
+How it works: the server (`POST /home/devices/:id/lock`) sends a Firebase push `{type:"lock"}` with a 2-minute life; Stashr Location locks the screen
+through Android's device-admin *force-lock* policy, which is the only policy it asks for (it cannot erase, reset or read anything). The phone's owner
+switches it on once, on that phone: Stashr Location → Remote lock → Allow. Off by default; switch it off the same way.
+The server only says the lock was *sent*. The phone reports `health.remoteLock` and `health.lastLock {at, ok, reason}` (reasons: `admin_off`,
+`stale`, `not_linked`, `lock_failed`) with its next report, which it triggers right after the attempt, so the app shows "locked ✓" or why not.
+A push that sat in a queue for over 2 minutes is ignored. Needs the Firebase key on the server (`STASHR_FIREBASE_KEY`) and the phone's push address
+(it appears after Stashr Location 1.9+ has run once). Tests: `server/tests/remoteLock.test.js`, `where-app` `LockLogicTest`, `mobile/scripts/lockText.test.mjs`.
+Not possible: answering or talking on a SIM call from a second phone (Android does not let apps carry call audio).
+
 ## Health check
 Every app (Hub 1.9, TV 1.3, Location 1.5) sends `status.health` with each report: app version, Android version, "Display over other
 apps", accessibility, battery limits, notifications, camera and microphone (tablet), location "all the time" (phone), USB drive (TV), and its

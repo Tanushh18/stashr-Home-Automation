@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ScrollView, View } from "react-native";
+import { useLocalSearchParams } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import { Page, Loading, Note } from "../components/kit";
 import { Chip } from "../components/ui";
@@ -29,8 +30,13 @@ export default function SmartHome() {
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const scroller = useRef(null);
+  // ?tab=devices / ?tab=security from a long-press shortcut wins over the remembered tab.
+  const { tab: linked } = useLocalSearchParams();
 
-  useEffect(() => { SecureStore.getItemAsync(KEY).then((t) => { if (TABS.some(([k]) => k === t)) setTab(t); }).catch(() => {}); }, []);
+  useEffect(() => {
+    if (TABS.some(([k]) => k === linked)) { setTab(linked); return; }
+    SecureStore.getItemAsync(KEY).then((t) => { if (TABS.some(([k]) => k === t)) setTab(t); }).catch(() => {});
+  }, [linked]);
   const go = useCallback((t) => { setTab(t); SecureStore.setItemAsync(KEY, t).catch(() => {}); }, []);
 
   const reload = useCallback(async () => {

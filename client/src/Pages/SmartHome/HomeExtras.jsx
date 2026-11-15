@@ -123,7 +123,7 @@ export function PeopleCard({ people }) {
         <ul className="sh-people">{people.map((p) => (
           <li key={p.person} className={p.home ? "is-home" : ""}>
             <span className="sh-avatar" aria-hidden="true">{p.person.slice(0, 1).toUpperCase()}</span>
-            <div><b>{p.person}</b><span>{p.home ? "Home" : p.stale ? "Location not updating" : "Out"}{p.by ? ` (${p.by === "wifi+gps" ? "Wi-Fi + location" : p.by === "gps" ? "location" : p.by === "last" ? "last known location, not updating" : "Wi-Fi"})` : ""}{!p.home && p.distanceKm !== undefined ? ` · ${p.distanceKm} km away` : ""}{p.fixAgeMin !== undefined ? ` · location ${p.fixAgeMin < 1 ? "just now" : p.fixAgeMin + " min ago"}` : p.lastSeen ? ` · seen ${ago(p.lastSeen)}` : ""} · {p.devices.join(", ")}</span></div>
+            <div><b>{p.person}</b><span>{p.home ? "Home" : p.stale ? "Location not updating" : "Out"}{p.by ? ` (${p.by === "wifi+gps" ? "Wi-Fi + location" : p.by === "gps" ? "location" : p.by === "last" ? "last known location, not updating" : p.by === "nowifi" ? "not on the home Wi-Fi" : "Wi-Fi"})` : ""}{!p.home && p.distanceKm !== undefined ? ` · ${p.distanceKm} km away` : ""}{p.fixAgeMin !== undefined ? ` · location ${p.fixAgeMin < 1 ? "just now" : p.fixAgeMin + " min ago"}` : p.lastSeen ? ` · seen ${ago(p.lastSeen)}` : ""} · {p.devices.join(", ")}</span></div>
           </li>
         ))}</ul>
       ) : <p className="sh-dim">Nobody is set up yet. Open a Wi-Fi device's Name / room and type whose it is.</p>}

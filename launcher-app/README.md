@@ -7,7 +7,7 @@ fetches Lawnchair at a pinned version and applies them.
 | File | What it is |
 |---|---|
 | `UPSTREAM` | Which Lawnchair repository and commit the launcher is built from |
-| `apply.py` | The edits to Lawnchair's own files (name, package id, version, default colour). Stops with a message if Lawnchair has changed that text |
+| `apply.py` | The edits to Lawnchair's own files (name, package id, version, default colour, and "Lawnchair" → "Stashr" in the on-screen text). Stops with a message if Lawnchair has changed that text |
 | `overlay/` | Files copied over Lawnchair's: the Stashr icon (adaptive, round, themed) and colour |
 | `version.txt` | The launcher's version (`1.0.0`) |
 | `NOTICE.md` | Credit to Lawnchair and a list of what is changed |
@@ -16,7 +16,8 @@ fetches Lawnchair at a pinned version and applies them.
 ## Build the APK (no computer setup needed)
 GitHub → **Actions** → *Stashr Launcher Android Release* → **Run workflow**. It takes about 25 to 45 minutes. The signed APK appears under
 **Releases** as `stashr-launcher-v<version>-build-<number>` (package `com.tanush.stashr.launcher`). It uses the same signing key as the other
-Stashr apps. It installs next to a normal Lawnchair; it never replaces it.
+Stashr apps. **Updates without a cable:** the Stashr server serves the newest build at `/api/mobile-updates/launcher/latest` and
+`/download`; in the Stashr app open Settings → Apps → *Stashr Launcher* → *Download the newest build* (Android asks to confirm; the layout is kept). It installs next to a normal Lawnchair; it never replaces it.
 
 ## Work on the look at home (Android Studio)
 You need Android Studio, JDK 21 and Git.
@@ -43,5 +44,5 @@ If anything looks wrong, Settings → Apps → Default apps → Home app → pic
 |---|---|---|
 | Stashr name, icon, green accent | **Done** in `apply.py` and `overlay/` | Built by the workflow above |
 | Cleaner OPPO setup | **Done as the checklist above** | A first-run reminder screen would need code inside the launcher: fork work |
-| Stashr card on the home screen (who is home, today's spend, vault button) | **Not built yet** | The card needs the family's Stashr login, which a launcher does not have. Build it as a home-screen **widget in the main Stashr app** (it already has the login); it then shows on this launcher and any other |
-| Stashr shortcuts on the dock (Money, Smart home, Passwords) | **Not built yet** | Add them as app shortcuts to the main Stashr app; long-pressing its icon in the dock then shows them, in this launcher and any other |
+| Stashr card on the home screen (who is home, who is on the way, weather, TV) | **Done** as the *Stashr Home* widget in the main Stashr app 2.6.0 (`mobile/modules/stashr-widget`) | Long-press the home screen → Widgets → Stashr, or Smart home → Overview → *Add to phone's home screen*. Shows on this launcher and any other |
+| Stashr shortcuts (Smart home, TV remote, Camera, Money, Passwords) | **Done** in the main Stashr app 2.6.0 | Long-press the Stashr icon; drag a shortcut onto the home screen or dock to keep it there. The lock screen still comes first |

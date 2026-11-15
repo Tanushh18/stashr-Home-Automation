@@ -1,0 +1,86 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+  <application>
+    <!-- The 15-second refresh of the widgets, only while the screen is on. It asks the Stashr server for the dashboard with a read-only key. -->
+    <service android:name=".LiveService" android:exported="false" android:foregroundServiceType="specialUse">
+      <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="Refreshes the Stashr home-screen widgets every 15 seconds while the screen is on" />
+    </service>
+    <receiver android:name=".LiveBoot" android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.BOOT_COMPLETED" />
+        <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+      </intent-filter>
+    </receiver>
+    <!-- The "Stashr Home" home-screen widget. It only draws a snapshot the app saved (no token, no network of its own). -->
+    <receiver
+      android:name=".StashrHomeWidget"
+      android:label="@string/stashr_home_widget_label"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/stashr_home_widget_info" />
+    </receiver>
+    <!-- The other board widgets (Widgets.kt): display text from the same snapshot; actions go through the app's unlock. -->
+    <receiver
+      android:name=".StashrPhonesWidget"
+      android:label="@string/stashr_phones_label"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/stashr_phones_widget_info" />
+    </receiver>
+    <receiver
+      android:name=".StashrTvWidget"
+      android:label="@string/stashr_tv_label"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/stashr_tv_widget_info" />
+    </receiver>
+    <receiver
+      android:name=".StashrQuickWidget"
+      android:label="@string/stashr_quick_label"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/stashr_quick_widget_info" />
+    </receiver>
+    <receiver
+      android:name=".StashrMoneyWidget"
+      android:label="@string/stashr_money_label"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/stashr_money_widget_info" />
+    </receiver>
+    <receiver
+      android:name=".StashrNetWidget"
+      android:label="@string/stashr_net_label"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/stashr_net_widget_info" />
+    </receiver>
+  </application>
+</manifest>

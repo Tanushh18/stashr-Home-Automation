@@ -21,7 +21,7 @@ function HeroMark() {
   return (
     <View style={styles.markWrap}>
       <View style={[styles.mark, { backgroundColor: theme.accent }]}>
-        <Icon name="shieldCheck" size={44} color="#fff" strokeWidth={1.8} />
+        <Icon name="shieldCheck" size={44} color={theme.onAccent} strokeWidth={1.8} />
       </View>
     </View>
   );
@@ -53,7 +53,7 @@ export default function Welcome() {
             <FadeIn key={f.title} delay={220 + i * 90}>
               <View style={[styles.feature, { backgroundColor: theme.surface, borderColor: theme.line }]}>
                 <LinearGradient colors={theme.cool} style={styles.featureIcon}>
-                  <Icon name={f.icon} size={18} color="#fff" />
+                  <Icon name={f.icon} size={18} color={theme.onAccent} />
                 </LinearGradient>
                 <View style={{ flex: 1 }}>
                   <Text style={{ color: theme.heading, fontFamily: theme.font.bodySemi, fontSize: 15 }}>{f.title}</Text>

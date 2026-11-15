@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { View } from "react-native";
 import { home } from "../../lib/homeApi";
+import { pushHomeWidget, widgetSupported, widgetCount, requestPin, syncHomeWidgetTask } from "../../lib/homeWidget";
 import { ago, fmtMinutes, healthItems } from "../../lib/smartHome";
 import { Boundary, Bad, Box, Btn, Dim, Good, Input, Row, Txt, Dot, usePoll, useLoad, Sub } from "./h";
 
@@ -34,6 +35,9 @@ const comingText = (c) => (c.minutes <= 1 ? `${c.person} bas pahunchne wale hain
 function HomeScreen() {
   const { data: d, setData } = useLoad(() => home.dashboard(), []);
   usePoll(async () => { setData(await home.dashboard()); }, 20000);
+  // The home-screen widget shows the same picture: hand it what was just loaded (no extra request).
+  React.useEffect(() => { pushHomeWidget(d); }, [d]);
+  const [placed, setPlaced] = useState(() => widgetCount() > 0);
   if (!d) return null;
   const w = d.weather;
   return (
@@ -47,6 +51,16 @@ function HomeScreen() {
       <Txt>⏱ TV today: {fmtMinutes(d.tvMinutesToday || 0)}</Txt>
       {d.speed ? <Txt>🚀 Internet: {d.speed.down} Mbit/s down · {d.speed.up} up · {d.speed.ping} ms · {ago(d.speed.at)}</Txt> : null}
       {d.events.slice(0, 5).map((e, i) => <Dim key={i}>{ago(e.at)} · {e.text}</Dim>)}
+      {widgetSupported && !placed ? (
+        <Btn
+          label="Add to phone's home screen"
+          onPress={() => {
+            if (!requestPin()) return;
+            // The launcher asks the person first; check a little later and start the 15-minute refresh once it is there.
+            setTimeout(() => { const on = widgetCount() > 0; setPlaced(on); if (on) { pushHomeWidget(d); syncHomeWidgetTask(); } }, 6000);
+          }}
+        />
+      ) : null}
     </Box>
   );
 }

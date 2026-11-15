@@ -69,6 +69,14 @@ const DEAD = /UNREGISTERED|NOT_FOUND|INVALID_ARGUMENT|registration-token/i;
  * the token is no good any more and should be forgotten (the app was uninstalled, or it got a newer token).
  */
 async function sendLocate(token, type = "locate") {
+    return sendData(token, { type: type === "now" ? "now" : "locate" }, "300s");
+}
+
+/**
+ * Sends one small data message (no personal data) to one phone. `ttl` is how long Firebase may hold it for a phone that is off or
+ * out of signal: a lock request uses a short one so a phone is never locked minutes after you pressed the button.
+ */
+async function sendData(token, data, ttl = "300s") {
     const key = readKey();
     if (!key) return { ok: false, reason: "not_configured" };
     if (!token || typeof token !== "string") return { ok: false, reason: "no_token" };
@@ -80,9 +88,9 @@ async function sendLocate(token, type = "locate") {
             body: JSON.stringify({
                 message: {
                     token,
-                    data: { type: type === "now" ? "now" : "locate" },
+                    data,
                     // High priority wakes a sleeping phone (Doze); the short TTL means an unreachable phone is not woken hours later.
-                    android: { priority: "HIGH", ttl: "300s" }
+                    android: { priority: "HIGH", ttl }
                 }
             }),
             signal: AbortSignal.timeout(10_000)
@@ -99,4 +107,4 @@ async function sendLocate(token, type = "locate") {
 /** Test hook: replace fetch / the clock and forget the cached access token. */
 function _reset({ fetch: f, now } = {}) { fetchImpl = f || ((...a) => fetch(...a)); nowImpl = now || (() => Date.now()); cached = null; }
 
-module.exports = { readKey, enabled, sendLocate, _reset, ENV_NAMES };
+module.exports = { readKey, enabled, sendLocate, sendData, _reset, ENV_NAMES };

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The board panel: near-black blue-green, like the website's departure board. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+  <gradient android:angle="270" android:startColor="#F2111A20" android:endColor="#F20A1116" />
+  <stroke android:width="1dp" android:color="#FF1A262D" />
+  <corners android:radius="18dp" />
+</shape>

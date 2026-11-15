@@ -52,7 +52,7 @@ export default function Lock() {
               <Animated.View style={[styles.ring, { borderColor: theme.accent2 }, ring(0.2)]} />
               <Bounce onPress={bio} scaleTo={0.9}>
                 <LinearGradient colors={theme.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={[styles.button, { shadowColor: theme.accent }]}>
-                  <Icon name="fingerprint" size={48} color="#fff" strokeWidth={1.6} />
+                  <Icon name="fingerprint" size={48} color={theme.onAccent} strokeWidth={1.6} />
                 </LinearGradient>
               </Bounce>
             </View>

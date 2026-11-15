@@ -70,7 +70,7 @@ export default function ItemCard({ item, info, icons, onEdit, onFavorite, select
               accessibilityLabel={`Select ${item.name || "item"}`}
               style={[styles.check, { borderColor: selected ? theme.accent : theme.line, backgroundColor: selected ? theme.accent : "transparent" }]}
             >
-              {selected ? <Icon name="check" size={14} color="#fff" /> : null}
+              {selected ? <Icon name="check" size={14} color={theme.onAccent} /> : null}
             </Pressable>
           ) : null}
           <ItemAvatar name={item.name} url={item.url} icons={icons} />

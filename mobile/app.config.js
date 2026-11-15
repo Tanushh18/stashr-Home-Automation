@@ -8,7 +8,7 @@ module.exports = ({ config }) => {
     updates: {
       ...(config.updates || {}),
       enabled: true,
-      url: process.env.STASHR_OTA_URL || "https://password-manager-server-10od.onrender.com/api/ota/manifest",
+      url: process.env.STASHR_OTA_URL || "https://password-manager-server-xxdr.onrender.com/api/ota/manifest",
       checkAutomatically: "ON_LOAD",
       fallbackToCacheTimeout: 0,
     },

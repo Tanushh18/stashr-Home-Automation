@@ -243,7 +243,7 @@ export default function Photos() {
                     )}
                     {m.type === "video" ? <View style={styles.tag}><Icon name="clock" size={11} color="#fff" /></View> : null}
                     {m.favorite ? <View style={styles.fav}><Icon name="starFill" size={13} color="#fff" /></View> : null}
-                    {selecting ? <View style={[styles.check, { borderColor: "#fff", backgroundColor: on ? theme.accent : "rgba(0,0,0,.35)" }]}>{on ? <Icon name="check" size={12} color="#fff" strokeWidth={3} /> : null}</View> : null}
+                    {selecting ? <View style={[styles.check, { borderColor: "#fff", backgroundColor: on ? theme.accent : "rgba(0,0,0,.35)" }]}>{on ? <Icon name="check" size={12} color={theme.onAccent} strokeWidth={3} /> : null}</View> : null}
                   </Pressable>
                 );
               })}

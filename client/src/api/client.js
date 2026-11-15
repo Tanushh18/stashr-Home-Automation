@@ -7,9 +7,9 @@ import axios from "axios";
 // Every server runs the same database, so any of these works and the next one takes over if the first is down.
 // EORE is the extra standby for the website only; it sleeps when unused and wakes when the others are down.
 const DEFAULT_SERVERS = [
-    "https://password-manager-server-10od.onrender.com",
-    "https://password-manager-server-g305.onrender.com",
     "https://password-manager-server-xxdr.onrender.com",
+    "https://password-manager-server-g305.onrender.com",
+    "https://password-manager-server-10od.onrender.com",
     "https://stashr-home-automation.onrender.com",
     "https://stashr-home-automation-gk9p.onrender.com"
 ];

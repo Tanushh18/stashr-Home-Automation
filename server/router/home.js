@@ -178,6 +178,40 @@ router.post("/home/devices/:id/commands", authenticate, writeLimiter, async (req
     } catch (e) { return fail(res, e, "Could not send the command."); }
 });
 
+/**
+ * Lock a family phone's screen from here. It goes by Firebase push (instant, kept for 2 minutes at most), and the phone does it
+ * only when its owner switched "Remote lock" on in Stashr Location. The answer says exactly what happened: this only says the push
+ * was sent; the phone writes status.lock when it has locked (or why it could not), which the page and the app show.
+ */
+/** A plain reason for a Firebase refusal, never the raw answer (it can name the project). */
+function fcmHint(sent) {
+    const r = String((sent && sent.reason) || "");
+    if (sent && sent.dead) return "its push address is no longer valid: open Stashr Location on it once";
+    if (/token HTTP|invalid_grant|auth|JWT|signature|private_key/i.test(r)) return "the Firebase key on the server was refused: it must be the full service-account JSON key (not google-services.json)";
+    if (/SENDER_ID_MISMATCH|mismatch/i.test(r)) return "the server's Firebase key is for a different project than the Stashr Location app (it must be project stashr-where)";
+    if (/HTTP 403|PERMISSION_DENIED|has not been used|disabled/i.test(r)) return "Firebase refused it: use a key from project stashr-where and make sure the Firebase Cloud Messaging API (V1) is enabled there";
+    if (/HTTP 401/.test(r)) return "the Firebase key was refused";
+    return "try again in a minute";
+}
+
+router.post("/home/devices/:id/lock", authenticate, writeLimiter, async (req, res) => {
+    try {
+        if (!validId(req.params.id)) return res.status(404).json({ error: "Device not found." });
+        const device = await HomeDevice.findOne({ _id: req.params.id, owner: req.rootUser._id }).select("+fcmToken");
+        if (!device) return res.status(404).json({ error: "Device not found." });
+        if (device.kind !== "phone" || !device.status || device.status.agent !== "stashr-where") return res.status(400).json({ error: "Only a phone running Stashr Location can be locked from here." });
+        const fcm = require("../utils/fcm");
+        // 501 / 424, not 503 / 502: the apps read 502-504 as "the server is asleep" and would hide this message behind a generic one.
+        if (!fcm.enabled()) return res.status(501).json({ error: "Phone push is not set up on this server (no Firebase key), so the lock cannot be sent. Add the Firebase service-account key as STASHR_FIREBASE_KEY on the server." });
+        if (!device.fcmToken) return res.status(409).json({ error: `${device.name} has no push address yet. Open Stashr Location on it once.` });
+        const sent = await fcm.sendData(device.fcmToken, { type: "lock" }, "120s");
+        if (sent.dead) await HomeDevice.updateOne({ _id: device._id }, { $set: { fcmToken: "", fcmSet: false } }).catch(() => {});
+        if (!sent.ok) return res.status(424).json({ error: `Firebase did not accept the lock for ${device.name}: ${fcmHint(sent)}.`, detail: process.env.NODE_ENV === "production" ? undefined : sent.reason });
+        await record({ owner: req.rootUser._id, device: device._id, deviceName: device.name, kind: "command", text: `Lock sent to ${device.name} (waiting for the phone to confirm)` });
+        return res.status(202).json({ ok: true, sent: true, device: device.name, note: "Sent. The phone confirms when it has locked; if its owner has not switched Remote lock on, it will not." });
+    } catch (e) { return fail(res, e, "Could not send the lock."); }
+});
+
 router.put("/home/devices/:id/lan/:key", authenticate, writeLimiter, async (req, res) => {
     try {
         if (!validId(req.params.id) || !/^[a-z0-9-]{1,60}$/.test(req.params.key)) return res.status(404).json({ error: "Device not found." });

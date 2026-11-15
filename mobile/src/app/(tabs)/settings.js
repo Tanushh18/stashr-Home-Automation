@@ -215,7 +215,7 @@ export default function Settings() {
             <Card glow style={{ gap: 14 }}>
               <View style={styles.profile}>
                 <LinearGradient colors={theme.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.avatar}>
-                  <Text style={{ color: "#fff", fontFamily: theme.font.displayHeavy, fontSize: 26 }}>{(profile?.name || "?").charAt(0).toUpperCase()}</Text>
+                  <Text style={{ color: theme.onAccent, fontFamily: theme.font.displayHeavy, fontSize: 26 }}>{(profile?.name || "?").charAt(0).toUpperCase()}</Text>
                 </LinearGradient>
                 <View style={{ flex: 1 }}>
                   <Text style={{ color: theme.heading, fontFamily: theme.font.display, fontSize: 19 }}>{profile?.name || "Your vault"}</Text>
@@ -239,6 +239,7 @@ export default function Settings() {
           </FadeIn>
 
           <Section title="WORKSPACE" delay={80}>
+            <Row icon="sparkle" title="Stashr Home" subtitle="Live command centre: devices, scenes, ask Stashr" onPress={() => router.push("/stashr-home")} />
             <Row icon="home" title="Smart home" subtitle="TV, tablet, family locations, camera, scenes and insights" onPress={() => router.push("/home")} />
             <Row icon="note" title="Money" subtitle="UPI and bank payments from your SMS, by category, in your Google Sheet" onPress={() => router.push("/money")} />
             {profile?.features?.smartHome !== false ? <Row icon="mail" title="WhatsApp sender" subtitle="Turn sending on, see when the next message goes, sheets, pictures and every step of each message" onPress={() => router.push("/whatsapp")} /> : null}

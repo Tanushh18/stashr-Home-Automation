@@ -3,7 +3,7 @@
     "name": "Stashr",
     "slug": "aurelia-vault",
     "scheme": "stashr",
-    "version": "2.5.0",
+    "version": "2.8.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -90,9 +90,9 @@
     },
     "extra": {
       "apiServers": [
-        "https://password-manager-server-10od.onrender.com",
-        "https://password-manager-server-g305.onrender.com",
         "https://password-manager-server-xxdr.onrender.com",
+        "https://password-manager-server-g305.onrender.com",
+        "https://password-manager-server-10od.onrender.com",
         "https://stashr-home-automation.onrender.com",
         "https://stashr-home-automation-gk9p.onrender.com"
       ],
