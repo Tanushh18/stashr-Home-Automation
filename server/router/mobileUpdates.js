@@ -165,7 +165,10 @@ const SIDE_APPS = {
   tv: { label: "Stashr TV", pkg: "com.tanush.stashr.tv", prefix: "stashr-tv-v", apk: "stashr-tv.apk", manifest: "stashr-tv-update.json", file: "Stashr-TV" },
   cast: { label: "Stashr Cast", pkg: "com.tanush.stashr.cast", prefix: "stashr-cast-v", apk: "stashr-cast.apk", manifest: "stashr-cast-update.json", file: "Stashr-Cast" },
   where: { label: "Stashr Location", pkg: "com.tanush.stashr.where", prefix: "stashr-where-v", apk: "stashr-where.apk", manifest: "stashr-where-update.json", file: "Stashr-Location" },
+  // The phone launcher (Lawnchair + Stashr changes, launcher-app/). No device identity, so like Cast it is offered to everyone.
+  launcher: { label: "Stashr Launcher", pkg: "com.tanush.stashr.launcher", prefix: "stashr-launcher-v", apk: "stashr-launcher.apk", manifest: "stashr-launcher-update.json", file: "Stashr-Launcher" },
 };
+const NO_ROLLOUT = new Set(["cast", "launcher"]);
 const sideCache = {};
 
 function ghHeaders(accept) {
@@ -173,7 +176,7 @@ function ghHeaders(accept) {
 }
 
 let sideList = null, sideListAt = 0;
-/** One GitHub call for the release list, shared by Hub, TV, Cast and Location. */
+/** One GitHub call for the release list, shared by Hub, TV, Cast, Location and the launcher. */
 async function sideReleases() {
   if (sideList && Date.now() - sideListAt < CACHE_MS) return sideList;
   const list = await githubJson(`https://api.github.com/repos/${GITHUB_REPOSITORY}/releases?per_page=40`);
@@ -226,7 +229,7 @@ for (const key of Object.keys(SIDE_APPS)) {
       const current = Number.parseInt(String(req.query.currentVersionCode || "0"), 10) || 0;
       const origin = `${req.protocol}://${req.get("host")}`;
       return res.json({ appId: app.pkg, version: r.version, versionCode: r.versionCode, sha256: r.sha256, sizeBytes: r.sizeBytes, releaseNotes: r.releaseNotes,
-        publishedAt: r.publishedAt, tagName: r.tagName, updateAvailable: current < r.versionCode && (key === "cast" || await rollout.offered(key, r.versionCode, req)), downloadUrl: `${origin}/api/mobile-updates/${key}/download` });
+        publishedAt: r.publishedAt, tagName: r.tagName, updateAvailable: current < r.versionCode && (NO_ROLLOUT.has(key) || await rollout.offered(key, r.versionCode, req)), downloadUrl: `${origin}/api/mobile-updates/${key}/download` });
     } catch (error) {
       return res.status(error.status || 502).json({ error: `${app.label} update information is temporarily unavailable.`, detail: process.env.NODE_ENV === "production" ? undefined : error.message });
     }

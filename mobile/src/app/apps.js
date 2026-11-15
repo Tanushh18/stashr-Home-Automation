@@ -11,6 +11,7 @@ const APPS = [
   { key: "tv", name: "Stashr TV", for: "TV", text: "The TV launcher: movies from Drive, notices, live map and cast receiver." },
   { key: "where", name: "Stashr Location", for: "Family phones", text: "Shares only where the phone is, in the background, with your own Stashr. Runs always-on with a per-phone switch." },
   { key: "cast", name: "Stashr Cast", for: "Phone", text: "Mirror your phone screen to the TV." },
+  { key: "launcher", name: "Stashr Launcher", for: "Phone home screen", text: "The Stashr home screen (Lawnchair with Stashr's name, icon and colour). Updating keeps your layout." },
 ];
 
 export default function Apps() {

@@ -16,7 +16,8 @@ fetches Lawnchair at a pinned version and applies them.
 ## Build the APK (no computer setup needed)
 GitHub → **Actions** → *Stashr Launcher Android Release* → **Run workflow**. It takes about 25 to 45 minutes. The signed APK appears under
 **Releases** as `stashr-launcher-v<version>-build-<number>` (package `com.tanush.stashr.launcher`). It uses the same signing key as the other
-Stashr apps. It installs next to a normal Lawnchair; it never replaces it.
+Stashr apps. **Updates without a cable:** the Stashr server serves the newest build at `/api/mobile-updates/launcher/latest` and
+`/download`; in the Stashr app open Settings → Apps → *Stashr Launcher* → *Download the newest build* (Android asks to confirm; the layout is kept). It installs next to a normal Lawnchair; it never replaces it.
 
 ## Work on the look at home (Android Studio)
 You need Android Studio, JDK 21 and Git.
