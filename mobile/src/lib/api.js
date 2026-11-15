@@ -17,7 +17,6 @@ const SERVERS = (fromEnv.length
       "https://password-manager-server-10od.onrender.com",
       "https://stashr-home-automation.onrender.com",
       "https://stashr-home-automation-gk9p.onrender.com",
-      "https://password-manager-server-8gvj.onrender.com",
     ]
 ).map((u) => u.replace(/\/+$/, ""));
 

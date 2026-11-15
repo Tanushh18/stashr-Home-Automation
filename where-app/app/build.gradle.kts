@@ -19,7 +19,7 @@ android {
         versionName = whereVersionName
                 buildConfigField("String", "DEFAULT_SERVER", "\"https://password-manager-server-xxdr.onrender.com\"")
                 buildConfigField("String", "DEFAULT_SERVER2", "\"https://password-manager-server-g305.onrender.com\"")
-        buildConfigField("String", "DEFAULT_SERVERS", "\"https://password-manager-server-xxdr.onrender.com,https://password-manager-server-g305.onrender.com,https://password-manager-server-10od.onrender.com,https://stashr-home-automation.onrender.com,https://stashr-home-automation-gk9p.onrender.com,https://password-manager-server-8gvj.onrender.com\"")
+        buildConfigField("String", "DEFAULT_SERVERS", "\"https://password-manager-server-xxdr.onrender.com,https://password-manager-server-g305.onrender.com,https://password-manager-server-10od.onrender.com,https://stashr-home-automation.onrender.com,https://stashr-home-automation-gk9p.onrender.com\"")
     }
     buildFeatures { buildConfig = true }
     buildTypes {
