@@ -7,7 +7,7 @@ fetches Lawnchair at a pinned version and applies them.
 | File | What it is |
 |---|---|
 | `UPSTREAM` | Which Lawnchair repository and commit the launcher is built from |
-| `apply.py` | The edits to Lawnchair's own files (name, package id, version, default colour). Stops with a message if Lawnchair has changed that text |
+| `apply.py` | The edits to Lawnchair's own files (name, package id, version, default colour, and "Lawnchair" → "Stashr" in the on-screen text). Stops with a message if Lawnchair has changed that text |
 | `overlay/` | Files copied over Lawnchair's: the Stashr icon (adaptive, round, themed) and colour |
 | `version.txt` | The launcher's version (`1.0.0`) |
 | `NOTICE.md` | Credit to Lawnchair and a list of what is changed |

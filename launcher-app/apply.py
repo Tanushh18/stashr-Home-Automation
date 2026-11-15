@@ -6,11 +6,13 @@
 What it does, and nothing else:
   1. edits a few lines of Lawnchair's own files (name, package id, version, default accent colour). Every edit says exactly which text it
      expects to find; if Lawnchair has changed that text, this script stops with a message instead of guessing, so a wrong build is never made;
-  2. copies launcher-app/overlay/ over the checkout (the Stashr icon and colour).
+  2. renames "Lawnchair" to "Stashr" in the text the person sees (strings.xml in every language), except the lines in KEEP_NAME;
+  3. copies launcher-app/overlay/ over the checkout (the Stashr icon and colour).
 
 It only changes data (strings, resources, Gradle constants). It does not touch Lawnchair's Kotlin or Java code. See launcher-app/README.md.
 """
 import pathlib
+import re
 import shutil
 import sys
 
@@ -37,6 +39,37 @@ EDITS = [
      f'<string name="config_default_accent_color" translatable="false">custom|{STASHR_GREEN}</string>'),
 ]
 
+# Strings that must keep saying "Lawnchair" because they are about the Lawnchair project itself, not this app
+# (the search-provider revenue share is Lawnchair's agreement; saying "Stashr" there would be untrue).
+KEEP_NAME = {"search_provider_sponsored_description"}
+STRING = re.compile(r'(<string name="([^"]+)"[^>]*>)(.*?)(</string>)', re.S)
+WORD = re.compile(r"\bLawnchair\b")
+
+
+def rename_strings(root):
+    """Replace the word Lawnchair with Stashr inside the visible text of every strings.xml. Resource names, class names and
+    comments are untouched (only the text between <string ...> and </string> changes, and only the whole word)."""
+    total = 0
+    for path in sorted((root / "lawnchair" / "res").glob("values*/strings.xml")):
+        text = path.read_text(encoding="utf-8")
+        count = 0
+
+        def swap(m):
+            nonlocal count
+            if m.group(2) in KEEP_NAME or "app.lawnchair" in m.group(3):
+                return m.group(0)
+            new, n = WORD.subn("Stashr", m.group(3))
+            count += n
+            return m.group(1) + new + m.group(4)
+
+        text = STRING.sub(swap, text)
+        if count:
+            path.write_text(text, encoding="utf-8")
+            print(f"renamed  {path.relative_to(root)} ({count})")
+        total += count
+    if total == 0:
+        sys.exit("Found no \"Lawnchair\" text in lawnchair/res/values*/strings.xml. Lawnchair changed; update launcher-app/apply.py.")
+
 
 def main(argv):
     if len(argv) != 2:
@@ -55,6 +88,8 @@ def main(argv):
             sys.exit(f"Expected to find this exactly once in {rel}, found {found} times:\n{old}\nLawnchair changed; update launcher-app/apply.py.")
         path.write_text(text.replace(old, new, 1), encoding="utf-8")
         print(f"edited   {rel}")
+
+    rename_strings(root)
 
     overlay = HERE / "overlay"
     for src in sorted(p for p in overlay.rglob("*") if p.is_file()):
