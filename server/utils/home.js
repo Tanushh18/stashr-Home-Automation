@@ -268,6 +268,7 @@ const PHONE_WIFI_MS = 8 * 60 * 1000;
 
 /** A last known location inside the home circle keeps a person "home" (flagged stale) for up to this long. */
 const LAST_IN_MAX_MS = 24 * 3600 * 1000;
+const MAX_IN_ACC_M = 100;          // a fix must be this accurate to say "inside the home circle"
 
 const rad = (x) => (x * Math.PI) / 180;
 function distM(a, b) {
@@ -281,8 +282,12 @@ function distM(a, b) {
  *  - a phone that reported its own address on the home network a moment ago is home (unless its fix says it is over 2 km away);
  *  - otherwise a fresh location fix (12 minutes) decides: inside the circle is home, outside is away, even when the tablet
  *    still sees another device of that person (a laptop left at home);
+ *  - only a PRECISE fix (accuracy 100 m or better) inside the circle counts as home: a rough network fix (often ±1–2 km on
+ *    mobile data) that happens to land near the house proves nothing;
+ *  - a phone that reported a moment ago and is NOT on the home Wi-Fi (while the tablet's scan is working) is away, unless a
+ *    precise fix puts it inside the circle ("nowifi");
  *  - with no fresh fix, a labelled Wi-Fi device the tablet saw within 15 minutes means home.
- * Each person comes back with home, by ("wifi", "gps", "wifi+gps" or "") and, when the home spot is known, distanceKm,
+ * Each person comes back with home, by ("wifi", "gps", "wifi+gps", "nowifi", "last" or "") and, when the home spot is known, distanceKm,
  * fixAt and stale (the phone has not reported a location for a while), so "everyone is home" is only said when it is true.
  */
 function presence(hubs, phones, now = Date.now(), spot = null) {
@@ -305,6 +310,8 @@ function presence(hubs, phones, now = Date.now(), spot = null) {
     }
     const gps = new Map();              // person -> "in" | "out" (fresh fixes only)
     const hasPhone = new Map();
+    // The tablet's scan is working right now (some device answers), so "not on the home Wi-Fi" means something.
+    const scanAlive = upIps.size > 0;
     const radius = spot && Number.isFinite(Number(spot.radius)) ? Number(spot.radius) : 200;
     for (const ph of phones || []) {
         const s = ph.status || {};
@@ -314,15 +321,20 @@ function presence(hubs, phones, now = Date.now(), spot = null) {
         const seenAt = ph.lastSeen ? new Date(ph.lastSeen).getTime() : 0;
         const wifiNow = seenAt && now - seenAt < PHONE_WIFI_MS && s.wifi && s.ip && upIps.has(s.ip);
         if (wifiNow) { p.wifi = true; p.lastSeen = Math.max(p.lastSeen, seenAt); }
+        // Reported a moment ago, but not from an address on the home Wi-Fi: a strong sign the person is out.
+        else if (scanAlive && seenAt && now - seenAt < PHONE_WIFI_MS) p.offWifi = true;
         const loc = s.location;
         if (spot && Number.isFinite(Number(spot.lat)) && Number.isFinite(Number(spot.lon)) && loc && Number.isFinite(Number(loc.lat)) && Number.isFinite(Number(loc.lon)) && loc.at) {
             const d = distM({ lat: Number(loc.lat), lon: Number(loc.lon) }, { lat: Number(spot.lat), lon: Number(spot.lon) });
             const age = now - Number(loc.at);
             const better = p.fixAt === undefined || Number(loc.at) > p.fixAt;
-            if (better) { p.fixAt = Number(loc.at); p.distanceKm = Math.round(d / 100) / 10; p.distanceM = Math.round(d); p.lastIn = d <= radius + Math.min(Math.max(Number(loc.acc) || 0, 0), 100); }
+            const rawAcc = Math.max(Number(loc.acc) || 0, 0);
+            const precise = rawAcc <= MAX_IN_ACC_M;
+            if (better) { p.fixAt = Number(loc.at); p.distanceKm = Math.round(d / 100) / 10; p.distanceM = Math.round(d); p.lastIn = precise && d <= radius + rawAcc; p.accM = Math.round(rawAcc); }
             if (age <= FIX_FRESH_MS) {
-                const acc = Math.min(Math.max(Number(loc.acc) || 0, 0), 300);
-                const verdict = d <= radius + Math.min(acc, 100) ? "in" : d > radius + Math.max(120, acc) ? "out" : gps.get(p.person) || "";
+                const acc = Math.min(rawAcc, 300);
+                // "in" needs a precise fix; a rough one inside the circle stays undecided.
+                const verdict = precise && d <= radius + acc ? "in" : d > radius + Math.max(120, acc) ? "out" : gps.get(p.person) || "";
                 if (verdict && gps.get(p.person) !== "in") gps.set(p.person, verdict);
             }
         }
@@ -332,11 +344,13 @@ function presence(hubs, phones, now = Date.now(), spot = null) {
         if (w && !(g === "out" && p.distanceM > 2000)) { p.home = true; p.by = g === "in" ? "wifi+gps" : "wifi"; }
         else if (g === "in") { p.home = true; p.by = "gps"; }
         else if (g === "out") { p.home = false; p.by = "gps"; }
+        else if (p.offWifi) { p.home = false; p.by = "nowifi"; }
         else if (lanSeen.get(p.person) && !(hasPhone.get(p.person) && p.fixAt !== undefined && now - p.fixAt <= FIX_FRESH_MS)) { p.home = true; p.by = "wifi"; p.wifi = true; }
         // No fresh fix and no Wi-Fi proof, but the last known fix (under 24 h old) was inside the circle: still shown as home
         // (the phone has not said it left), flagged stale so the page says the location is not updating.
         else if (!g && p.lastIn && p.fixAt !== undefined && now - p.fixAt <= LAST_IN_MAX_MS) { p.home = true; p.by = "last"; }
-        p.stale = Boolean(hasPhone.get(p.person) && spot && !g && !p.wifi);
+        p.stale = Boolean(hasPhone.get(p.person) && spot && !g && !p.wifi && !p.offWifi);
+        delete p.offWifi;
         if (p.fixAt !== undefined) p.fixAgeMin = Math.max(0, Math.round((now - p.fixAt) / 60000));
     }
     return [...people.values()].sort((a, b) => (b.home - a.home) || a.person.localeCompare(b.person));

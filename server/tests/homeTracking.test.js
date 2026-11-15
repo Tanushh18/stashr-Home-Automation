@@ -87,6 +87,44 @@ describe("who is home: the Wi-Fi and the location decide together", () => {
         expect(home.presence([{ lanBook: {}, lanLabels: {} }], [inside], now, spot).find((x) => x.person === "Papa").home).toBe(true);   // inside by accuracy
     });
 
+    test("a rough network fix near the house is not proof of home (the Parveen case)", () => {
+        // Reported a minute ago on mobile data, the network fix (±1.5 km) happens to land 150 m from the house.
+        const rough = phone({ status: { wifi: false, ip: "", location: { lat: north(150), lon: 77.209, acc: 1500, at: now - 60_000 } } });
+        const p = home.presence([hub()], [rough], now, spot).find((x) => x.person === "Papa");
+        expect(p.home).toBe(false);
+        expect(p.by).toBe("nowifi");
+        expect(p.stale).toBe(false);
+        // The same rough fix with no other information stays undecided: not home, not a reason to say "away" either.
+        const quiet = phone({ lastSeen: new Date(now - 30 * 60_000), status: { wifi: false, ip: "", location: { lat: north(150), lon: 77.209, acc: 1500, at: now - 60_000 } } });
+        expect(home.presence([{ lanBook: {}, lanLabels: {} }], [quiet], now, spot).find((x) => x.person === "Papa").home).toBe(false);
+    });
+
+    test("not on the home Wi-Fi, but a precise fix inside the circle: home by location (Wi-Fi switched off at home)", () => {
+        const wifiOff = phone({ status: { wifi: false, ip: "", location: { lat: north(40), lon: 77.209, acc: 15, at: now - 60_000 } } });
+        const p = home.presence([hub()], [wifiOff], now, spot).find((x) => x.person === "Papa");
+        expect(p.home).toBe(true);
+        expect(p.by).toBe("gps");
+    });
+
+    test("on another Wi-Fi (an address the tablet does not see) with a rough fix: away", () => {
+        const elsewhere = phone({ status: { wifi: true, ip: "10.0.0.12", location: { lat: north(100), lon: 77.209, acc: 900, at: now - 60_000 } } });
+        const p = home.presence([hub()], [elsewhere], now, spot).find((x) => x.person === "Papa");
+        expect(p.home).toBe(false);
+        expect(p.by).toBe("nowifi");
+    });
+
+    test("the tablet's scan is down: 'not on the home Wi-Fi' means nothing, so it is not used", () => {
+        const dark = { lanBook: { "n-papa": { ip: "192.168.1.30", up: false, lastSeen: now - 3600_000 } }, lanLabels: {} };
+        const rough = phone({ status: { wifi: false, ip: "", location: { lat: north(150), lon: 77.209, acc: 1500, at: now - 60_000 } } });
+        const p = home.presence([dark], [rough], now, spot).find((x) => x.person === "Papa");
+        expect(p.by).not.toBe("nowifi");
+    });
+
+    test("a rough last known fix inside the circle does not keep someone home either", () => {
+        const lost = phone({ lastSeen: new Date(now - 3 * 3600_000), status: { wifi: false, ip: "", location: { lat: north(30), lon: 77.209, acc: 1200, at: now - 3 * 3600_000 } } });
+        expect(home.presence([{ lanBook: {}, lanLabels: {} }], [lost], now, spot).find((x) => x.person === "Papa").home).toBe(false);
+    });
+
     test("/coming says who is out and how far, and only says 'Sab ghar par hain' when it is true", () => {
         const settings = { homeSpot: spot, etaState: {} };
         const out = phone({ lastSeen: new Date(now - 30 * 60_000), status: { wifi: false, ip: "", location: { lat: north(4000), lon: 77.209, acc: 20, at: now - 3 * 60_000 } } });
