@@ -2,4 +2,19 @@
   <string name="stashr_home_widget_label">Stashr Home</string>
   <string name="stashr_home_widget_title">STASHR · HOME</string>
   <string name="stashr_home_widget_description">Who is home, who is on the way, the weather and the TV</string>
+  <string name="stashr_scenes_label">Stashr Scenes</string>
+  <string name="stashr_scenes_title">STASHR · SCENES</string>
+  <string name="stashr_scenes_description">Run a home scene with one tap (after the unlock)</string>
+  <string name="stashr_tv_label">Stashr TV remote</string>
+  <string name="stashr_tv_title">STASHR · TV</string>
+  <string name="stashr_tv_description">Play, pause, volume, mute and Home for the living-room TV</string>
+  <string name="stashr_quick_label">Stashr Quick actions</string>
+  <string name="stashr_quick_title">STASHR · QUICK</string>
+  <string name="stashr_quick_description">Ask Stashr, camera photo, Money and Passwords</string>
+  <string name="stashr_money_label">Stashr Money</string>
+  <string name="stashr_money_title">STASHR · MONEY</string>
+  <string name="stashr_money_description">Spent today and this month, the top category and entries to check</string>
+  <string name="stashr_net_label">Stashr Network</string>
+  <string name="stashr_net_title">STASHR · NETWORK</string>
+  <string name="stashr_net_description">Internet speed, Wi-Fi devices and the health of your Stashr devices</string>
 </resources>

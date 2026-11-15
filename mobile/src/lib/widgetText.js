@@ -58,3 +58,58 @@ export function widgetSnapshot(d, now = Date.now()) {
     updatedAt: now
   };
 }
+
+/* ───────── the other home-screen widgets (Scenes, TV remote, Money, Network) ───────── */
+
+/** Up to four scenes for the Scenes widget: [{ id, name }]. */
+export function scenesOf(dash) {
+  return (Array.isArray(dash && dash.scenes) ? dash.scenes : [])
+    .filter((s) => s && clean(s.id) && clean(s.name))
+    .slice(0, 4)
+    .map((s) => ({ id: clean(s.id).slice(0, 60), name: clean(s.name).slice(0, 24) }));
+}
+
+/** Indian grouping without Intl: 1234567.8 -> "₹12,34,568". */
+export function inr(n) {
+  const v = Math.round(Math.abs(Number(n) || 0));
+  const s = String(v);
+  const last3 = s.slice(-3);
+  const rest = s.slice(0, -3).replace(/\B(?=(\d{2})+(?!\d))/g, ",");
+  return `${Number(n) < 0 ? "-" : ""}₹${rest ? rest + "," : ""}${last3}`;
+}
+
+// Same as the server (server/utils/expenses.js): these are not counted until they are confirmed.
+const DOUBTFUL = ["Flagged", "Not in statement", "Mismatch"];
+
+/**
+ * The Money widget from GET /expenses (this month): spent today, spent this month, the biggest category and how many entries
+ * still need a look. `today` is "YYYY-MM-DD" in India time. Returns null when there is nothing to show.
+ */
+export function moneyLines(list, today) {
+  if (!list || !list.totals) return null;
+  const rows = Array.isArray(list.rows) ? list.rows : [];
+  const spentToday = rows
+    .filter((t) => t && t.date === today && t.type === "Debit" && !DOUBTFUL.includes(t.status))
+    .reduce((a, t) => a + (Number(t.amount) || 0), 0);
+  const top = (list.totals.byCategory || [])[0];
+  const check = (Number(list.totals.flagged) || 0) + (Number(list.uncategorized) || 0);
+  return {
+    today: inr(spentToday),
+    month: inr(list.totals.debit),
+    top: top ? `${clean(top.category)} · ${inr(top.amount)}` : "",
+    check: check ? `${check} to check` : "All sorted",
+  };
+}
+
+/** The Network widget: last speed test, Wi-Fi devices seen now, and the health of the Stashr devices. */
+export function netLines(dash, lan, health) {
+  const sp = dash && dash.speed;
+  const fresh = (Array.isArray(lan) ? lan : []).filter((d) => d && !d.stale).length;
+  const bad = Number(health && health.bad) || 0;
+  const warn = Number(health && health.warn) || 0;
+  return {
+    speed: sp && Number.isFinite(Number(sp.down)) ? `${Math.round(sp.down)}↓ ${Math.round(sp.up)}↑ · ${Math.round(sp.ping)} ms` : "No speed test yet",
+    wifi: Array.isArray(lan) ? `${fresh} device${fresh === 1 ? "" : "s"} on Wi-Fi` : "",
+    health: bad ? `${bad} need${bad === 1 ? "s" : ""} fixing` : warn ? `${warn} to check` : "All green",
+  };
+}

@@ -21,6 +21,19 @@ export const widgetCount = () => {
   try { return Number(native.widgetCount()) || 0; } catch (e) { return 0; }
 };
 
+/** Placed widgets per kind: { home, scenes, tv, quick, money, net }. */
+export const widgetCounts = () => {
+  const none = { home: 0, scenes: 0, tv: 0, quick: 0, money: 0, net: 0 };
+  if (!native) return none;
+  try { return { ...none, ...(native.widgetCounts() || {}) }; } catch (e) { return none; }
+};
+
+/** The per-install secret on every widget button; "" when the module is missing (then no widget action is accepted). */
+export const actionKey = () => {
+  if (!native) return "";
+  try { return String(native.actionKey() || ""); } catch (e) { return ""; }
+};
+
 /** Asks the launcher to add the widget. false when this launcher or Android version cannot. */
 export const requestPin = () => {
   if (!native) return false;

@@ -32,12 +32,29 @@ class StashrWidgetModule : Module() {
     // Saves the widget text (a small JSON of display strings) and redraws every Stashr Home widget.
     Function("setSnapshot") { json: String ->
       WidgetStore.save(context, json)
-      StashrHomeWidget.renderAll(context)
+      Board.renderAll(context)
     }
 
-    // How many Stashr Home widgets are on the home screen (0 = skip the background refresh).
+    // How many Stashr widgets of any kind are on the home screen (0 = skip the background refresh).
     Function("widgetCount") {
-      StashrHomeWidget.ids(context).size
+      Board.PROVIDERS.sumOf { Board.ids(context, it).size }
+    }
+
+    // Per kind, so the app only loads Money or the network when such a widget is placed.
+    Function("widgetCounts") {
+      mapOf(
+        "home" to Board.ids(context, StashrHomeWidget::class.java).size,
+        "scenes" to Board.ids(context, StashrScenesWidget::class.java).size,
+        "tv" to Board.ids(context, StashrTvWidget::class.java).size,
+        "quick" to Board.ids(context, StashrQuickWidget::class.java).size,
+        "money" to Board.ids(context, StashrMoneyWidget::class.java).size,
+        "net" to Board.ids(context, StashrNetWidget::class.java).size
+      )
+    }
+
+    // The per-install secret every widget button carries; the app runs a widget action only when the link has it.
+    Function("actionKey") {
+      WidgetStore.actionKey(context)
     }
 
     // Asks the launcher to place the widget (Android 8+, launchers that support it). Returns false when it cannot.

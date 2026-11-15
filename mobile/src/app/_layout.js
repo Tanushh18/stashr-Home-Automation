@@ -141,6 +141,7 @@ function RootStack({ fontsReady }) {
           <Stack.Screen name="home" />
           <Stack.Screen name="stashr-home" options={{ animation: "fade", contentStyle: { backgroundColor: "#050912" } }} />
           <Stack.Screen name="money" />
+          <Stack.Screen name="action" options={{ animation: "fade" }} />
         </Stack.Protected>
       </Stack>
       {status === "ready" ? <SkyFx /> : null}

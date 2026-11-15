@@ -28,6 +28,13 @@ background, only while a widget is placed; it is cleared on sign-out. Long-press
 after the unlock. Code: `mobile/modules/stashr-widget`, `src/lib/homeWidget.js`, `src/lib/widgetText.js` (tests:
 `node --test scripts/widgetText.test.mjs`).
 
+**More widgets (2.6.3), all in the website's departure-board style:** *Stashr Scenes* (up to four scenes, one tap runs one),
+*Stashr TV remote* (TV state; ⏯, VOL −, VOL +, MUTE, HOME), *Stashr Quick actions* (Ask Stashr, Camera photo, Money, Passwords),
+*Stashr Money* (spent today and this month, top category, entries to check; from `GET /expenses`, loaded only while this widget is
+placed) and *Stashr Network* (last speed test, devices on the Wi-Fi, health of the Stashr devices; loaded only while placed).
+Buttons that act open `stashr://action?…&k=<key>`: the app asks for the unlock, checks the per-install secret key every widget button
+carries (so no other app can fire them), sends only whitelisted commands and shows what the server answered (`src/app/action.js`).
+
 ## Health check
 Every app (Hub 1.9, TV 1.3, Location 1.5) sends `status.health` with each report: app version, Android version, "Display over other
 apps", accessibility, battery limits, notifications, camera and microphone (tablet), location "all the time" (phone), USB drive (TV), and its

@@ -12,5 +12,61 @@
         android:name="android.appwidget.provider"
         android:resource="@xml/stashr_home_widget_info" />
     </receiver>
+    <!-- The other board widgets (Widgets.kt): display text from the same snapshot; actions go through the app's unlock. -->
+    <receiver
+      android:name=".StashrScenesWidget"
+      android:label="@string/stashr_scenes_label"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/stashr_scenes_widget_info" />
+    </receiver>
+    <receiver
+      android:name=".StashrTvWidget"
+      android:label="@string/stashr_tv_label"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/stashr_tv_widget_info" />
+    </receiver>
+    <receiver
+      android:name=".StashrQuickWidget"
+      android:label="@string/stashr_quick_label"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/stashr_quick_widget_info" />
+    </receiver>
+    <receiver
+      android:name=".StashrMoneyWidget"
+      android:label="@string/stashr_money_label"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/stashr_money_widget_info" />
+    </receiver>
+    <receiver
+      android:name=".StashrNetWidget"
+      android:label="@string/stashr_net_label"
+      android:exported="true">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data
+        android:name="android.appwidget.provider"
+        android:resource="@xml/stashr_net_widget_info" />
+    </receiver>
   </application>
 </manifest>
