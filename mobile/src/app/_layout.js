@@ -139,6 +139,7 @@ function RootStack({ fontsReady }) {
           <Stack.Screen name="photo-viewer" options={{ presentation: "fullScreenModal", animation: "fade" }} />
           {/* Opened by the long-press shortcuts and the home-screen widget: never without the unlock. */}
           <Stack.Screen name="home" />
+          <Stack.Screen name="stashr-home" options={{ animation: "fade", contentStyle: { backgroundColor: "#050912" } }} />
           <Stack.Screen name="money" />
         </Stack.Protected>
       </Stack>

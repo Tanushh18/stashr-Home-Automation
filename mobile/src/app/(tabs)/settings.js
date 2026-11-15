@@ -239,6 +239,7 @@ export default function Settings() {
           </FadeIn>
 
           <Section title="WORKSPACE" delay={80}>
+            <Row icon="sparkle" title="Stashr Home" subtitle="Live command centre: devices, scenes, ask Stashr" onPress={() => router.push("/stashr-home")} />
             <Row icon="home" title="Smart home" subtitle="TV, tablet, family locations, camera, scenes and insights" onPress={() => router.push("/home")} />
             <Row icon="note" title="Money" subtitle="UPI and bank payments from your SMS, by category, in your Google Sheet" onPress={() => router.push("/money")} />
             {profile?.features?.smartHome !== false ? <Row icon="mail" title="WhatsApp sender" subtitle="Turn sending on, see when the next message goes, sheets, pictures and every step of each message" onPress={() => router.push("/whatsapp")} /> : null}

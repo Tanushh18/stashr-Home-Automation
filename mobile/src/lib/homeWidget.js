@@ -14,7 +14,7 @@ export { widgetSupported, widgetCount, requestPin };
 
 /** Long-press shortcuts. Each link is a route in this app; the lock screen still comes first when the vault is locked. */
 export const SHORTCUTS = [
-  { id: "home", label: "Smart home", long: "Open Smart home", url: "stashr://home", icon: "home" },
+  { id: "home", label: "Stashr Home", long: "Open Stashr Home", url: "stashr://stashr-home", icon: "home" },
   { id: "tv", label: "TV remote", long: "TV and devices", url: "stashr://home?tab=devices", icon: "tv" },
   { id: "camera", label: "Camera", long: "Camera and alerts", url: "stashr://home?tab=security", icon: "camera" },
   { id: "money", label: "Money", long: "Money", url: "stashr://money", icon: "money" },
@@ -22,7 +22,7 @@ export const SHORTCUTS = [
 ];
 
 /** Paths the shortcuts and the widget open; used by the root layout to resume them after the unlock. */
-export const LINK_PATHS = ["/home", "/money", "/"];
+export const LINK_PATHS = ["/home", "/stashr-home", "/money", "/"];
 
 export function installShortcuts() {
   return setShortcuts(SHORTCUTS);
