@@ -3,6 +3,8 @@ package com.tanush.stashr.tv.access
 import android.accessibilityservice.AccessibilityService
 import android.content.Context
 import android.provider.Settings
+import android.content.Intent
+import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
 
 /**
@@ -13,6 +15,18 @@ class RemoteAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() { instance = this }
     override fun onUnbind(intent: android.content.Intent?): Boolean { if (instance === this) instance = null; return super.onUnbind(intent) }
     override fun onInterrupt() {}
+
+    /**
+     * The remote's Google Play button (KEYCODE_BUTTON_2): the TV's own system code would open the Play Store before any app sees it.
+     * The key filter sees it first, so Stashr takes it and opens the pendrive folder instead. Every other key passes through untouched.
+     */
+    override fun onKeyEvent(event: KeyEvent): Boolean {
+        if (event.keyCode != KeyEvent.KEYCODE_BUTTON_2) return false
+        if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+            try { startActivity(Intent(this, com.tanush.stashr.tv.ui.UsbBrowserActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (e: Exception) { return false }
+        }
+        return true
+    }
 
     override fun onAccessibilityEvent(e: AccessibilityEvent?) {
         if (e?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return

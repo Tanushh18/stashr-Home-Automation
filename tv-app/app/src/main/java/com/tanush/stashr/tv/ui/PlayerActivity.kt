@@ -29,7 +29,9 @@ class PlayerActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         prefs = Prefs(this)
-        val movie = MovieStore.find(this, intent.getStringExtra(EXTRA_NAME).orEmpty())
+        // Either a movie the app keeps (by name), or any file picked in the pendrive browser (by path).
+        val picked = intent.getStringExtra(EXTRA_PATH)?.let { java.io.File(it) }?.takeIf { it.isFile }
+        val movie = if (picked != null) com.tanush.stashr.tv.sync.Movie(picked.name, picked.length(), picked, false) else MovieStore.find(this, intent.getStringExtra(EXTRA_NAME).orEmpty())
         if (movie == null) { Toast.makeText(this, "That movie is not on this TV", Toast.LENGTH_LONG).show(); finish(); return }
         name = movie.name
         val view = PlayerView(this).apply { setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING); controllerShowTimeoutMs = 4000; isFocusable = true }
@@ -76,6 +78,6 @@ class PlayerActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
-    companion object { const val EXTRA_NAME = "movie" }
+    companion object { const val EXTRA_NAME = "movie"; const val EXTRA_PATH = "path" }
 
 }

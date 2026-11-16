@@ -307,6 +307,11 @@ class HomeActivity : Activity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        // The remote's Google Play button opens the pendrive folder instead of the Play Store.
+        if (event.keyCode == KeyEvent.KEYCODE_BUTTON_2) {
+            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) startActivity(Intent(this, UsbBrowserActivity::class.java))
+            return true
+        }
         if (morning.visibility == View.VISIBLE) { if (event.action == KeyEvent.ACTION_DOWN) morning.visibility = View.GONE; return true }
         return super.dispatchKeyEvent(event)
     }
