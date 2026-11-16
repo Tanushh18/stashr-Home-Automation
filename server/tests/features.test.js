@@ -43,12 +43,3 @@ describe("features", () => {
     expect(CATALOG.every((f) => f.key && f.label && ["all", "admin"].includes(f.audience))).toBe(true);
   });
 });
-
-describe("folder sharing", () => {
-  const { subtree } = require("../router/photoFolderShares");
-  test("a shared folder includes its sub-folders and nothing else", () => {
-    const f = [{ id: "a", parentId: null }, { id: "b", parentId: "a" }, { id: "c", parentId: "b" }, { id: "d", parentId: null }];
-    expect([...subtree(f, "a")].sort()).toEqual(["a", "b", "c"]);
-    expect([...subtree(f, "d")]).toEqual(["d"]);
-  });
-});

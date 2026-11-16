@@ -44,7 +44,6 @@ const COMMANDS = {
         // Plays songs on the tablet through YouTube Music (where the Premium account is signed in).
         play_music: (a) => (okText(a.query, 120) ? { query: a.query.trim() } : null),
         camera: (a) => (["arm", "disarm", "snapshot", "clip", "live"].includes(a.action) ? { action: a.action } : null),
-        slideshow: (a) => (["start", "stop"].includes(a.action) ? { action: a.action } : null),
         show_today: () => ({}),
         show_map: () => ({}),
         show_room: () => ({}),

@@ -87,7 +87,7 @@ const publicSettings = (s) => ({
     timezone: s.timezone, alerts: s.alerts, weather: { city: (s.weather && s.weather.city) || "" }, brief: { enabled: s.brief.enabled, time: s.brief.time },
     weekly: { enabled: s.weekly.enabled }, tvLimit: { minutes: s.tvLimit.minutes, action: s.tvLimit.action, lateNight: s.tvLimit.lateNight !== false },
     schedules: s.schedules || [], scenes: (s.scenes && s.scenes.length ? s.scenes : automation.DEFAULT_SCENES),
-    slideshowFolder: s.slideshowFolder || "", places: s.places || [], history: { enabled: Boolean(s.history && s.history.enabled) }, tvLive: { enabled: !(s.tvLive && s.tvLive.enabled === false) }, news: { enabled: true, lang: "en", count: 6, ...(s.news || {}) }, rain: s.rain !== false, homeSpot: s.homeSpot && Number.isFinite(s.homeSpot.lat) ? { lat: s.homeSpot.lat, lon: s.homeSpot.lon, radius: s.homeSpot.radius || 200 } : null, eta: { enabled: true, maxKm: 40, notifyMinutes: 15, routing: true, ...(s.eta || {}) }, camera: { sensitivity: 5, video: true, auto: false, ...(s.camera || {}), autoState: undefined }
+    places: s.places || [], history: { enabled: Boolean(s.history && s.history.enabled) }, tvLive: { enabled: !(s.tvLive && s.tvLive.enabled === false) }, news: { enabled: true, lang: "en", count: 6, ...(s.news || {}) }, rain: s.rain !== false, homeSpot: s.homeSpot && Number.isFinite(s.homeSpot.lat) ? { lat: s.homeSpot.lat, lon: s.homeSpot.lon, radius: s.homeSpot.radius || 200 } : null, eta: { enabled: true, maxKm: 40, notifyMinutes: 15, routing: true, ...(s.eta || {}) }, camera: { sensitivity: 5, video: true, auto: false, ...(s.camera || {}), autoState: undefined }
 });
 
 router.get("/home/settings", authenticate, async (req, res) => {
@@ -136,12 +136,6 @@ router.put("/home/settings", authenticate, writeLimiter, async (req, res) => {
             if (b.tvLimit.minutes !== undefined) set["tvLimit.minutes"] = m;
             if (["notify", "pause", "home"].includes(b.tvLimit.action)) set["tvLimit.action"] = b.tvLimit.action;
             if (typeof b.tvLimit.lateNight === "boolean") set["tvLimit.lateNight"] = b.tvLimit.lateNight;
-        }
-        if (b.slideshowFolder !== undefined) {
-            const raw = String(b.slideshowFolder || "").trim();
-            const id = raw ? movies.folderIdFrom(raw) : "";
-            if (raw && !id) return res.status(400).json({ error: "Paste the Drive folder's link." });
-            set.slideshowFolder = id;
         }
         if (b.news && typeof b.news === "object") {
             const c = cur.news || {}, n = b.news;
@@ -450,7 +444,7 @@ async function buildDashboardNow(owner) {
         // For local mode: Wi-Fi device key -> person, so the tablet can announce an arrival by itself when the server is down.
         localPeople: Object.fromEntries(devices.filter((d) => d.kind === "hub").flatMap((h) => Object.entries(h.lanLabels || {}).filter(([, l]) => l && l.person).map(([k, l]) => [k, l.person]))),
         ...(await require("./homeInsights").tabletLines(owner, s).catch(() => ({ nudges: [], trips: [] }))),
-        config: { camera: { sensitivity: (s.camera && s.camera.sensitivity) || 5, video: !(s.camera && s.camera.video === false), alerts: s.alerts.camera !== false }, slideshow: Boolean(s.slideshowFolder) }
+        config: { camera: { sensitivity: (s.camera && s.camera.sensitivity) || 5, video: !(s.camera && s.camera.video === false), alerts: s.alerts.camera !== false } }
     };
 }
 
@@ -558,31 +552,6 @@ router.post("/home/agent/assistant", agentLimiter, agentAuth, async (req, res) =
         if (out.error) return res.status(out.status || 400).json({ error: out.error });
         return res.json(out);
     } catch (e) { return fail(res, e, "Could not do that."); }
-});
-
-router.get("/home/agent/slideshow", agentLimiter, agentAuth, async (req, res) => {
-    try {
-        res.set("Cache-Control", "no-store");
-        const s = await automation.settingsOf(req.device.owner);
-        if (!s.slideshowFolder) return res.json({ photos: [], error: "Pick a Google Drive photo folder on the Smart home page." });
-        const { files } = await movies.listImages(req.device.owner, s.slideshowFolder);
-        return res.json({ photos: files.slice(0, 300).map((f) => ({ id: f.id, name: f.name })) });
-    } catch (e) { return fail(res, e, "Could not list the photos."); }
-});
-
-router.get("/home/agent/slideshow/file", agentLimiter, agentAuth, async (req, res) => {
-    try {
-        const s = await automation.settingsOf(req.device.owner);
-        const id = String(req.query.id || "");
-        const { ctx, files } = await movies.listImages(req.device.owner, s.slideshowFolder);
-        const file = files.find((f) => f.id === id);
-        if (!ctx || !file) return res.status(404).json({ error: "Not found." });
-        const up = await movies.openImage(ctx, file);
-        if (!up.ok || !up.body) return res.status(502).json({ error: `Google Drive answered HTTP ${up.status}` });
-        for (const h of ["content-length", "content-type"]) if (up.headers.get(h)) res.setHeader(h, up.headers.get(h));
-        const { Readable } = require("stream");
-        Readable.fromWeb(up.body).on("error", () => res.destroy()).pipe(res);
-    } catch (e) { return fail(res, e, "Could not send the photo."); }
 });
 
 /* ───────── tidying the Wi-Fi list, family phones ───────── */

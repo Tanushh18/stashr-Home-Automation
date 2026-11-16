@@ -84,7 +84,6 @@ function parse(sentence, devices, scenes = []) {
         if (has(text, ["on", "chalu", "start", "arm", "shuru"])) return toHub("camera", { action: "arm" }, "Camera alerts are on: you get a photo when someone comes into view.");
     }
     if (has(text, ["wake", "jagao", "jaga", "uthao"]) && !has(text, ["tv"])) return { reply: "wake", wake: text.replace(/\b(wake|up|jagao|jaga|uthao|on|the|ko|please)\b/g, " ").replace(/\s+/g, " ").trim() };
-    if (has(text, ["photo", "photos", "slideshow"]) && has(text, ["slideshow", "dikhao", "chalao", "show", "start"])) return toHub("slideshow", { action: has(text, ["band", "stop", "off"]) ? "stop" : "start" }, "Showing your photos on the tablet.");
 
     if (has(text, ["scan", "wifi", "wi-fi", "devices"]) && hub && has(text, ["scan", "refresh", "check", "dekho", "update"])) {
         return { reply: "Scanning the Wi-Fi now.", commands: [{ kind: "hub", type: "scan_now", args: {} }] };

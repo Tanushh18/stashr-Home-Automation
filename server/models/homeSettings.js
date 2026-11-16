@@ -28,7 +28,6 @@ const homeSettingsSchema = new mongoose.Schema({
     usage: { type: mongoose.Schema.Types.Mixed, default: {} },
     schedules: { type: [mongoose.Schema.Types.Mixed], default: [] },
     scenes: { type: [mongoose.Schema.Types.Mixed], default: [] },
-    slideshowFolder: { type: String, default: "" },
     camera: { sensitivity: { type: Number, default: 5 }, video: { type: Boolean, default: true }, auto: { type: Boolean, default: false }, autoState: { type: mongoose.Schema.Types.Mixed, default: {} } },
     // Places: a family phone arrives at / leaves a spot, and the tablet sends a WhatsApp message to a group.
     places: { type: [mongoose.Schema.Types.Mixed], default: [] },
