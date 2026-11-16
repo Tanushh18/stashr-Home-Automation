@@ -73,7 +73,7 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
   const [importRows, setImportRows] = useState(null);
   const [importPick, setImportPick] = useState(() => new Set());
   const [importBusy, setImportBusy] = useState(false);
-  const [syncTarget, setSyncTarget] = useState("all");
+  const [syncSkip, setSyncSkip] = useState(() => new Set()); // keys of web services the user unticked
   const [syncDirection, setSyncDirection] = useState("to");
   const [syncOverwrite, setSyncOverwrite] = useState(false);
   const [syncDeploy, setSyncDeploy] = useState(true);
@@ -269,7 +269,7 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
   const siblings = useMemo(() => {
     const repo = repoKeyOf(service.repo);
     if (!repo) return [];
-    return (services || []).filter((s) => serviceKey(s) !== serviceKey(service) && repoKeyOf(s.repo) === repo && serviceKind(s) !== "PostgreSQL");
+    return (services || []).filter((s) => serviceKey(s) !== serviceKey(service) && repoKeyOf(s.repo) === repo && serviceKind(s) === "Web service");
   }, [services, service]);
 
   const importCandidates = useMemo(() => (services || []).filter((s) => serviceKey(s) !== serviceKey(service) && serviceKind(s) !== "PostgreSQL"), [services, service]);
@@ -317,10 +317,10 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
   };
 
   const syncEnv = async () => {
-    const others = syncTarget === "all" ? siblings : siblings.filter((s) => serviceKey(s) === syncTarget);
+    const others = siblings.filter((s) => !syncSkip.has(serviceKey(s)));
     const push = syncDirection === "to"; // "to": this server is the source; "from": this server receives
     const own = envVars.filter((v) => !v.remove && !v.isNew && v.key && v.originalValue !== "");
-    if (!others.length) { toast.info("Pick a server to sync with."); return; }
+    if (!others.length) { toast.info("Tick at least one web service to sync with."); return; }
     if (push && !own.length) { toast.info("This server has no variables with a value to copy."); return; }
     const names = others.map((t) => t.name).join(", ");
     const ok = await askConfirm({
@@ -699,7 +699,7 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
             <button type="button" className="rd-btn rd-btn--quiet" disabled={snapshotBusy} onClick={() => void createSnapshot()}>▣ Snapshot</button>
             <button type="button" className="rd-btn rd-btn--quiet" disabled={snapshotBusy} onClick={() => void loadSnapshots()}>Snapshots</button>
             <button type="button" className="rd-btn rd-btn--quiet" onClick={() => void copyEnv()}>⧉ Copy env</button>
-            <button type="button" className="rd-btn rd-btn--quiet" onClick={() => setSyncOpen((v) => !v)} aria-expanded={syncOpen} disabled={!siblings.length} title={siblings.length ? "" : "No other server uses this repo"}>⇄ Sync env</button>
+            <button type="button" className="rd-btn rd-btn--quiet" onClick={() => setSyncOpen((v) => !v)} aria-expanded={syncOpen} disabled={!siblings.length} title={siblings.length ? "" : "No other web service uses this repo"}>⇄ Sync env</button>
             <button type="button" className="rd-btn rd-btn--quiet" onClick={() => setImportOpen((v) => !v)} aria-expanded={importOpen}>⬇ Import env</button>
             <button type="button" className="rd-btn rd-btn--quiet" onClick={() => setNewEnv((v) => !v)} aria-expanded={newEnv}>＋ Add variable</button>
           </div>
@@ -734,10 +734,17 @@ export default function ServiceDetail({ service, services, incidentKeys, opsConf
               <option value="to">From {service.name} (this server) → to the server below</option>
               <option value="from">From the server below → to {service.name} (this server)</option>
             </select>
-            <select className="rd-field" aria-label="Server to sync to" value={syncTarget} onChange={(e) => setSyncTarget(e.target.value)}>
-              <option value="all">All {siblings.length} other server{siblings.length === 1 ? "" : "s"} of this repo</option>
-              {siblings.map((t) => <option key={serviceKey(t)} value={serviceKey(t)}>{t.name} · {t.accountName || "account"}{serviceState(t, incidentKeys) === "suspended" ? " (suspended)" : ""}</option>)}
-            </select>
+            <div className="rd-note" role="group" aria-label="Web services to sync with">
+              <div>
+                <button type="button" className="rd-btn rd-btn--quiet" onClick={() => setSyncSkip(new Set())}>Select all</button>{" "}
+                <button type="button" className="rd-btn rd-btn--quiet" onClick={() => setSyncSkip(new Set(siblings.map(serviceKey)))}>None</button>
+              </div>
+              {siblings.map((t) => (
+                <label key={serviceKey(t)} style={{ display: "block" }}>
+                  <input type="checkbox" checked={!syncSkip.has(serviceKey(t))} onChange={() => setSyncSkip((old) => { const n = new Set(old); if (n.has(serviceKey(t))) n.delete(serviceKey(t)); else n.add(serviceKey(t)); return n; })} /> {t.name} · {t.accountName || "account"}{serviceState(t, incidentKeys) === "suspended" ? " (suspended)" : ""}
+                </label>
+              ))}
+            </div>
             <label className="rd-note"><input type="checkbox" checked={syncOverwrite} onChange={(e) => setSyncOverwrite(e.target.checked)} /> Also replace values that already exist on the target</label>
             <label className="rd-note"><input type="checkbox" checked={syncDeploy} onChange={(e) => setSyncDeploy(e.target.checked)} /> Redeploy servers that receive changes</label>
             <div><button type="button" className="rd-btn rd-btn--primary" disabled={syncBusy || envBusy} onClick={() => void syncEnv()}>{syncBusy ? "Syncing…" : "Sync now"}</button></div>
