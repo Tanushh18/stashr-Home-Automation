@@ -42,8 +42,10 @@ const validId = (id) => mongoose.isValidObjectId(id);
 function publicDevice(d, now = Date.now()) {
     const out = {
         id: String(d._id), name: d.name, kind: d.kind, tokenHint: d.tokenHint || "", viaHub: Boolean(d.parent),
-        online: d.syncPaused ? false : d.kind === "phone" ? Boolean(d.lastSeen) && now - new Date(d.lastSeen).getTime() < PHONE_ONLINE_MS : Boolean(d.online) && home.isOnline(d, now), lastSeen: d.lastSeen || null, onlineSince: d.onlineSince || null, syncPaused: Boolean(d.syncPaused),
-        status: d.status || {},
+        online: d.syncPaused ? false : d.kind === "phone" ? Boolean(d.lastSeen) && now - new Date(d.lastSeen).getTime() < PHONE_ONLINE_MS : Boolean(d.online) && home.isOnline(d, now),
+        // Syncing off: no last-seen time, no location, battery or Wi-Fi anywhere (the stored copies are erased too, see PUT /sync).
+        lastSeen: d.syncPaused ? null : d.lastSeen || null, onlineSince: d.syncPaused ? null : d.onlineSince || null, syncPaused: Boolean(d.syncPaused),
+        status: d.syncPaused ? (d.status && d.status.agent ? { agent: d.status.agent } : {}) : d.status || {},
         ...(d.kind === "phone" ? { roomOn: Boolean(d.roomOn) } : {}),
         ...(d.kind === "phone" ? { push: { on: Boolean(d.fcmSet), seenAt: d.fcmSeenAt || null, askedAt: d.fcmPushedAt || null, misses: d.fcmMisses || 0 } } : {}),
         commands: (d.commands || []).slice(-10).reverse().map((c) => ({ id: c.id, type: c.type, args: c.args, status: c.status, result: c.result, createdAt: c.createdAt }))
@@ -137,7 +139,9 @@ router.put("/home/devices/:id/sync", authenticate, writeLimiter, async (req, res
         const set = { syncPaused: paused };
         if (paused) set.online = false;
         const ids = paused ? [d._id, ...(await HomeDevice.find({ owner: d.owner, parent: d._id }).distinct("_id"))] : [d._id];
-        await HomeDevice.updateMany({ _id: { $in: ids } }, { $set: set });
+        // Turning it off erases what was stored about where it is and when it last reported, so no screen can show an old position or time.
+        const update = paused ? { $set: set, $unset: { lastSeen: "", onlineSince: "", "status.location": "", "status.battery": "", "status.charging": "", "status.wifi": "", "status.ip": "" } } : { $set: set };
+        await HomeDevice.updateMany({ _id: { $in: ids } }, update);
         await record({ owner: d.owner, device: d._id, deviceName: d.name, kind: paused ? "sync_paused" : "sync_resumed", text: paused ? `Syncing with ${d.name} is paused from the website` : `Syncing with ${d.name} is back on` });
         return res.json({ ok: true, syncPaused: paused });
     } catch (e) { return fail(res, e, "Could not change syncing."); }

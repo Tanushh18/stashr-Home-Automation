@@ -798,6 +798,7 @@ const whereText = (p) => {
     const low = p.battery?.pct != null && p.battery.pct <= 20 && !p.battery.charging;
     return `${low ? "Location stopped (battery low)" : "Location not updating"} · last seen ${p.state === "home" ? "at home" : `${p.distanceKm} km from home`}, ${m < 60 ? `${m} min` : `${Math.round(m / 60)} h`} ago`;
   }
+  if (p.state === "paused") return "Syncing is off";
   if (p.state === "home") return "At home";
   if (p.state === "coming") return `${p.etaMinutes <= 1 ? "Almost home" : `About ${p.etaMinutes} min away`} · ${p.distanceKm} km · heading home${p.traffic ? " · live traffic" : ""}`;
   if (p.state === "away") return `${p.distanceKm} km from home${p.etaMinutes ? ` · about ${p.etaMinutes} min if they head home now${p.traffic ? " (live traffic)" : ""}` : ""}`;

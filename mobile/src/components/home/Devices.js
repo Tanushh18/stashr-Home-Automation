@@ -285,6 +285,7 @@ function PhonesCard({ phones, reload }) {
 }
 
 const whereText = (p) => {
+  if (p.state === "paused") return "Syncing is off";
   if (p.state === "home") return "At home";
   if (p.state === "coming") return `${p.etaMinutes <= 1 ? "Almost home" : `About ${p.etaMinutes} min away`} · ${p.distanceKm} km · heading home${p.traffic ? " · live traffic" : ""}`;
   if (p.state === "away") return `${p.distanceKm} km from home${p.etaMinutes ? ` · about ${p.etaMinutes} min if they head home now${p.traffic ? " (live traffic)" : ""}` : ""}`;

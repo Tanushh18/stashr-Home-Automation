@@ -304,16 +304,18 @@ router.get("/home/where", authenticate, async (req, res) => {
         res.set("Cache-Control", "no-store");
         const owner = req.rootUser._id, now = Date.now();
         const s = await automation.settingsOf(owner);
-        const phones = (await HomeDevice.find({ owner, kind: "phone" }).lean()).filter((p) => (p.status || {}).location || (p.status || {}).agent === "stashr-where");
+        const phones = (await HomeDevice.find({ owner, kind: "phone" }).lean()).filter((p) => p.syncPaused || (p.status || {}).location || (p.status || {}).agent === "stashr-where");
         return res.json({
             homeSet: Boolean(s.homeSpot && Number.isFinite(s.homeSpot.lat)),
             locating: Boolean(s.locateUntil && new Date(s.locateUntil).getTime() > now),
             people: phones.map((p) => {
+                // Syncing off: only the name and the switch, no position, battery or time.
+                if (p.syncPaused) return { id: String(p._id), name: p.person || p.name, app: (p.status || {}).agent === "stashr-where" ? "Stashr Location" : "Stashr Hub", state: "paused", syncPaused: true };
                 const w = automation.whereIs(s, p, now), st = p.status || {};
                 return { id: String(p._id), name: p.person || p.name, app: st.agent === "stashr-where" ? "Stashr Location" : "Stashr Hub", ...w,
                     battery: home.batteryOf(st), lastSeen: p.lastSeen || null, syncPaused: Boolean(p.syncPaused),
                     wifi: Boolean(st.wifi), accuracyM: st.location ? Math.round(st.location.acc || 0) : null };
-            }).sort((a, b) => ({ coming: 0, away: 1, home: 2, unknown: 3, unset: 4 }[a.state] - { coming: 0, away: 1, home: 2, unknown: 3, unset: 4 }[b.state]) || a.name.localeCompare(b.name))
+            }).sort((a, b) => ({ coming: 0, away: 1, home: 2, unknown: 3, unset: 4, paused: 5 }[a.state] - { coming: 0, away: 1, home: 2, unknown: 3, unset: 4, paused: 5 }[b.state]) || a.name.localeCompare(b.name))
         });
     } catch (e) { return fail(res, e, "Could not load where everyone is."); }
 });

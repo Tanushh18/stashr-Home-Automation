@@ -295,6 +295,8 @@ function distM(a, b) {
  * fixAt and stale (the phone has not reported a location for a while), so "everyone is home" is only said when it is true.
  */
 function presence(hubs, phones, now = Date.now(), spot = null) {
+    // A device with syncing off is not part of "who is home": nothing about it is shown.
+    hubs = (hubs || []).filter((h) => !h.syncPaused); phones = (phones || []).filter((p) => !p.syncPaused);
     const people = new Map();
     const touch = (name) => { const k = name.trim(); if (!people.has(k)) people.set(k, { person: k, home: false, lastSeen: 0, devices: [], wifi: false, by: "" }); return people.get(k); };
     const upIps = new Set();

@@ -35,7 +35,7 @@ describe("sync on or off for one device", () => {
         const fix = (lat) => request(app).post("/home/agent/location").set(bearer(ph.token)).send({ lat, lon: 77.209, acc: 20, at: Date.now(), battery: { pct: 80, charging: false }, wifi: { connected: true, ip: "192.168.1.30", bssid: "aa:bb:cc:dd:ee:02" } });
         expect((await fix(28.6139)).body.paused).toBeUndefined();
         const id = String((await HomeDevice.findOne({ kind: "phone" }))._id);
-        const before = (await HomeDevice.findById(id)).status.location.lat;
+        expect((await HomeDevice.findById(id)).status.location.lat).toBe(28.6139);
 
         const off = await request(app).put(`/home/devices/${id}/sync`).set(auth).send({ paused: true });
         expect(off.status).toBe(200); expect(off.body.syncPaused).toBe(true);
@@ -43,11 +43,17 @@ describe("sync on or off for one device", () => {
         expect(r.status).toBe(200);
         expect(r.body).toMatchObject({ ok: true, paused: true, state: "paused" });
         expect(r.body.nextCheckSec).toBe(900);
-        expect((await HomeDevice.findById(id)).status.location.lat).toBe(before);              // the new fix was not stored
+        const kept = await HomeDevice.findById(id);
+        expect(kept.status.location).toBeUndefined();                                          // the old fix is erased, the new one was not stored
+        expect(kept.lastSeen).toBeUndefined();
+        const where = (await request(app).get("/home/where").set(auth)).body.people.find((x) => x.id === id);
+        expect(where.state).toBe("paused"); expect(where.syncPaused).toBe(true);
+        expect(where.lastSeen).toBeUndefined(); expect(where.fixAt).toBeUndefined(); expect(where.battery).toBeUndefined();
         const listed = (await request(app).get("/home/devices").set(auth)).body;
         const row = (listed.devices || listed).find((d) => String(d.id || d._id) === id);
         expect(row.syncPaused).toBe(true);
         expect(row.online).toBe(false);
+        expect(row.lastSeen).toBeNull(); expect(row.status.location).toBeUndefined();
 
         expect((await request(app).put(`/home/devices/${id}/sync`).set(auth).send({ paused: false })).body.syncPaused).toBe(false);
         expect((await fix(30.0)).body.paused).toBeUndefined();
