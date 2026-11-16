@@ -55,6 +55,11 @@ class Prefs(ctx: Context) {
         set(v) = p.edit().putString("lastError", v).apply()
 
     /** The local date (yyyy-MM-dd) on which the morning panel was last shown. */
+    /** The home screen scene: "auto" (festival by date, snow when it is cold), or one fixed scene, or "off". */
+    var scene: String
+        get() = p.getString("scene", "auto") ?: "auto"
+        set(v) = p.edit().putString("scene", v).apply()
+
     var morningShown: String
         get() = p.getString("morningShown", "") ?: ""
         set(v) = p.edit().putString("morningShown", v).apply()

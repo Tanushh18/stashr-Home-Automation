@@ -62,6 +62,10 @@ class LineIcon(private val name: String, color: Int = 0xEBFFFFFF.toInt()) : Draw
                 p.reset(); p.moveTo(12f, 2f); p.lineTo(10.2f, 4.6f); p.lineTo(13.8f, 4.6f); p.close(); c.drawPath(p, dot)
             }
             "drive" -> { p.reset(); p.addRoundRect(RectF(3f, 8f, 21f, 16f), 2f, 2f, Path.Direction.CW); c.drawPath(p, paint); c.drawCircle(17f, 12f, 1f, dot) }
+            "sparkle" -> {
+                poly(12f, 3f, 14.2f, 9.8f, 21f, 12f, 14.2f, 14.2f, 12f, 21f, 9.8f, 14.2f, 3f, 12f, 9.8f, 9.8f, close = true)
+                poly(19f, 3.5f, 19f, 7f); poly(17.2f, 5.2f, 20.8f, 5.2f)
+            }
             "home" -> {
                 poly(3f, 11f, 12f, 3.5f, 21f, 11f)
                 poly(5.5f, 9.5f, 5.5f, 20.5f, 18.5f, 20.5f, 18.5f, 9.5f)

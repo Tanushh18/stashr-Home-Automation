@@ -61,6 +61,10 @@ class HomeActivity : Activity() {
     private lateinit var newsStrip: TextView
     private lateinit var newsLine: CountdownLine
     private lateinit var weatherIcon: WeatherIconView
+    private lateinit var aurora: AuroraView
+    private var sceneToast: android.widget.Toast? = null
+    private lateinit var syncBar: ProgressLine
+    private lateinit var usbBar: ProgressLine
     private var newsIndex = 0
     private lateinit var morning: LinearLayout
     private var tvHome: Logic.TvHome? = null
@@ -94,7 +98,11 @@ class HomeActivity : Activity() {
 
     override fun onPause() { alive = false; main.removeCallbacksAndMessages(null); super.onPause() }
 
-    override fun onNewIntent(intent: Intent?) { super.onNewIntent(intent); firstTile()?.requestFocus() }
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent); firstTile()?.requestFocus()
+        // `am start ... --es scene JUNGLE` picks a scene directly (handy for checking one).
+        intent?.getStringExtra("scene")?.let { Prefs(this).scene = it; applyScene() }
+    }
 
     private fun firstTile(): View? = groupRows.values.firstNotNullOfOrNull { r -> (r.getChildAt(0)?.tag as? View) }
 
@@ -118,21 +126,25 @@ class HomeActivity : Activity() {
         offlineChip = ui.text("", 18f, 0xFFFFE08A.toInt(), bold = true).apply { visibility = View.GONE; maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END }
         left.addView(hello); left.addView(date); left.addView(offlineChip)
         head.addView(ui.fill(left))
-        val right = ui.column(6).apply { gravity = Gravity.END }
+        val right = ui.column(6).apply { gravity = Gravity.END; minimumWidth = ui.dp(330) }   // room for all five round buttons
         // Three round symbol buttons: Wi-Fi, Bluetooth, settings. The USB drive shows beside them only while one is plugged in.
         val buttons = ui.row(14).apply { clipChildren = false; gravity = Gravity.END or Gravity.CENTER_VERTICAL; setPadding(ui.dp(6), ui.dp(4), ui.dp(6), ui.dp(4)) }
         usbButton = ui.text("", 15f, 0xDDFFFFFF.toInt()).apply {
             visibility = View.GONE; compoundDrawablePadding = ui.dp(8)
             setCompoundDrawablesRelative(LineIcon("usb").apply { setBounds(0, 0, ui.dp(22), ui.dp(22)) }, null, null, null)
         }
-        buttons.addView(usbButton)
         buttons.addView(roundButton("wifi", "Wi-Fi") { openSettings(android.provider.Settings.ACTION_WIFI_SETTINGS) })
         buttons.addView(roundButton("bluetooth", "Bluetooth") { openSettings(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS) })
         buttons.addView(roundButton("pin", "Live location") { startActivity(Intent(this, LiveMapActivity::class.java)) })
+        buttons.addView(roundButton("sparkle", "Scene") { nextScene() })
         buttons.addView(roundButton("sliders", "Settings") { openSettings(android.provider.Settings.ACTION_SETTINGS) })
         // One short line: a long download error must never squeeze the greeting column down to a sliver.
         syncLine = ui.text("", 18f, 0xFFFFE08A.toInt()).apply { gravity = Gravity.END; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; maxWidth = ui.dp(420) }
-        right.addView(buttons); right.addView(syncLine)
+        // Two thin live bars under the buttons: the drive filling up, and the movie coming in.
+        usbBar = ProgressLine(this, 0xCC4ADE80.toInt()).apply { layoutParams = LinearLayout.LayoutParams(ui.dp(260), ui.dp(4)).apply { gravity = Gravity.END }; visibility = View.GONE }
+        syncBar = ProgressLine(this, 0xFFFFE08A.toInt()).apply { layoutParams = LinearLayout.LayoutParams(ui.dp(420), ui.dp(4)).apply { gravity = Gravity.END }; visibility = View.GONE }
+        usbButton.layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { gravity = Gravity.END }
+        right.addView(buttons); right.addView(usbButton); right.addView(usbBar); right.addView(syncLine); right.addView(syncBar)
         head.addView(right)
         col.addView(head)
 
@@ -191,7 +203,8 @@ class HomeActivity : Activity() {
             setBackgroundColor(0xF0140F3A.toInt()); setPadding(ui.dp(96), ui.dp(64), ui.dp(96), ui.dp(48)); visibility = View.GONE; isFocusable = true; isClickable = true
         }
         val root = FrameLayout(this)
-        root.addView(AuroraView(this), FrameLayout.LayoutParams(-1, -1))
+        aurora = AuroraView(this)
+        root.addView(aurora, FrameLayout.LayoutParams(-1, -1))
         root.addView(scroll, FrameLayout.LayoutParams(-1, -1))
         root.addView(morning, FrameLayout.LayoutParams(-1, -1))
         return root
@@ -239,12 +252,34 @@ class HomeActivity : Activity() {
     }
     private val familyTimer = Runnable { refreshFamily() }
 
+    /** The scene the background plays: the one chosen with the Menu key, or today's pick when it is on "auto". */
+    private fun applyScene() {
+        val chosen = Prefs(this).scene
+        val w = tvHome?.weather
+        aurora.scene = when (chosen) {
+            "auto" -> Scene.auto(Calendar.getInstance(), w?.temp, w?.text)
+            else -> Scene.values().firstOrNull { it.name == chosen } ?: Scene.OFF
+        }
+    }
+
+    /** The sparkle button in the header: Auto, then each scene in turn, so any of them can be picked from the sofa with OK. */
+    private fun nextScene() {
+        val order = listOf("auto") + Scene.values().map { it.name }
+        val cur = order.indexOf(Prefs(this).scene).let { if (it < 0) 0 else it }
+        val next = order[(cur + 1) % order.size]
+        Prefs(this).scene = next
+        applyScene()
+        sceneToast?.cancel()
+        sceneToast = android.widget.Toast.makeText(this, "Scene: " + (if (next == "auto") "Auto (${aurora.scene.label})" else Scene.valueOf(next).label), android.widget.Toast.LENGTH_SHORT).also { it.show() }
+    }
+
     private fun renderHome() {
+        applyScene()
         val h = tvHome
         val w = h?.weather
         weatherChip.text = if (w != null) "${w.temp}°C" else "--"
         weatherSub.text = if (w != null) listOfNotNull(w.text.takeIf { it.isNotBlank() }, w.city.takeIf { it.isNotBlank() }, w.rainChance?.let { "$it% rain" }).joinToString(" · ") else "Connect the TV to see the weather"
-        if (w != null) weatherIcon.kind = WeatherIconView.kindOf(w.text, w.rainChance)
+        if (w != null) { weatherIcon.kind = WeatherIconView.kindOf(w.text, w.rainChance); aurora.sky = weatherIcon.kind } else aurora.sky = null
         weatherIcon.visibility = if (w != null) View.VISIBLE else View.GONE
         comingBox.removeAllViews()
         comingBox.visibility = if (h != null && h.coming.isNotEmpty()) View.VISIBLE else View.GONE
@@ -322,12 +357,17 @@ class HomeActivity : Activity() {
         hello.text = Logic.greeting(Calendar.getInstance().get(Calendar.HOUR_OF_DAY))
         val drives = MovieStore.drives(this)
         usbButton.visibility = if (drives.isNotEmpty()) View.VISIBLE else View.GONE
-        usbButton.text = if (drives.isEmpty()) "" else "${drives.size} USB · ${Logic.size(drives.sumOf { it.free })} free of ${Logic.size(drives.sumOf { it.total })}"
+        usbBar.visibility = if (drives.isEmpty()) View.GONE else View.VISIBLE
+        if (drives.isNotEmpty()) { val tot = drives.sumOf { it.total }.coerceAtLeast(1); val used = 1f - drives.sumOf { it.free }.toFloat() / tot; usbBar.set(used, used > 0.9f) }
+        usbButton.text = if (drives.isEmpty()) "" else "${drives.size} USB · ${Logic.size(drives.sumOf { it.free })} free"   // short, so the greeting beside it is never squeezed; the bar below shows how full
         val prefs = Prefs(this)
         val local = com.tanush.stashr.tv.service.TvService.localMode
         offlineChip.visibility = if (local) View.VISIBLE else View.GONE
         if (local) offlineChip.text = "●  Offline mode · working through the tablet"
         val s = com.tanush.stashr.tv.service.TvService.syncer?.state
+        val dl = s != null && s.active && s.name.isNotEmpty() && s.error.isEmpty()
+        syncBar.visibility = if (dl) View.VISIBLE else View.GONE
+        if (dl) syncBar.set((s?.pct ?: 0) / 100f)
         syncLine.text = when {
             !prefs.linked -> "Not linked"
             s != null && s.active && s.name.isNotEmpty() && s.error.isEmpty() -> "Downloading ${Logic.title(s.name)} · ${s.pct}%"

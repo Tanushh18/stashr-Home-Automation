@@ -22,6 +22,7 @@ import kotlin.concurrent.thread
  * is cropped. A dark veil keeps the apps readable. Without photos it is a drifting colour wash with soft glows.
  */
 class AuroraView(ctx: Context) : View(ctx) {
+    private val rnd0 = java.util.Random(11)
     private val palette = intArrayOf(0xFF08121A.toInt(), 0xFF0A2A33.toInt(), 0xFF0B4A47.toInt(), 0xFF0C2F4A.toInt(), 0xFF0A1F2E.toInt())   // the Stashr dark teal
     private val wash = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(palette[0], palette[1], palette[2]))
     private val eval = ArgbEvaluator()
@@ -32,6 +33,12 @@ class AuroraView(ctx: Context) : View(ctx) {
         Glow(0.55f, 0.85f, 0.38f, 0.00013f, 0.00019f, 0xFF3D7BFF.toInt()),
     )
     private var running = false
+    /** What the weather is doing outside, from the server: the background plays it (rain streaks, drifting clouds, a warm sun glow). Null = nothing special. */
+    var sky: WeatherIconView.Kind? = null
+    /** The themed scene to play (jungle, snowfall, a festival…). */
+    var scene: Scene = Scene.OFF
+    private val art = SceneArt()
+    private val drops = List(70) { Mote(rnd0.nextFloat(), rnd0.nextFloat(), 0.7f + rnd0.nextFloat() * 0.8f, 0f) }
     private val shield = android.graphics.Path()
     private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; color = Color.WHITE }
     private val rnd = java.util.Random(7)
@@ -125,8 +132,52 @@ class AuroraView(ctx: Context) : View(ctx) {
         paint.shader = android.graphics.LinearGradient(sx - w * 0.12f, 0f, sx + w * 0.12f, h * 0.35f, intArrayOf(Color.TRANSPARENT, Color.argb(26, 255, 255, 255), Color.TRANSPARENT), null, Shader.TileMode.CLAMP)
         c.drawRect(0f, 0f, w, h, paint)
         paint.shader = null
+        drawSky(c, t, w, h)
+        art.draw(c, scene, t, w, h)
         // keep the apps readable
         c.drawColor(Color.argb(60, 4, 10, 16))
+    }
+
+    /** Weather and time of day on top of the wash: rain falls, clouds drift, the sun glows by day and stars twinkle by night. */
+    private fun drawSky(c: Canvas, t: Float, w: Float, h: Float) {
+        val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+        val night = hour >= 19 || hour < 6
+        paint.style = Paint.Style.FILL
+        when (sky) {
+            WeatherIconView.Kind.RAIN -> {
+                stroke.strokeCap = Paint.Cap.ROUND; stroke.strokeWidth = h * 0.0025f
+                for (d in drops) {
+                    val f = ((t / 1000f * 0.9f * d.speed) + d.phase) % 1f
+                    val x = w * d.x - f * w * 0.03f; val y = h * (f * 1.15f - 0.05f)
+                    stroke.alpha = (50 + 60 * d.speed / 1.5f).toInt()
+                    c.drawLine(x, y, x - h * 0.006f, y + h * 0.035f, stroke)
+                }
+                stroke.alpha = 255
+            }
+            WeatherIconView.Kind.CLOUD -> {
+                for (i in 0 until 3) {
+                    val x = ((t / 1000f * (0.006f + 0.003f * i) + i * 0.37f) % 1.5f - 0.25f) * w
+                    val y = h * (0.12f + 0.2f * i)
+                    paint.shader = RadialGradient(x, y, h * (0.32f + 0.05f * i), Color.argb(34, 255, 255, 255), Color.TRANSPARENT, Shader.TileMode.CLAMP)
+                    c.drawCircle(x, y, h * (0.32f + 0.05f * i), paint)
+                    paint.shader = null
+                }
+            }
+            WeatherIconView.Kind.SUN -> if (!night) {
+                val pulse = 0.85f + 0.15f * Math.sin(t / 3000.0).toFloat()
+                paint.shader = RadialGradient(w * 0.88f, h * 0.02f, h * 0.7f * pulse, Color.argb(60, 255, 201, 77), Color.TRANSPARENT, Shader.TileMode.CLAMP)
+                c.drawCircle(w * 0.88f, h * 0.02f, h * 0.7f * pulse, paint)
+                paint.shader = null
+            }
+            null -> {}
+        }
+        if (night && sky != WeatherIconView.Kind.RAIN) {
+            for (m in motes.take(24)) {
+                val tw = 0.5f + 0.5f * Math.sin((t / 900f * m.speed + m.phase * 12f).toDouble()).toFloat()
+                paint.color = Color.argb((40 + 140 * tw).toInt(), 255, 255, 235)
+                c.drawCircle(w * ((m.x * 7.3f) % 1f), h * ((m.phase * 3.7f) % 0.55f), m.size * 0.45f * (0.6f + tw), paint)
+            }
+        }
     }
 
     override fun onDraw(c: Canvas) {

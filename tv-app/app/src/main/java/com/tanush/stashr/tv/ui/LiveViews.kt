@@ -100,3 +100,23 @@ class CountdownLine(ctx: Context, private val color: Int) : View(ctx) {
         p.color = color; c.drawRoundRect(0f, 0f, width * frac, height.toFloat(), height / 2f, height / 2f, p)
     }
 }
+
+/** A thin bar that shows a fraction (a download, a drive filling up). It eases to each new value instead of jumping. */
+class ProgressLine(ctx: Context, private val color: Int) : View(ctx) {
+    private val p = Paint(Paint.ANTI_ALIAS_FLAG)
+    private var shown = 0f
+    private var target = 0f
+    private var warn = false
+    private var anim: ValueAnimator? = null
+    fun set(frac: Float, warning: Boolean = false) {
+        target = frac.coerceIn(0f, 1f); warn = warning
+        anim?.cancel()
+        anim = ValueAnimator.ofFloat(shown, target).apply { duration = 700; addUpdateListener { shown = it.animatedValue as Float; invalidate() }; start() }
+    }
+    override fun onDetachedFromWindow() { anim?.cancel(); super.onDetachedFromWindow() }
+    override fun onDraw(c: Canvas) {
+        p.color = 0x33FFFFFF; c.drawRoundRect(0f, 0f, width.toFloat(), height.toFloat(), height / 2f, height / 2f, p)
+        p.color = if (warn) 0xFFFF8A65.toInt() else color
+        c.drawRoundRect(0f, 0f, width * shown, height.toFloat(), height / 2f, height / 2f, p)
+    }
+}
