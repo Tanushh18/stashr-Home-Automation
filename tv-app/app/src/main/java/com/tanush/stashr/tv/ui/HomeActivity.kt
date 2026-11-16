@@ -59,6 +59,8 @@ class HomeActivity : Activity() {
     private lateinit var nightRow: LinearLayout
     private lateinit var nightScroll: HorizontalScrollView
     private lateinit var newsStrip: TextView
+    private lateinit var newsLine: CountdownLine
+    private lateinit var weatherIcon: WeatherIconView
     private var newsIndex = 0
     private lateinit var morning: LinearLayout
     private var tvHome: Logic.TvHome? = null
@@ -150,10 +152,12 @@ class HomeActivity : Activity() {
         weatherChip = ui.text("", 30f, Color.WHITE, bold = true).apply { maxLines = 1 }
         weatherSub = ui.text("", 17f, 0xDDFFFFFF.toInt()).apply { maxLines = 2 }
         newsStrip = ui.text("", 21f, Color.WHITE, bold = true).apply { maxLines = 3; ellipsize = android.text.TextUtils.TruncateAt.END }
+        newsLine = CountdownLine(this, 0xCCFFE08A.toInt()).apply { layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ui.dp(3)).apply { topMargin = ui.dp(4) } }
+        weatherIcon = WeatherIconView(this).apply { layoutParams = LinearLayout.LayoutParams(ui.dp(52), ui.dp(52)) }
         familyRow = ui.column(2)
         val cards = ui.row(16).apply { clipChildren = false; setPadding(ui.dp(6), ui.dp(4), ui.dp(48), ui.dp(4)); layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT) }
-        cards.addView(card("Weather", 300, ui.column(2).apply { addView(weatherChip); addView(weatherSub) }))
-        cards.addView(card("In the news", 560, newsStrip))
+        cards.addView(card("Weather", 300, ui.row(10).apply { addView(weatherIcon); addView(ui.column(2).apply { addView(weatherChip); addView(weatherSub) }) }))
+        cards.addView(card("In the news", 560, ui.column(0).apply { addView(newsStrip); addView(newsLine) }))
         cards.addView(card("Family", 300, familyRow, focusable = true) { startActivity(Intent(this, LiveMapActivity::class.java)) })
         col.addView(cards)
 
@@ -221,7 +225,13 @@ class HomeActivity : Activity() {
                 if (line == null || isFinishing) return@post
                 familyRow.removeAllViews()
                 if (line.isEmpty()) familyRow.addView(ui.text("No phones linked yet", 17f, 0xDDFFFFFF.toInt()))
-                for (l in line.take(3)) familyRow.addView(ui.text(l, 19f, Color.WHITE, bold = true).apply { maxLines = 1 })
+                for (l in line.take(3)) {
+                    val home = l.endsWith("home")
+                    familyRow.addView(ui.row(8).apply {
+                        addView(PulseDot(this@HomeActivity, if (home) 0xFF4ADE80.toInt() else 0xFFFFC94D.toInt()).apply { layoutParams = LinearLayout.LayoutParams(ui.dp(14), ui.dp(14)) })
+                        addView(ui.text(l.removePrefix("📍").trim(), 19f, Color.WHITE, bold = true).apply { maxLines = 1 })
+                    })
+                }
             }
         }
         main.removeCallbacks(familyTimer)
@@ -234,6 +244,8 @@ class HomeActivity : Activity() {
         val w = h?.weather
         weatherChip.text = if (w != null) "${w.temp}°C" else "--"
         weatherSub.text = if (w != null) listOfNotNull(w.text.takeIf { it.isNotBlank() }, w.city.takeIf { it.isNotBlank() }, w.rainChance?.let { "$it% rain" }).joinToString(" · ") else "Connect the TV to see the weather"
+        if (w != null) weatherIcon.kind = WeatherIconView.kindOf(w.text, w.rainChance)
+        weatherIcon.visibility = if (w != null) View.VISIBLE else View.GONE
         comingBox.removeAllViews()
         comingBox.visibility = if (h != null && h.coming.isNotEmpty()) View.VISIBLE else View.GONE
         h?.coming?.forEach { c ->
@@ -250,7 +262,11 @@ class HomeActivity : Activity() {
         val news = tvHome?.news.orEmpty()
         if (news.isEmpty()) { newsStrip.text = "Headlines will show here"; return }
         val n = news[newsIndex++ % news.size]
-        newsStrip.text = n.title + (if (n.source.isNotEmpty()) "\n" + n.source else "")
+        newsStrip.animate().alpha(0f).setDuration(150).withEndAction {
+            newsStrip.text = n.title + (if (n.source.isNotEmpty()) "\n" + n.source else "")
+            newsStrip.animate().alpha(1f).setDuration(350).start()
+        }.start()
+        newsLine.restart(10_000L)
         if (alive) main.postDelayed(newsTimer, 10_000L)
     }
     private val newsTimer = Runnable { showNews() }
