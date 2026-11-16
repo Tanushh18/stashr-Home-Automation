@@ -30,9 +30,8 @@ test("the hub update check finds the newest stashr-hub release, not the main app
     assert.equal(same.body.updateAvailable, false);
 });
 
-test("the hub APK downloads through the server", async () => {
-    const r = await request(app).get("/api/mobile-updates/hub/download").buffer(true).parse((res, cb) => { const c = []; res.on("data", (d) => c.push(d)); res.on("end", () => cb(null, Buffer.concat(c))); });
-    assert.equal(r.status, 200);
-    assert.equal(r.headers["content-type"], "application/vnd.android.package-archive");
-    assert.equal(r.body.toString(), "hub-apk");
+test("the hub APK is sent straight to GitHub, not streamed through the server", async () => {
+    const r = await request(app).get("/api/mobile-updates/hub/download").redirects(0);
+    assert.equal(r.status, 302);
+    assert.match(r.headers.location, /^https:\/\/github\.com\//);
 });

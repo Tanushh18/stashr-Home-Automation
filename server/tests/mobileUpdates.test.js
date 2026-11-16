@@ -54,19 +54,10 @@ test("latest Android manifest reports no update for current build", async () => 
   assert.equal(response.body.updateAvailable, false);
 });
 
-test("APK endpoint streams the release asset through the server", async () => {
-  const response = await request(app)
-    .get("/api/mobile-updates/android/download")
-    .buffer(true)
-    .parse((res, callback) => {
-      const chunks = [];
-      res.on("data", (chunk) => chunks.push(chunk));
-      res.on("end", () => callback(null, Buffer.concat(chunks)));
-    });
-  assert.equal(response.status, 200);
-  assert.equal(response.headers["content-type"], "application/vnd.android.package-archive");
-  assert.match(response.headers["content-disposition"], /Stashr-2\.3\.1-build-100123\.apk/);
-  assert.equal(response.body.toString(), "fake-apk-binary");
+test("APK endpoint sends the phone straight to GitHub instead of streaming it through the server", async () => {
+  const response = await request(app).get("/api/mobile-updates/android/download").redirects(0);
+  assert.equal(response.status, 302);
+  assert.match(response.headers.location, /^https:\/\/github\.com\/.+\/stashr-release\.apk$/);
 });
 
 test.after(() => {

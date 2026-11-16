@@ -127,6 +127,8 @@ router.get("/asset/:name", async (req, res) => {
     const asset = assets.find((item) => item.name === name);
     if (!asset) return res.status(404).json({ error: "Asset not found." });
 
+    // Public release file: GitHub serves it directly, so the bundle does not use this server's bandwidth.
+    if (asset.browser_download_url) return res.redirect(302, asset.browser_download_url);
     const response = await fetchWithHeaderTimeout(asset.url, { headers: githubHeaders("application/octet-stream") }, 30_000);
     if (!response.ok || !response.body) throw httpError(502, `GitHub asset download returned HTTP ${response.status}`);
     res.status(200);

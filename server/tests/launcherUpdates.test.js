@@ -31,8 +31,11 @@ test("the launcher update check finds the newest stashr-launcher release and off
     assert.equal(same.body.updateAvailable, false);
 });
 
-test("the launcher APK downloads through the server", async () => {
-    const r = await request(app).get("/api/mobile-updates/launcher/download").buffer(true).parse((res, cb) => { const c = []; res.on("data", (d) => c.push(d)); res.on("end", () => cb(null, Buffer.concat(c))); });
+test("the launcher APK is sent straight to GitHub, not streamed through the server", async () => {
+    const r = await request(app).get("/api/mobile-updates/launcher/download").redirects(0);
+    assert.equal(r.status, 302);
+    assert.match(r.headers.location, /^https:\/\/github\.com\//);
+});
     assert.equal(r.status, 200);
     assert.equal(r.headers["content-type"], "application/vnd.android.package-archive");
     assert.equal(r.body.toString(), "launcher-apk");

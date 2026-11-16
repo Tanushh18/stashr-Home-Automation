@@ -1,5 +1,5 @@
 const express = require("express");
-const { fetchWithHeaderTimeout, pipeUpstream } = require("../utils/upstreamStream");
+const { fetchWithHeaderTimeout } = require("../utils/upstreamStream");
 const { latestFromFeed } = require("../utils/releaseFeed");
 
 const rollout = require("../utils/rollout");
@@ -127,26 +127,10 @@ router.get("/android/download", async (_req, res) => {
   res.set("Cache-Control", "no-store");
   try {
     const release = await latestRelease();
-    const headers = {
-      Accept: "application/octet-stream",
-      "User-Agent": "Stashr-Android-Updater",
-      ...(process.env.STASHR_UPDATE_GITHUB_TOKEN ? { Authorization: `Bearer ${process.env.STASHR_UPDATE_GITHUB_TOKEN}` } : {}),
-    };
-    const response = await fetchWithHeaderTimeout(release.assetApiUrl, { headers }, 30_000);
-    if (!response.ok || !response.body) {
-      const error = new Error(`GitHub asset download returned HTTP ${response.status}`);
-      error.status = 502;
-      throw error;
-    }
-    res.status(200);
-    res.set("Content-Type", "application/vnd.android.package-archive");
-    res.set("Content-Disposition", `attachment; filename="Stashr-${release.version}-build-${release.versionCode}.apk"`);
-    res.set("X-Content-Type-Options", "nosniff");
-    if (release.sizeBytes > 0) res.set("Content-Length", String(release.sizeBytes));
-    return pipeUpstream(response, res);
+    // The release is public on GitHub: send the phone straight there so the APK never passes through this server
+    // (Render's included bandwidth ran out quickly when every update was streamed through it).
+    return res.redirect(302, release.downloadUrl);
   } catch (error) {
-    if (res.headersSent) return res.destroy(error);
-    // The release is public on GitHub: its own "latest" link needs no API call, so a rate-limited server still gives the APK.
     if (error.status !== 404) return res.redirect(302, `https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/stashr-release.apk`);
     return res.status(error.status || 502).json({
       error: "The latest Android APK is not available yet.",
@@ -237,23 +221,12 @@ for (const key of Object.keys(SIDE_APPS)) {
 
   router.get(`/${key}/download`, async (_req, res) => {
     res.set("Cache-Control", "no-store");
-    let direct = "";
     try {
       const r = await latestSideRelease(key);
-      // The release is public: GitHub's own download link needs no API call, so it is the fallback whenever the proxy path cannot be used.
-      direct = r.directUrl || `https://github.com/${GITHUB_REPOSITORY}/releases/download/${encodeURIComponent(r.tagName)}/${app.apk}`;
-      if (!r.assetApiUrl) return res.redirect(302, direct);
-      const response = await fetchWithHeaderTimeout(r.assetApiUrl, { headers: ghHeaders("application/octet-stream") }, 30_000);
-      if (!response.ok || !response.body) throw Object.assign(new Error(`GitHub asset download returned HTTP ${response.status}`), { status: 502 });
-      res.status(200);
-      res.set("Content-Type", "application/vnd.android.package-archive");
-      res.set("Content-Disposition", `attachment; filename="${app.file}-${r.version}-build-${r.versionCode}.apk"`);
-      res.set("X-Content-Type-Options", "nosniff");
-      if (r.sizeBytes > 0) res.set("Content-Length", String(r.sizeBytes));
-      return pipeUpstream(response, res);
+      // Straight from GitHub (public release): the APK does not pass through this server and use up its bandwidth.
+      const direct = r.directUrl || `https://github.com/${GITHUB_REPOSITORY}/releases/download/${encodeURIComponent(r.tagName)}/${app.apk}`;
+      return res.redirect(302, direct);
     } catch (error) {
-      if (res.headersSent) return res.destroy(error);
-      if (direct && error.status !== 404) return res.redirect(302, direct);
       return res.status(error.status || 502).json({ error: `The ${app.label} APK is not available yet.`, detail: process.env.NODE_ENV === "production" ? undefined : error.message });
     }
   });
