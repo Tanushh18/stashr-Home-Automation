@@ -27,6 +27,7 @@ export function navGroups(profile) {
         ...(on(f, "smartHome") ? [{ to: "/smart-home", label: "Smart home", icon: "tv" }] : []),
         ...(on(f, "smartHome") ? [{ to: "/whatsapp", label: "WhatsApp sender", icon: "send" }] : []),
         ...(on(f, "smartHome") ? [{ to: "/sms", label: "SMS sender", icon: "sms" }] : []),
+        ...(on(f, "smartHome") ? [{ to: "/ggnhome-admin", label: "ggnHome admin", icon: "folder" }] : []),
         ...(on(f, "money") ? [{ to: "/money", label: "Money", icon: "rupee" }] : []),
       ],
     },

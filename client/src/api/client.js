@@ -600,6 +600,11 @@ export const saveSmsSheet = (body) => instance.put("/sms/sheets", body).then((r)
 export const saveSmsDevice = (id, body) => instance.patch(`/sms/devices/${encodeURIComponent(id)}`, body).then((r) => r.data);
 export const getSmsLog = (limit = 50) => instance.get("/sms/log", { params: { limit } }).then((r) => r.data);
 export const sendSmsTest = (phoneNumber, message) => instance.post("/sms/test", { phoneNumber, message }).then((r) => r.data);
+export const ggnAdminHttp = instance;
+export const getGgnSmsOverview = () => instance.get("/sms/ggnhome/overview", { timeout: 60000 }).then((r) => r.data);
+export const saveGgnSmsSettings = (body) => instance.put("/sms/ggnhome/settings", body).then((r) => r.data);
+export const saveGgnSmsDevice = (id, body) => instance.patch(`/sms/ggnhome/devices/${encodeURIComponent(id)}`, body).then((r) => r.data);
+export const sendGgnSmsTest = (phoneNumber, message) => instance.post("/sms/ggnhome/test", { phoneNumber, message }).then((r) => r.data);
 export const sendWaSheetToWeThree = (id) => instance.post(`/wa/sheets/${id}/we-three`, {}, { timeout: 120000 }).then((r) => r.data);
 export const createWaSheet = (body) => instance.post("/wa/sheets", body).then((r) => r.data);
 export const saveWaSheet = (id, body) => instance.patch(`/wa/sheets/${id}`, body).then((r) => r.data);

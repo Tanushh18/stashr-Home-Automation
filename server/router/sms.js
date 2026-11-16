@@ -10,17 +10,41 @@
  *   PATCH  /sms/devices/:deviceId     a phone: { name, role, enabled }
  *   GET    /sms/log                   the latest messages
  *   POST   /sms/test                  { phoneNumber, message }
+ *
+ * The limits are NOT built into the We Three or ggnHome servers: every limit (per day, per hour, the gap, the lunch batch) has
+ * its own on/off here, and "off" is sent as null = no limit. The safe numbers and the ceiling live in this file and in the page.
+ *
+ *   GET    /sms/ggnhome/overview      ggnHome: settings, limits, phones
+ *   PUT    /sms/ggnhome/settings      { showOtpOnAndroid, dailyLimit, hourlyLimit, gapMinSec, gapMaxSec } (null = off)
+ *   PATCH  /sms/ggnhome/devices/:id   { name, enabled }
+ *   GET    /sms/ggnhome/log           the latest ggnHome messages
+ *   POST   /sms/ggnhome/test          { phoneNumber, message }
  */
 const express = require("express");
 const authenticate = require("../middlewares/authenticate");
 const rateLimit = require("../middlewares/rateLimit");
 const WaLink = require("../models/waLink");
 const waLeads = require("../utils/waLeads");
+const ggn = require("../utils/ggnhomeApi");
 
 const router = express.Router();
 const writeLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, message: "Too many changes. Slow down." });
 
-const SETTING_KEYS = ["paused", "mode", "dailyLimit", "hourlyLimit", "gapMinSec", "gapMaxSec", "lunchQuota", "lunchStart", "lunchEnd", "nightStart", "nightEnd", "days"];
+const SETTING_KEYS = ["paused", "dailyLimit", "hourlyLimit", "gapMinSec", "gapMaxSec", "lunchQuota", "lunchStart", "lunchEnd", "nightStart", "nightEnd", "days"];
+/** Ceilings kept here (not on the servers) so a typo cannot flood a SIM. */
+const CEILING = { dailyLimit: 200, hourlyLimit: 60, gapMinSec: 600, gapMaxSec: 900, lunchQuota: 200 };
+/** Limits: null / "" switches one off; a number is rounded and kept inside 1..ceiling. */
+function limits(src, keys) {
+    const out = {};
+    for (const k of keys) {
+        if (!src || src[k] === undefined) continue;
+        if (src[k] === null || src[k] === "") { out[k] = null; continue; }
+        const n = Number(src[k]);
+        if (Number.isFinite(n)) out[k] = Math.min(CEILING[k], Math.max(k === "lunchQuota" ? 0 : 1, Math.round(n)));
+    }
+    return out;
+}
+const LIMIT_KEYS = ["dailyLimit", "hourlyLimit", "gapMinSec", "gapMaxSec", "lunchQuota"];
 const pick = (src, keys) => Object.fromEntries(keys.filter((k) => src && src[k] !== undefined).map((k) => [k, src[k]]));
 
 /** One call to We Three's SMS console; its answer (or a clear error) goes back to the browser. */
@@ -41,7 +65,7 @@ async function relay(req, res, method, path, body) {
 }
 
 router.get("/sms/overview", authenticate, (req, res) => { res.set("Cache-Control", "no-store"); return relay(req, res, "GET", "/overview"); });
-router.put("/sms/settings", authenticate, writeLimiter, (req, res) => relay(req, res, "PUT", "/settings", pick(req.body, SETTING_KEYS)));
+router.put("/sms/settings", authenticate, writeLimiter, (req, res) => relay(req, res, "PUT", "/settings", { ...pick(req.body, SETTING_KEYS.filter((k) => !LIMIT_KEYS.includes(k))), ...limits(req.body, LIMIT_KEYS) }));
 router.put("/sms/sheets", authenticate, writeLimiter, (req, res) => {
     const b = req.body || {};
     if (!String(b.sheet || "").trim()) return res.status(400).json({ error: "Which sheet?" });
@@ -57,6 +81,37 @@ router.get("/sms/log", authenticate, (req, res) => relay(req, res, "GET", `/log?
 router.post("/sms/test", authenticate, writeLimiter, (req, res) => {
     const b = req.body || {};
     return relay(req, res, "POST", "/test", { phoneNumber: String(b.phoneNumber || "").slice(0, 20), message: String(b.message || "").slice(0, 300) });
+});
+
+/** One call to the ggnHome SMS console; its answer (or a clear error) goes back to the browser. */
+async function relayGgn(res, method, path, body) {
+    try {
+        const r = await ggn.sms(method, path, body);
+        if (r.status >= 200 && r.status < 300) return res.json(r.json || {});
+        const msg = (r.json && (r.json.message || (r.json.error && (r.json.error.message || r.json.error)))) || `ggnHome answered HTTP ${r.status}`;
+        if (r.status === 401) return res.status(502).json({ error: "ggnHome did not accept the SMS key. SMS_KEY on Stashr must be the same as on ggnHome." });
+        return res.status(r.status >= 400 && r.status < 500 ? r.status : 502).json({ error: String(msg) });
+    } catch (err) {
+        return res.status(err.status && err.status < 600 ? err.status : 502).json({ error: err.message || "Could not reach ggnHome." });
+    }
+}
+router.get("/sms/ggnhome/overview", authenticate, (req, res) => { res.set("Cache-Control", "no-store"); return relayGgn(res, "GET", "/overview"); });
+router.put("/sms/ggnhome/settings", authenticate, writeLimiter, (req, res) => {
+    const b = req.body || {};
+    const body = limits(b, ["dailyLimit", "hourlyLimit", "gapMinSec", "gapMaxSec"]);
+    if (typeof b.showOtpOnAndroid === "boolean") body.showOtpOnAndroid = b.showOtpOnAndroid;
+    return relayGgn(res, "PUT", "/ggnhome/settings", body);
+});
+router.patch("/sms/ggnhome/devices/:deviceId", authenticate, writeLimiter, (req, res) => {
+    const b = req.body || {}, body = {};
+    if (typeof b.name === "string") body.name = b.name.slice(0, 60);
+    if (typeof b.enabled === "boolean") body.ggnhome = b.enabled;
+    return relayGgn(res, "PATCH", `/phones/${encodeURIComponent(String(req.params.deviceId).slice(0, 64))}`, body);
+});
+router.get("/sms/ggnhome/log", authenticate, (req, res) => relayGgn(res, "GET", `/log?service=ggnhome&limit=${Math.min(Math.max(Number(req.query.limit) || 50, 1), 200)}`));
+router.post("/sms/ggnhome/test", authenticate, writeLimiter, (req, res) => {
+    const b = req.body || {};
+    return relayGgn(res, "POST", "/test", { service: "ggnhome", phoneNumber: String(b.phoneNumber || "").replace(/\D/g, "").slice(-10), message: String(b.message || "").slice(0, 300) });
 });
 
 module.exports = router;

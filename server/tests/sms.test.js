@@ -78,6 +78,9 @@ describe("SMS sender (managed from Stashr, sent by We Three)", () => {
         await request(app).put("/sms/settings").set(auth).send({ paused: true, dailyLimit: 80, days: [1, 2], hack: "no" });
         expect(seen.at(-1)).toMatchObject({ path: "/sms-console/settings", body: { paused: true, dailyLimit: 80, days: [1, 2] } });
         expect(seen.at(-1).body.hack).toBe(undefined);
+        // every limit has its own on/off: null = off, and a number is kept under Stashr's ceiling
+        await request(app).put("/sms/settings").set(auth).send({ dailyLimit: null, hourlyLimit: 9999, gapMinSec: "", lunchQuota: 0 });
+        expect(seen.at(-1).body).toEqual({ dailyLimit: null, hourlyLimit: 60, gapMinSec: null, lunchQuota: 0 });
         await request(app).patch("/sms/devices/phone 1").set(auth).send({ enabled: false, name: "Office phone" });
         expect(seen.at(-1)).toMatchObject({ method: "PATCH", path: "/sms-console/devices/phone%201", body: { enabled: false, name: "Office phone" } });
         await request(app).post("/sms/test").set(auth).send({ phoneNumber: "8130483894", message: "Hello" });
@@ -85,6 +88,17 @@ describe("SMS sender (managed from Stashr, sent by We Three)", () => {
         await request(app).get("/sms/log?limit=999").set(auth);
         expect(seen.at(-1).path).toBe("/sms-console/log?limit=200");
         expect((await request(app).put("/sms/sheets").set(auth).send({ texts: [] })).status).toBe(400);
+    });
+
+    test("manages the ggnHome SMS limits too, with the shared key and no ggnHome page", async () => {
+        const auth = await signUp();
+        process.env.SMS_KEY = "k-test"; process.env.GGNHOME_URL = process.env.WA_THREE_URL;
+        const r = await request(app).put("/sms/ggnhome/settings").set(auth).send({ dailyLimit: 5000, hourlyLimit: null, gapMinSec: 8, gapMaxSec: 14, showOtpOnAndroid: true, junk: 1 });
+        expect(r.status).toBe(404); // the stand-in only knows /sms-console; the real path is /api/sms-console/...
+        delete process.env.SMS_KEY;
+        const none = await request(app).get("/sms/ggnhome/overview").set(auth);
+        expect(none.status).toBe(503);
+        delete process.env.GGNHOME_URL;
     });
 
     test("We Three's own errors come back readable", async () => {

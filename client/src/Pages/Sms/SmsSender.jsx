@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "react-toastify";
-import { getSmsOverview, saveSmsSettings, saveSmsSheet, saveSmsDevice, getSmsLog, sendSmsTest, getWaOverview } from "../../api/client";
+import { getSmsOverview, getGgnSmsOverview, saveGgnSmsSettings, saveSmsSettings, saveSmsSheet, saveSmsDevice, getSmsLog, sendSmsTest, getWaOverview } from "../../api/client";
 import { Section, Skeleton } from "../Render/RenderUi";
 import { usePolling } from "../Render/renderHooks";
 import { errorMessage } from "../Render/renderUtils";
@@ -21,46 +21,51 @@ const ROLE_LABEL = { shine: "Shine One", ggnhome: "GGN Home", both: "Both" };
 const STATUS_LABEL = { sending: "Sending", sent: "Sent", failed: "Failed", pending: "Waiting" };
 const when = (v) => (v ? new Date(v).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }) : "");
 
-/** Limits and sending times. "Safe defaults" uses the We Three server's built-in numbers; "My numbers" uses these (capped). */
+/** The numbers Stashr suggests when a limit is switched on. Nothing is built into the servers: off = no limit. */
+const SUGGESTED = { dailyLimit: 90, hourlyLimit: 30, gapMinSec: 8, gapMaxSec: 14, lunchQuota: 30 };
+const CEIL = { dailyLimit: 200, hourlyLimit: 60, gapMinSec: 600, gapMaxSec: 900, lunchQuota: 200 };
+
+/** One limit with its own on/off switch. Off sends null (no limit). */
+function LimitField({ k, label, f, set }) {
+  const on = f[k] !== null && f[k] !== undefined && f[k] !== "";
+  return (
+    <div className="wa-label">
+      <label className="wa-check"><input type="checkbox" checked={on} onChange={(e) => set(k, e.target.checked ? SUGGESTED[k] : null)} /> {label}</label>
+      <input className="wa-input is-short" type="number" min="1" max={CEIL[k]} aria-label={label} value={on ? f[k] : ""} placeholder="no limit" disabled={!on} onChange={(e) => set(k, e.target.value)} />
+    </div>
+  );
+}
+
+/** Limits and sending times for Shine One (We Three). Every limit has its own switch; the servers have none built in. */
 function LimitsCard({ settings, onSaved }) {
   const [f, setF] = useState(() => ({ ...settings }));
   const [busy, setBusy] = useState(false);
   useEffect(() => { setF({ ...settings }); }, [settings]);
   const set = (k, v) => setF((cur) => ({ ...cur, [k]: v }));
-  const caps = settings.hardCaps || { daily: 200, hourly: 60 };
   const eff = settings.effective || {};
-  const custom = f.mode === "custom";
+  const txt = (v, unit) => (v === null || v === undefined ? "no limit" : `${v}${unit}`);
   const save = async () => {
     setBusy(true);
     try {
-      const body = { mode: f.mode, lunchStart: f.lunchStart, lunchEnd: f.lunchEnd, nightStart: f.nightStart, nightEnd: f.nightEnd, days: f.days, lunchQuota: Number(f.lunchQuota) };
-      if (custom) Object.assign(body, { dailyLimit: Number(f.dailyLimit), hourlyLimit: Number(f.hourlyLimit), gapMinSec: Number(f.gapMinSec), gapMaxSec: Number(f.gapMaxSec) });
+      const body = { lunchStart: f.lunchStart, lunchEnd: f.lunchEnd, nightStart: f.nightStart, nightEnd: f.nightEnd, days: f.days };
+      for (const k of Object.keys(SUGGESTED)) body[k] = f[k] === null || f[k] === undefined || f[k] === "" ? null : Number(f[k]);
       await saveSmsSettings(body);
       toast.success("Limits saved.");
       await onSaved();
     } catch (e) { toast.error(errorMessage(e)); } finally { setBusy(false); }
   };
-  const num = (k, label, max) => (
-    <label className="wa-label">{label}
-      <input className="wa-input is-short" type="number" min="1" max={max} value={f[k] ?? ""} disabled={!custom} onChange={(e) => set(k, e.target.value)} />
-    </label>
-  );
   return (
-    <Section title="Limits and sending times" subtitle={`Each phone sends at most ${eff.dailyLimit ?? "?"} a day and ${eff.hourlyLimit ?? "?"} an hour, with a random gap of ${eff.gapMinSec ?? "?"}–${eff.gapMaxSec ?? "?"} seconds. Times are India time.`}>
+    <Section title="Limits and sending times" subtitle={`Now: ${txt(eff.dailyLimit, " a day")} per phone, ${txt(eff.hourlyLimit, " an hour")}, gap ${eff.gapMinSec == null && eff.gapMaxSec == null ? "none" : `${eff.gapMinSec ?? 0}–${eff.gapMaxSec ?? eff.gapMinSec} seconds`}. Switch a limit off to remove it. Times are India time.`}>
       <div className="wa-row">
-        <label className="wa-check"><input type="radio" name="sms-mode" checked={!custom} onChange={() => set("mode", "auto")} /> Safe defaults</label>
-        <label className="wa-check"><input type="radio" name="sms-mode" checked={custom} onChange={() => set("mode", "custom")} /> My numbers (never above {caps.daily} a day, {caps.hourly} an hour)</label>
-      </div>
-      <div className="wa-row">
-        {num("dailyLimit", "Messages a day (per phone)", caps.daily)}
-        {num("hourlyLimit", "Messages an hour", caps.hourly)}
-        {num("gapMinSec", "Shortest gap (seconds)", 600)}
-        {num("gapMaxSec", "Longest gap (seconds)", 900)}
+        <LimitField k="dailyLimit" label="Messages a day (per phone)" f={f} set={set} />
+        <LimitField k="hourlyLimit" label="Messages an hour" f={f} set={set} />
+        <LimitField k="gapMinSec" label="Shortest gap (seconds)" f={f} set={set} />
+        <LimitField k="gapMaxSec" label="Longest gap (seconds)" f={f} set={set} />
+        <LimitField k="lunchQuota" label="At most at lunch" f={f} set={set} />
       </div>
       <div className="wa-row">
         <label className="wa-label">Lunch from <input className="wa-input is-short" type="time" value={f.lunchStart || ""} onChange={(e) => set("lunchStart", e.target.value)} /></label>
         <label className="wa-label">to <input className="wa-input is-short" type="time" value={f.lunchEnd || ""} onChange={(e) => set("lunchEnd", e.target.value)} /></label>
-        <label className="wa-label">at most <input className="wa-input is-short" type="number" min="0" max={caps.daily} value={f.lunchQuota ?? ""} onChange={(e) => set("lunchQuota", e.target.value)} /> at lunch</label>
         <label className="wa-label">Night from <input className="wa-input is-short" type="time" value={f.nightStart || ""} onChange={(e) => set("nightStart", e.target.value)} /></label>
         <label className="wa-label">to <input className="wa-input is-short" type="time" value={f.nightEnd || ""} onChange={(e) => set("nightEnd", e.target.value)} /></label>
       </div>
@@ -70,6 +75,48 @@ function LimitsCard({ settings, onSaved }) {
         ))}
       </div>
       <div className="wa-row"><button className="rd-btn is-primary" disabled={busy} onClick={save}>Save limits</button></div>
+    </Section>
+  );
+}
+
+/** GGN Home: its login-code SMS limits (the same on/off per limit) and its phones. Managed here, sent by the ggnHome server. */
+function GgnhomeCard() {
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState("");
+  const [f, setF] = useState({});
+  const [busy, setBusy] = useState(false);
+  const load = useCallback(async () => {
+    try { const d = await getGgnSmsOverview(); setData(d); setF({ ...(d.ggnhome || {}).settings }); setErr(""); }
+    catch (e) { setErr(errorMessage(e, "Could not reach ggnHome.")); }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+  const set = (k, v) => setF((cur) => ({ ...cur, [k]: v }));
+  const save = async () => {
+    setBusy(true);
+    try {
+      const body = { showOtpOnAndroid: !!f.showOtpOnAndroid };
+      for (const k of ["dailyLimit", "hourlyLimit", "gapMinSec", "gapMaxSec"]) body[k] = f[k] === null || f[k] === undefined || f[k] === "" ? null : Number(f[k]);
+      await saveGgnSmsSettings(body);
+      toast.success("GGN Home limits saved.");
+      await load();
+    } catch (e) { toast.error(errorMessage(e)); } finally { setBusy(false); }
+  };
+  if (err && !data) return <Section title="GGN Home SMS"><p className="wa-error">{err}</p></Section>;
+  if (!data) return <Section title="GGN Home SMS"><Skeleton /></Section>;
+  const eff = ((data.ggnhome || {}).settings || {}).effective || {};
+  const txt = (v, unit) => (v === null || v === undefined ? "no limit" : `${v}${unit}`);
+  return (
+    <Section title="GGN Home SMS (login codes)" subtitle={`Now: ${txt(eff.dailyLimit, " a day")} per phone, ${txt(eff.hourlyLimit, " an hour")}, gap ${eff.gapMinSec == null && eff.gapMaxSec == null ? "none" : `${eff.gapMinSec ?? 0}–${eff.gapMaxSec ?? eff.gapMinSec} seconds`}. ${(data.ggnhome || {}).pending || 0} waiting to be sent.`}>
+      <div className="wa-row">
+        <LimitField k="dailyLimit" label="Messages a day (per phone)" f={f} set={set} />
+        <LimitField k="hourlyLimit" label="Messages an hour" f={f} set={set} />
+        <LimitField k="gapMinSec" label="Shortest gap (seconds)" f={f} set={set} />
+        <LimitField k="gapMaxSec" label="Longest gap (seconds)" f={f} set={set} />
+      </div>
+      <div className="wa-row">
+        <label className="wa-check"><input type="checkbox" checked={!!f.showOtpOnAndroid} onChange={(e) => set("showOtpOnAndroid", e.target.checked)} /> Show login codes in the Android app instead of sending SMS</label>
+      </div>
+      <div className="wa-row"><button className="rd-btn is-primary" disabled={busy} onClick={save}>Save GGN Home limits</button></div>
     </Section>
   );
 }
@@ -208,13 +255,13 @@ export default function SmsSender() {
 
   return (
     <div className="rd-page wa-page">
-      <header className="rd-pagehead"><h1>SMS sender</h1><p>Shine One’s text messages to the people of the We Three sheets, sent by the phones with the SMS Service app. Switch a sheet on, give it messages (one is picked at random for each person) and the phones send them inside the limits below, at lunch and at night.</p></header>
+      <header className="rd-pagehead"><h1>SMS sender</h1><p>Shine One’s text messages to the people of the We Three sheets, sent by the phones with the SMS Service app. Switch a sheet on, give it messages (one is picked at random for each person) and the phones send them inside any limits switched on below, at lunch and at night.</p></header>
       {error ? <p className="wa-error">{error}</p> : null}
 
       <Section title={s.paused ? "Sending is paused" : "Sending is on"} subtitle={`Lunch ${eff.lunchStart || s.lunchStart}–${eff.lunchEnd || s.lunchEnd} · night ${eff.nightStart || s.nightStart}–${eff.nightEnd || s.nightEnd} · ${(s.days || []).length === 7 ? "every day" : (s.days || []).map((d) => DAYS[d]).join(", ")}`}
         actions={<label className="wa-check"><input type="checkbox" checked={!s.paused} disabled={busy} onChange={togglePause} /> On</label>}>
         <div className="wa-stats">
-          <span><b>{sentToday}</b> sent today of {(eff.dailyLimit || 0) * Math.max(1, shinePhones.length)}</span>
+          <span><b>{sentToday}</b> sent today of {eff.dailyLimit == null ? "no limit" : eff.dailyLimit * Math.max(1, shinePhones.length)}</span>
           <span><b>{online}</b> of {shinePhones.length} {shinePhones.length === 1 ? "phone" : "phones"} online</span>
           <span><b>{toSend}</b> left on the switched-on sheets</span>
         </div>
@@ -222,6 +269,8 @@ export default function SmsSender() {
       </Section>
 
       <LimitsCard settings={s} onSaved={load} />
+
+      <GgnhomeCard />
 
       <Section title="Test the phone" subtitle="Goes out at once (any time of day), through the same phones and the same log.">
         <div className="wa-row">
