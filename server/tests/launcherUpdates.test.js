@@ -36,7 +36,3 @@ test("the launcher APK is sent straight to GitHub, not streamed through the serv
     assert.equal(r.status, 302);
     assert.match(r.headers.location, /^https:\/\/github\.com\//);
 });
-    assert.equal(r.status, 200);
-    assert.equal(r.headers["content-type"], "application/vnd.android.package-archive");
-    assert.equal(r.body.toString(), "launcher-apk");
-});
