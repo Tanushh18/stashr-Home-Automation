@@ -227,7 +227,7 @@ async function buildLive(owner, { includeHome = false, extend = true } = {}) {
     if (s.tvLive && s.tvLive.enabled === false) return { ok: false, error: "The live map is switched off on the Stashr website (Family locations).", devices: [], home: null };
     if (extend) await HomeSettings.updateOne({ owner }, { $set: { liveUntil: new Date(now + 2 * 60 * 1000) } });
     const spot = s.homeSpot && Number.isFinite(s.homeSpot.lat) ? { lat: s.homeSpot.lat, lon: s.homeSpot.lon, radius: s.homeSpot.radius || 200 } : null;
-    const phones = (await HomeDevice.find({ owner, kind: "phone" }).lean()).filter((p) => p.status && p.status.agent === "stashr-where" && p.status.location);
+    const phones = (await HomeDevice.find({ owner, kind: "phone" }).lean()).filter((p) => !p.syncPaused && p.status && p.status.agent === "stashr-where" && p.status.location);   // syncing off: never on the TV or the live map, even if an old position is still stored
     const devices = [];
     for (const p of phones.slice(0, 8)) {
         const w = automation.whereIs(s, p, now), loc = p.status.location;

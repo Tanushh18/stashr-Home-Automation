@@ -70,4 +70,15 @@ describe("sync on or off for one device", () => {
         expect((await request(app).put(`/home/devices/${new mongoose.Types.ObjectId()}/sync`).set(auth).send({ paused: true })).status).toBe(404);
         expect((await request(app).put(`/home/devices/${tv._id}/sync`).send({ paused: false })).status).toBe(401);
     });
+
+    test("a phone with syncing off never appears on the live map or the TV, even if an old position is still stored", async () => {
+        const auth = await signUp();
+        const lc = (await request(app).get("/home/location-code").set(auth)).body.code;
+        const ph = (await request(app).post("/home/agent/link").send({ code: lc, name: "Papa" })).body;
+        await request(app).put("/home/settings").set(auth).send({ homeSpot: { lat: 28.6139, lon: 77.209, radius: 200 } });
+        await request(app).post("/home/agent/location").set(bearer(ph.token)).send({ lat: 28.9, lon: 77.209, acc: 20, at: Date.now(), battery: { pct: 80, charging: false } });
+        expect((await request(app).get("/home/live").set(auth)).body.devices.map((d) => d.name)).toEqual(["Papa"]);
+        await HomeDevice.updateOne({ kind: "phone" }, { $set: { syncPaused: true } });      // paused, but the old fix was not erased
+        expect((await request(app).get("/home/live").set(auth)).body.devices).toEqual([]);
+    });
 });
