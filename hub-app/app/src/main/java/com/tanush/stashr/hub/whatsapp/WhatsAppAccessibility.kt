@@ -86,7 +86,8 @@ class WhatsAppAccessibility : AccessibilityService() {
     /**
      * One step of a number send. With a picture: wait for the chat to open (so the number is valid), ask the sender to share this
      * message's own picture file into it, press the preview's Send, then wait for the chat to come back. Without a picture: the
-     * composer's Send. A number WhatsApp says is invalid ends the job at once.
+     * composer's Send. Either Send is pressed only after it has been on screen for the message's pause ([WaHuman]), the few seconds
+     * a person looks at the chat. A number WhatsApp says is invalid ends the job at once.
      */
     private fun waStep(j: WaLeadSender.Job) {
         val now = System.currentTimeMillis()
@@ -119,11 +120,15 @@ class WhatsAppAccessibility : AccessibilityService() {
                 j.shareWanted = true; j.stage = 3; j.stageAt = now
             } else {
                 val send = findAcross("send") ?: return
+                if (j.sendSeenAt == 0L) j.sendSeenAt = now
+                if (!WaHuman.ready(j.sendSeenAt, now, j.pauseMs)) return
                 if (clickUp(send)) { j.clicks++; j.lastClick = now; j.stage = 4; j.stageAt = now }
             }
             3 -> {
                 if (!j.shared) return
                 val b = findAcross("send_media_btn") ?: findAcross("send") ?: return
+                if (j.sendSeenAt == 0L) j.sendSeenAt = now
+                if (!WaHuman.ready(j.sendSeenAt, now, j.pauseMs)) return
                 if (clickUp(b)) { j.clicks++; j.lastClick = now; j.stage = 4; j.stageAt = now }
             }
             4 -> {

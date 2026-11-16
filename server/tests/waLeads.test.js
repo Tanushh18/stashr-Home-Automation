@@ -167,7 +167,7 @@ describe("the We Three link", () => {
         await request(app).post("/wa/threads/import").set(auth).send({ origin: "Test" });
         const sheet = await WaSheet.findOne({});
         await WaSheet.updateOne({ _id: sheet._id }, { $set: { texts: ["Hello {name}"], enabled: true } });
-        await request(app).put("/wa/settings").set(auth).send({ enabled: true, dailyLimit: 5 });
+        await request(app).put("/wa/settings").set(auth).send({ enabled: true, dailyLimit: 5, restDaysPerWeek: 0 });           // no random rest day on the test day
         patchStatus = 500;                                                    // We Three is failing right now
         await sender.tickOwner(o, NOON, () => 0);
         const cmd = (await hubReport(hub.token)).body.commands.find((c) => c.type === "send_wa");
@@ -190,7 +190,7 @@ describe("the We Three link", () => {
         const { auth, hub, o } = await linked();
         await request(app).post("/wa/threads/import").set(auth).send({ origin: "Test" });
         await WaSheet.updateOne({}, { $set: { texts: ["Hi"], enabled: true } });
-        await request(app).put("/wa/settings").set(auth).send({ enabled: true, dailyLimit: 5 });
+        await request(app).put("/wa/settings").set(auth).send({ enabled: true, dailyLimit: 5, restDaysPerWeek: 0 });           // no random rest day on the test day
         await sender.tickOwner(o, NOON, () => 0);
         const cmd = (await hubReport(hub.token)).body.commands.find((c) => c.type === "send_wa");
         await hubReport(hub.token, [{ id: cmd.id, ok: false, message: "That number is not on WhatsApp" }]);

@@ -172,6 +172,17 @@ Adb access gives only a terminal on your computer. The app still talks to the St
 - [ ] Test SMS to your own number arrives at once. A phone set to GGN Home only does not send Shine One messages.
 - [ ] ggnHome SMS console → Shine One Estate tab only points to Stashr; its Phones and Log tabs still work.
 
+## 7p. WhatsApp sender rhythm and rest days (added 2026-11-14)
+- [ ] WhatsApp sender → "Rest days" shows this week and next week; next week has 2 days marked Off, on other weekdays than this week's. The week the change was deployed only gets its fair share (a Saturday deploy: Sunday is off about 3 times in 10).
+- [ ] On a rest day the status says "Rest day today (picked at random)… Sending again …", the tablet gets no message all day, and there is no nightly report. Test mode still sends.
+- [ ] "Pick other days" changes what is left of this week and next week; a rest day that is over stays. Rest days a week = None: every day sends; 3: next week has 3 days off.
+- [ ] "Today:" shows a number of messages a little under the limit and a start time a little after the window opens; the first message goes at that start time (not at 10:00 sharp), and sending stops at the shown number.
+- [ ] Latest messages: the time between two messages is different each time (mostly 6 to 12 minutes, sometimes a longer break), and people are not messaged in list order.
+- [ ] The nightly report before a rest day ends with "Tomorrow is a rest day". Same on the Android app's WhatsApp sender screen.
+- [ ] Limits show From 10:00, To 18:00. "Today:" lists the rounds and the lunch break; between rounds the status says "Break between rounds: the next … at HH:MM", during lunch "Lunch break until HH:MM", and nothing goes out then.
+- [ ] Stashr Hub 1.9.5: watch the tablet send one message: the chat (or the picture preview) stays open a few seconds (3 to 12) before Send is pressed, a different time each message; the message still goes and is counted as sent.
+- [ ] A sheet message with `{Hi|Hello} {name}, {new|fresh} plots`: the Latest messages show different combinations for different people.
+
 ## 8. Updates (OTA)
 - [ ] Push a change under `hub-app/` to `main`; the GitHub Release is created and is **not** "latest".
 - [ ] The app (or "check_update") finds it, verifies it and Android asks for one tap to install.

@@ -6,6 +6,7 @@ const j = (path, method, body, timeout) => request(path, { method, body, timeout
 export const wa = {
   overview: () => request("/wa/overview", { timeout: 30000 }),
   saveSettings: (body) => j("/wa/settings", "PUT", body),
+  shuffleRest: () => j("/wa/rest-days/shuffle", "POST", {}),
   saveSheet: (id, body) => j(`/wa/sheets/${id}`, "PATCH", body, 40000),
   createSheet: (name, source) => j("/wa/sheets", "POST", source ? { name, source } : { name }),
   // The We Three account (lead sheets that can be brought in as sheets here).

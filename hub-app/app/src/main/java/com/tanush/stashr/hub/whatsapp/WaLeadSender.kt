@@ -18,7 +18,7 @@ import java.io.File
 /**
  * One WhatsApp Business message to one number, with the sheet's picture: wakes the screen, opens the chat by number, and
  * (with a picture) shares that exact picture file into the chat with the text as its caption, then lets
- * [WhatsAppAccessibility] press Send. The picture is a private file of this app, named for this message, so nothing else
+ * [WhatsAppAccessibility] press Send after a pause on the chat, as a person would ([WaHuman]). The picture is a private file of this app, named for this message, so nothing else
  * saved to the gallery meanwhile can be sent by mistake (the old way picked "the newest photo" from the gallery).
  * WhatsApp Business only; normal WhatsApp is never used.
  * The result goes back to Stashr as the command's answer, and Stashr counts a message as sent only from that answer.
@@ -27,7 +27,7 @@ object WaLeadSender {
     const val PACKAGE = "com.whatsapp.w4b"
     private const val JOB_MS = 80_000L
 
-    class Job(val phone: String, val text: String, val withImage: Boolean, val deadline: Long) {
+    class Job(val phone: String, val text: String, val withImage: Boolean, val deadline: Long, val pauseMs: Long = 0L) {
         @Volatile var stage = 0            // 0 wait for the chat (then share the picture), 3 the picture preview's Send, 4 wait for the chat to come back
         @Volatile var shareWanted = false  // the chat is open: the picture file can be shared into it now
         @Volatile var shared = false       // the share was started
@@ -38,6 +38,7 @@ object WaLeadSender {
         @Volatile var clicks = 0
         @Volatile var lastClick = 0L
         @Volatile var startedAt = System.currentTimeMillis()
+        @Volatile var sendSeenAt = 0L      // when the Send button (chat or picture preview) was first on screen; it is pressed pauseMs later
     }
 
     @Volatile var job: Job? = null
@@ -54,6 +55,7 @@ object WaLeadSender {
         val text = args.optString("text").trim()
         val sendId = args.optString("sendId")
         val withImage = args.optBoolean("image", false)
+        val pauseMs = WaHuman.pauseMs(if (args.has("pauseMs")) args.optLong("pauseMs", -1L) else -1L, Math.random())
         if (phone.length !in 10..14) throw IllegalArgumentException("That is not a valid number")
         if (text.isEmpty() && !withImage) throw IllegalArgumentException("Nothing to send")
         if (WhatsAppAccessibility.instance == null) throw IllegalStateException("Turn on Stashr Hub in Accessibility settings")
@@ -66,7 +68,7 @@ object WaLeadSender {
             withContext(Dispatchers.IO) { writeShareFile(ctx, bytes, sendId) }
         } else null
         val wasOff = ScreenGuard.wasOff(ctx)
-        val j = Job(phone, text, withImage, System.currentTimeMillis() + JOB_MS)
+        val j = Job(phone, text, withImage, System.currentTimeMillis() + JOB_MS, pauseMs)
         job = j
         val wl = (ctx.getSystemService(Context.POWER_SERVICE) as PowerManager).newWakeLock(
             PowerManager.FULL_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP or PowerManager.ON_AFTER_RELEASE, "stashr:wa-lead")

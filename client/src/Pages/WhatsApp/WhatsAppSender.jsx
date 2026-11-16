@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import {
   getWaLink, connectWaLink, disconnectWaLink, getWaOrigins, importWaOrigin,
-  getWaOverview, saveWaSettings, resetWaSheet, sendWaReportNow, createWaSheet, saveWaSheet, deleteWaSheet, addWaPeople, addWaPeopleInBatches, getWaPeople, editWaPerson, sendWaSheetToWeThree, retryWaSheet, sendWaTest, getWaSend, getWaPictures, getWaPicture
+  getWaOverview, saveWaSettings, shuffleWaRestDays, resetWaSheet, sendWaReportNow, createWaSheet, saveWaSheet, deleteWaSheet, addWaPeople, addWaPeopleInBatches, getWaPeople, editWaPerson, sendWaSheetToWeThree, retryWaSheet, sendWaTest, getWaSend, getWaPictures, getWaPicture
 } from "../../api/client";
 import { Section, Skeleton } from "../Render/RenderUi";
 import { errorMessage } from "../Render/renderUtils";
@@ -39,6 +39,65 @@ function NextLine({ plan, label = "Next message" }) {
   if (plan.state === "blocked") return <p className="wa-next is-blocked"><b>{label}:</b> {plan.reason}. {when && <>It will go at {when} once that is fixed.</>}</p>;
   if (plan.state === "later") return <p className="wa-next"><b>{label}:</b> after {plan.after} other sheet{plan.after === 1 ? "" : "s"} have had their turn, about {when}.{plan.reason ? " " + plan.reason + "." : ""}</p>;
   return <p className="wa-next is-next"><b>{label}:</b> {when}.{plan.reason ? " " + plan.reason + "." : ""}</p>;
+}
+
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+/** "10:47 (4), 13:58 (3) and 15:40 (4)": today's rounds with how many messages each has. */
+const roundsText = (rounds) => {
+  const parts = (rounds || []).map((r) => `${r.at} (${r.count})`);
+  return parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}` : parts[0] || "";
+};
+
+/** The rest days: this week and next week with the days off marked, today's own plan, and how many rest days a week. */
+function RestDays({ rhythm, testMode, onChanged }) {
+  const [busy, setBusy] = useState(false);
+  if (!rhythm) return null;
+  const run = async (fn, ok) => {
+    setBusy(true);
+    try { await fn(); toast.success(ok); await onChanged(); } catch (e) { toast.error(errorMessage(e)); } finally { setBusy(false); }
+  };
+  const t = rhythm.today;
+  const todayText = rhythm.rest ? `rest day, nothing goes out. Sending again ${rhythm.nextSendLabel}.`
+    : t.limit > 0 ? `${plural(t.target, "message")} (a random number, the limit is ${t.limit}), starting at ${t.start} and stopping by ${t.end}.`
+      + ((t.rounds || []).length > 1 ? ` In ${t.rounds.length} rounds with breaks between them: ${roundsText(t.rounds)}.` : "")
+      + (t.lunch ? ` Lunch break ${t.lunch.start} to ${t.lunch.end}.` : "")
+    : "the daily limit is 0, so nothing goes out.";
+  return (
+    <Section
+      title="Rest days"
+      subtitle={rhythm.perWeek > 0
+        ? `Each week ${plural(rhythm.perWeek, "day")} ${rhythm.perWeek === 1 ? "is" : "are"} picked at random when nothing goes out. They change every week and never fall on the same weekdays as the week before, so there is no pattern.`
+        : "Off: messages go out every day."}
+    >
+      {rhythm.weeks.map((w, i) => (
+        <div key={w.week} className="wa-week">
+          <span className="wa-week__name">{i === 0 ? "This week" : "Next week"}</span>
+          <ol className="wa-days" aria-label={i === 0 ? "This week" : "Next week"}>
+            {w.days.map((d) => {
+              const [name, num] = d.label.split(" ");
+              return (
+                <li key={d.date} className={"wa-day" + (d.rest ? " is-rest" : "") + (d.today ? " is-today" : "") + (d.past ? " is-past" : "")}
+                  title={`${d.label}${d.today ? " (today)" : ""}: ${d.rest ? "rest day, nothing goes out" : "messages go out"}`}>
+                  <span>{name}</span><b>{num}</b><small>{d.rest ? "Off" : "Sends"}</small>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+      ))}
+      <p className={"wa-next" + (rhythm.rest ? " is-blocked" : "")}><b>Today:</b> {todayText}</p>
+      {testMode && <p className="wa-warn">Test mode is on, so the rest days are ignored.</p>}
+      <div className="wa-row">
+        <label className="wa-inline">Rest days a week
+          <select className="wa-input is-short" value={rhythm.perWeek} disabled={busy} onChange={(e) => run(() => saveWaSettings({ restDaysPerWeek: Number(e.target.value) }), "Rest days saved.")}>
+            {[0, 1, 2, 3].map((n) => <option key={n} value={n}>{n === 0 ? "None" : n}</option>)}
+          </select>
+        </label>
+        <button className="rd-btn" disabled={busy || rhythm.perWeek === 0} title="New random rest days for the rest of this week and for next week (days that are over stay as they were)" onClick={() => run(shuffleWaRestDays, "New rest days picked.")}>Pick other days</button>
+      </div>
+    </Section>
+  );
 }
 
 const WHO = { server: "The server", tablet: "The tablet", whatsapp: "WhatsApp" };
@@ -285,8 +344,8 @@ function SheetCard({ sheet, onChanged }) {
       <NextLine plan={sheet.plan} label="Next message from this sheet" />
       <div className="wa-grid">
         <div>
-          <label className="wa-label" htmlFor={"t" + sheet._id}>Messages. Put a line with only --- between two messages (a message can have many lines). One is picked at random for each person. Use {"{name}"} for the first name.</label>
-          <textarea id={"t" + sheet._id} className="wa-input" rows={5} value={texts} onChange={(e) => setTexts(e.target.value)} placeholder={"Happy Diwali {name}!\nWishing you and your family a bright Diwali.\n---\nDiwali greetings from ..."} />
+          <label className="wa-label" htmlFor={"t" + sheet._id}>Messages. Put a line with only --- between two messages (a message can have many lines). One is picked at random for each person. Use {"{name}"} for the first name, and {"{Hi|Hello|Namaste}"} to pick one of the words at random for each person, so no two messages are exactly alike.</label>
+          <textarea id={"t" + sheet._id} className="wa-input" rows={5} value={texts} onChange={(e) => setTexts(e.target.value)} placeholder={"{Happy Diwali|Diwali greetings} {name}!\nWishing you and your family a {bright|happy} Diwali.\n---\nDiwali greetings from ..."} />
           <div className="wa-row"><button className="rd-btn" disabled={busy} onClick={saveTexts}>Save messages</button><button className="rd-btn is-quiet" disabled={busy} onClick={useStarter}>Use the 25 We Three quotes</button><span className="wa-muted">{boxToTexts(texts).length} in the box</span></div>
           {unsaved
             ? <p className="wa-warn">Not saved yet: the box has {boxToTexts(texts).length} message{boxToTexts(texts).length === 1 ? "" : "s"}, but {savedCount} {savedCount === 1 ? "is" : "are"} saved on the server. Press <b>Save messages</b>, or they are lost when you refresh the page.</p>
@@ -630,17 +689,19 @@ export default function WhatsAppSender() {
         actions={<label className="wa-switch is-big"><input type="checkbox" checked={s.enabled} onChange={(e) => set({ enabled: e.target.checked }, e.target.checked ? "Sending is on." : "Sending is off.")} /><span>{s.enabled ? "On" : "Off"}</span></label>}
       >
         <div className="wa-counts">
-          <Count label={`sent today of ${s.dailyLimit}`} n={data.sentToday} tone="ok" />
+          <Count label={data.rhythm && data.rhythm.rest && !s.testMode ? "sent today (rest day)" : `sent today of ${data.rhythm ? data.rhythm.today.target : s.dailyLimit}`} n={data.sentToday} tone="ok" />
           <Count label="tablet" n={data.tablet ? "online" : "offline"} tone={data.tablet ? "ok" : "bad"} />
         </div>
         {!data.tablet && <p className="wa-error">The tablet is offline, so nothing can be sent. Check that Stashr Hub is open, on charge and on Wi-Fi.</p>}
         <NextLine plan={data.next} label={data.next && data.next.sheet ? "Next message (from " + ((data.sheets.find((x) => x._id === data.next.sheet) || {}).name || "a sheet") + ")" : "Next message"} />
-        {s.testMode && <p className="wa-warn">Test mode is on: the time window, the gap and the daily limit are ignored. Turn it off before real sending.</p>}
+        {s.testMode && <p className="wa-warn">Test mode is on: the time window, the gap, the daily limit and the rest days are ignored. Turn it off before real sending.</p>}
       </Section>
 
-      <Section title="Limits" subtitle="The daily limit is spread over the sending window with a random gap each time.">
+      <RestDays rhythm={data.rhythm} testMode={s.testMode} onChanged={load} />
+
+      <Section title="Limits" subtitle="Each day picks its own number of messages (a little under the limit), a first message at a random time after From (up to 90 minutes later) and a stop at a random time before To (up to an hour earlier), a lunch break, and a few rounds spread over the day. Inside a round the gap is different every time, and the tablet waits a few seconds on each chat before pressing Send, like a person.">
         <div className="wa-form">
-          <label>Messages a day<input className="wa-input" type="number" min="0" max="60" value={settings.dailyLimit} onFocus={() => { editing.current = true; }} onChange={(e) => setSettings({ ...settings, dailyLimit: e.target.value })} /></label>
+          <label>Most messages a day<input className="wa-input" type="number" min="0" max="60" value={settings.dailyLimit} onFocus={() => { editing.current = true; }} onChange={(e) => setSettings({ ...settings, dailyLimit: e.target.value })} /></label>
           <label>From<input className="wa-input" type="time" value={settings.from} onChange={(e) => setSettings({ ...settings, from: e.target.value })} /></label>
           <label>To<input className="wa-input" type="time" value={settings.to} onChange={(e) => setSettings({ ...settings, to: e.target.value })} /></label>
           <label>Shortest gap (min)<input className="wa-input" type="number" min="1" max="120" value={settings.gapMin} onChange={(e) => setSettings({ ...settings, gapMin: e.target.value })} /></label>
@@ -669,7 +730,7 @@ export default function WhatsAppSender() {
             <option value="">Plain test text</option>
             {data.sheets.map((sh) => <option key={sh._id} value={sh._id}>Use "{sh.name}" messages and pictures</option>)}
           </select>
-          <button className="rd-btn" disabled={!data.tablet} onClick={() => { if (window.confirm("This sends one real message to the next person on your sheets, now. Continue?")) test({}); }}>Send to the next person now</button>
+          <button className="rd-btn" disabled={!data.tablet} onClick={() => { if (window.confirm("This sends one real message now, to one of the next people in line on your sheets (picked at random). Continue?")) test({}); }}>Send to the next person now</button>
         </div>
         {testNote && <p className="wa-note" role="status">{testNote}</p>}
       </Section>

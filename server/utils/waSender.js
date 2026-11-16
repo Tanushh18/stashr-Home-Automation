@@ -14,6 +14,7 @@ const waLeads = require("./waLeads");
 const WaLink = require("../models/waLink");
 const home = require("./home");
 const steps = require("./waSteps");
+const rhythm = require("./waRhythm");
 
 const QUEUED_GIVE_UP_MS = 6 * 60 * 1000;     // a message the tablet never answered is marked failed after this
 const MAX_ATTEMPTS = 2;                      // tries per person for a failure that is not "not on WhatsApp"
@@ -42,21 +43,119 @@ function inWindow(s, minutes) {
 }
 
 /**
- * Minutes to wait after a message. The daily limit is spread over the window (window / limit), jittered by 25%, then held
- * between the gap limits (6 to 12 minutes by default). `random` is injectable so it can be tested.
+ * Minutes to wait after a message: a different gap every time, anywhere between the shortest and the longest gap, leaning
+ * towards the gap that spreads the day's messages over the day's window, with a longer break now and then (see waRhythm.js).
+ * `plan` is today's plan (its own window and number of messages); `random` is injectable so it can be tested.
  */
-function nextGapMinutes(s, random = Math.random) {
-    const gapMin = Math.max(1, Number(s.gapMin) || 6);
-    const gapMax = Math.max(gapMin, Number(s.gapMax) || 12);
-    const win = windowMinutes(s);
-    const limit = Math.max(1, Number(s.dailyLimit) || 1);
-    const base = win > 0 ? win / limit : (gapMin + gapMax) / 2;
-    const jitter = base * (0.75 + random() * 0.5);
-    return Math.min(gapMax, Math.max(gapMin, jitter));
+function nextGapMinutes(s, random = rhythm.secureRandom, plan = null) {
+    // A plan with rounds spreads the day itself, so the gaps inside a round centre on the middle of the gap range.
+    const win = plan ? (Array.isArray(plan.rounds) && plan.rounds.length ? 0 : Math.max(0, plan.end - plan.start)) : windowMinutes(s);
+    return rhythm.nextGap({ gapMin: s.gapMin, gapMax: s.gapMax, windowMinutes: win, target: plan ? plan.target : s.dailyLimit }, random);
 }
+
+/** Rest days a week (0 to 3; 2 for an account that never chose). */
+const restPerWeek = (s) => Math.min(rhythm.MAX_REST_DAYS, Math.max(0, Number.isFinite(Number(s && s.restDaysPerWeek)) ? Math.round(Number(s.restDaysPerWeek)) : 2));
+
+/**
+ * This week's and next week's rest days, picked once and kept in the settings so every server and the website agree.
+ * A week that is picked once it has begun only uses today (when nothing went out yet today) and the days after it, with its
+ * fair share of the rest days. Two servers picking at once: the first one's pick is kept. Returns the weeks kept.
+ */
+async function ensureRest(owner, s, local, random = rhythm.secureRandom) {
+    const perWeek = restPerWeek(s);
+    const thisWeek = rhythm.weekOf(local.date);
+    let weeks = (s.restWeeks || []).slice();
+    for (const week of [thisWeek, rhythm.addDays(thisWeek, 7)]) {
+        if (weeks.some((w) => w.week === week)) continue;
+        const all = rhythm.daysOfWeek(week);
+        let free = all, count = perWeek;
+        if (week === thisWeek) {
+            const sentToday = await WaSend.exists({ owner, day: local.date, kind: "scheduled" });
+            free = all.filter((d) => d > local.date || (d === local.date && !sentToday));
+            count = rhythm.shareOf(perWeek, free.length, random);
+        }
+        const days = rhythm.planWeek({ week, perWeek, count, free, history: weeks, random });
+        const entry = { week, days, perWeek, count: days.length };
+        await WaSettings.updateOne({ owner, "restWeeks.week": { $ne: week } }, { $push: { restWeeks: { $each: [entry], $sort: { week: 1 }, $slice: -8 } } });
+        weeks = ((await WaSettings.findOne({ owner }).select("restWeeks").lean()) || {}).restWeeks || [];
+    }
+    return weeks;
+}
+
+/**
+ * Picks the rest days again ("Pick other days", or a new number of rest days a week): what is left of this week and all of next
+ * week. Rest days that are over stay as they were, and today stays a sending day once something went out today.
+ */
+async function replanRest(owner, now = Date.now(), random = rhythm.secureRandom) {
+    const s = await settingsOf(owner);
+    const local = automation.localParts(now, s.timezone);
+    const perWeek = restPerWeek(s);
+    const thisWeek = rhythm.weekOf(local.date), nextWeek = rhythm.addDays(thisWeek, 7);
+    const sentToday = await WaSend.exists({ owner, day: local.date, kind: "scheduled" });
+    const earlier = (s.restWeeks || []).filter((w) => w.week < thisWeek);
+    const cur = (s.restWeeks || []).find((w) => w.week === thisWeek);
+    const fixed = perWeek > 0 && cur ? cur.days.filter((d) => d < local.date) : [];
+    const free = rhythm.daysOfWeek(thisWeek).filter((d) => d > local.date || (d === local.date && !sentToday));
+    // A week that started with its fair share keeps it; a new number of rest days a week moves it by the difference.
+    const wanted = cur && Number.isFinite(cur.count) ? cur.count + (perWeek - (Number.isFinite(cur.perWeek) ? cur.perWeek : perWeek)) : perWeek;
+    const count = perWeek === 0 ? 0 : Math.min(fixed.length + free.length, Math.max(fixed.length, wanted));
+    const days = rhythm.planWeek({ week: thisWeek, perWeek, count, fixed, free, history: earlier, random });
+    const current = { week: thisWeek, days, perWeek, count: days.length };
+    const next = rhythm.planWeek({ week: nextWeek, perWeek, count: perWeek, history: [...earlier, current], random });
+    const weeks = [...earlier, current, { week: nextWeek, days: next, perWeek, count: next.length }].slice(-8);
+    await WaSettings.updateOne({ owner }, { $set: { restWeeks: weeks } });
+    return weeks;
+}
+
+/** Today's plan (how many messages, when sending starts and stops), picked once a day and again when the window or the limit changes. */
+async function ensureDayPlan(owner, s, local, random = rhythm.secureRandom) {
+    const p = s.dayPlan;
+    if (p && p.day === local.date && p.basis === rhythm.basisOf(s)) return p;
+    const plan = rhythm.dayPlanFor(s, local.date, random);
+    await WaSettings.updateOne({ owner, $or: [{ "dayPlan.day": { $ne: local.date } }, { "dayPlan.basis": { $ne: plan.basis } }] }, { $set: { dayPlan: plan } });
+    const kept = ((await WaSettings.findOne({ owner }).select("dayPlan").lean()) || {}).dayPlan;
+    return kept && kept.day === local.date && kept.basis === plan.basis ? kept : plan;
+}
+
+/** The plan that holds when there is none yet (the whole window, the whole limit). */
+const plainPlan = (s, date) => ({ day: date, target: Math.max(0, Number(s.dailyLimit) || 0), start: minutesOf(s.from) || 0, end: minutesOf(s.to) || 0 });
+
+/**
+ * Today's rhythm for one account: the rest days of this week and next week, whether today is one of them, today's plan, and the
+ * next day that sends. Makes the weeks and the plan the first time they are asked for.
+ */
+async function rhythmOf(owner, s, local, random = rhythm.secureRandom) {
+    const weeks = await ensureRest(owner, s, local, random);
+    const plan = await ensureDayPlan(owner, s, local, random);
+    return describeRhythm(s, local, weeks, plan);
+}
+
+/** What rhythmOf returns, from what is already known (pure). */
+function describeRhythm(s, local, weeks, plan) {
+    const perWeek = restPerWeek(s);
+    const restDays = perWeek > 0 ? [...new Set((weeks || []).flatMap((w) => w.days || []))].sort() : [];
+    const rest = restDays.includes(local.date);
+    const thisWeek = rhythm.weekOf(local.date);
+    return {
+        perWeek, rest, plan: plan || plainPlan(s, local.date), restDays,
+        nextSendDay: rhythm.nextSendingDay(local.date, restDays),
+        weeks: [thisWeek, rhythm.addDays(thisWeek, 7)].map((week) => ({
+            week, days: rhythm.daysOfWeek(week).map((date) => ({ date, label: rhythm.dayLabel(date), rest: restDays.includes(date), past: date < local.date, today: date === local.date }))
+        }))
+    };
+}
+
+/** "tomorrow" or "on Tue 17 Nov". */
+const whenDay = (today, date) => (rhythm.daysBetween(today, date) === 1 ? "tomorrow" : `on ${rhythm.dayLabel(date)}`);
 
 async function settingsOf(owner) {
     const found = await WaSettings.findOne({ owner }).lean();
+    if (found && found.windowV2 === undefined) {
+        // Sending now stops before 18:00: an account still on the old 10:00 to 19:00 default moves to 18:00, once (a later choice stays).
+        const set = { windowV2: true, ...(found.from === "10:00" && found.to === "19:00" ? { to: "18:00" } : {}) };
+        await WaSettings.updateOne({ owner, windowV2: { $exists: false } }, { $set: set });
+        return { ...found, ...set };
+    }
     if (found) return found;
     try { return (await WaSettings.create({ owner })).toObject(); }
     catch (e) { return WaSettings.findOne({ owner }).lean(); }
@@ -117,21 +216,30 @@ async function finishSend(sendId, ok, message, now = Date.now(), special = null)
     return send;
 }
 
-/** The next person to message: sheets are served in turn (the one with the fewest sends today first), within each sheet's own limit. */
-async function pickRecipient(owner, day) {
+/** People are picked at random among the next ones in line, so a list is never worked through in order (numbers in sequence look like a bot). */
+const PICK_FROM = 25;
+
+/**
+ * The next person to message: sheets are served in turn (the one with the fewest sends today first, a tie decided at random),
+ * within each sheet's own limit; in a sheet, one of the next 25 people in line at random.
+ */
+async function pickRecipient(owner, day, random = rhythm.secureRandom) {
     const sheets = await WaSheet.find({ owner, enabled: true }).lean();
     const ranked = [];
     for (const sh of sheets) {
         const today = await WaSend.countDocuments({ owner, sheet: sh._id, day, status: { $in: ["queued", "sent"] }, kind: "scheduled" });
         if (sh.dailyLimit > 0 && today >= sh.dailyLimit) continue;
-        ranked.push({ sh, today });
+        ranked.push({ sh, today, tie: random() });
     }
-    ranked.sort((a, b) => a.today - b.today);
+    ranked.sort((a, b) => a.today - b.today || a.tie - b.tie);
     for (const { sh } of ranked) {
         for (let tries = 0; tries < 20; tries++) {
-            const r = await WaRecipient.findOneAndUpdate({ owner, sheet: sh._id, status: "pending" },
-                { $set: { status: "queued", queuedAt: new Date() }, $inc: { attempts: 1 } }, { sort: { order: 1, _id: 1 }, new: true });
-            if (!r) break;
+            const line = await WaRecipient.find({ owner, sheet: sh._id, status: "pending" }).sort({ order: 1, _id: 1 }).limit(PICK_FROM).select("_id").lean();
+            if (!line.length) break;
+            const chosen = line[Math.min(line.length - 1, Math.floor(random() * line.length))]._id;
+            const r = await WaRecipient.findOneAndUpdate({ _id: chosen, status: "pending" },
+                { $set: { status: "queued", queuedAt: new Date() }, $inc: { attempts: 1 } }, { new: true });
+            if (!r) continue;                                                   // another server took that person a moment ago
             // Never the same number twice, even when it is in two sheets.
             const dup = await WaRecipient.exists({ owner, phone: r.phone, _id: { $ne: r._id }, status: { $in: ["queued", "sent"] } });
             if (dup) { await WaRecipient.updateOne({ _id: r._id }, { $set: { status: "skipped", error: "Already messaged from another list" } }); continue; }
@@ -148,11 +256,11 @@ function imagesOf(sheet) {
     return list;
 }
 
-/** The text for one person: one of the sheet's messages at random, {name} filled in. */
-function textFor(sheet, recipient, random = Math.random) {
+/** The text for one person: one of the sheet's messages at random, each {Hi|Hello} choice picked at random, {name} filled in. */
+function textFor(sheet, recipient, random = rhythm.secureRandom) {
     const list = (sheet.texts || []).filter((t) => String(t || "").trim());
     if (!list.length) return "";
-    const raw = list[Math.min(list.length - 1, Math.floor(random() * list.length))];
+    const raw = rhythm.spin(list[Math.min(list.length - 1, Math.floor(random() * list.length))], random);
     const first = String(recipient.name || "").trim().split(/\s+/)[0] || "";
     return raw.replace(/\{name\}/gi, first).replace(/[ \t]+([,.!?])/g, "$1").replace(/[ \t]{2,}/g, " ").replace(/ +\n/g, "\n").trim().slice(0, 900);
 }
@@ -174,12 +282,12 @@ async function onDelivered(commandIds, now = Date.now()) {
 }
 
 /** Queues one message on the tablet and records it. Returns the send, or null when the tablet queue refused it. */
-async function dispatch({ owner, tablet, sheet, recipient, phone, name, text, kind, day, now, random = Math.random }) {
+async function dispatch({ owner, tablet, sheet, recipient, phone, name, text, kind, day, now, random = rhythm.secureRandom }) {
     const pictures = imagesOf(sheet);
     const imageIndex = pictures.length ? Math.min(pictures.length - 1, Math.floor(random() * pictures.length)) : 0;
     const send = await WaSend.create({ owner, sheet: sheet && sheet._id, recipient: recipient && recipient._id, phone, name: name || "", text, kind, day, device: tablet._id, queuedAt: new Date(now), imageIndex });
     await addSteps(send._id, [steps.step("picked", "ok", `${name || phone}${pictures.length ? `, picture ${imageIndex + 1} of ${pictures.length}` : ", no picture"}`)], now);
-    const entry = await automation.queue(tablet, "send_wa", { phone, text, sendId: String(send._id), image: pictures.length > 0 });
+    const entry = await automation.queue(tablet, "send_wa", { phone, text, sendId: String(send._id), image: pictures.length > 0, pauseMs: rhythm.sendPauseMs(text, random) });
     if (!entry) {
         await addSteps(send._id, [steps.step("queued", "failed", "The tablet's queue is full.")], now, "server");
         await WaSend.updateOne({ _id: send._id }, { $set: { status: "failed", result: "The tablet queue is full", doneAt: new Date(now) } });
@@ -192,14 +300,15 @@ async function dispatch({ owner, tablet, sheet, recipient, phone, name, text, ki
 }
 
 /** One minute of the sender for one account. Returns what it did, so tests and the website can show it. */
-async function tickOwner(owner, now = Date.now(), random = Math.random) {
+async function tickOwner(owner, now = Date.now(), random = rhythm.secureRandom) {
     const s = await settingsOf(owner);
     const local = automation.localParts(now, s.timezone);
+    const day = await rhythmOf(owner, s, local, random);
     // The nightly report may go out even when sending was switched off in the evening.
     if (!(await WaSend.exists({ owner, status: "queued" }))) {
         const tab = await tabletOf(owner, now);
         if (tab && (await automation.claim(`warep:${owner}:${Math.floor(now / 30000)}`))) {
-            const rep = await reportTick(owner, s, local, now, tab);
+            const rep = await reportTick(owner, s, local, now, tab, day);
             if (rep) return { did: "report", send: rep };
         }
     }
@@ -208,15 +317,22 @@ async function tickOwner(owner, now = Date.now(), random = Math.random) {
     await expireQueued(owner, now);
     if (await WaSend.exists({ owner, status: "queued" })) return note("Waiting for the tablet to finish a message");
     if (!s.testMode) {
+        const p = day.plan, again = `Sending again ${whenDay(local.date, day.nextSendDay)} from ${s.from}`;
+        if (day.rest) return note(`Rest day today (picked at random): nothing goes out. ${again}`);
         if (!inWindow(s, local.minutes)) return note(`Outside ${s.from} to ${s.to}`);
+        if (local.minutes < p.start) return note(`Today starts at ${rhythm.hhmm(p.start)} (a random time after ${s.from})`);
+        if (local.minutes >= p.end) return note(`Stopped for today at ${rhythm.hhmm(p.end)} (a random time before ${s.to}). ${again}`);
         const sent = await WaSend.countDocuments({ owner, day: local.date, status: { $in: ["queued", "sent"] }, kind: "scheduled" });
-        if (sent >= s.dailyLimit) return note(`Done for today (${sent} of ${s.dailyLimit})`);
+        if (sent >= p.target) return note(`Done for today (${sent} of ${p.target}${p.target < s.dailyLimit ? `: today's random number, under the limit of ${s.dailyLimit}` : ""})`);
+        if (rhythm.atLunch(p, local.minutes)) return note(`Lunch break until ${rhythm.hhmm(p.lunch.end)}`);
+        const round = sent >= rhythm.allowedBy(p, local.minutes) ? rhythm.nextRound(p, local.minutes) : null;
+        if (round) return note(`Break between rounds: the next ${round.count === 1 ? "message goes" : `${round.count} messages start`} at ${rhythm.hhmm(round.at)}`);
         if (s.nextDueAt && new Date(s.nextDueAt).getTime() > now) return note(`Next message at ${new Date(s.nextDueAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: s.timezone })}`);
     }
     const tablet = await tabletOf(owner, now);
     if (!tablet) return note("The tablet is offline");
     if (!(await automation.claim(`wa:${owner}:${Math.floor(now / 30000)}`))) return { did: "wait", status: "claimed elsewhere" };
-    const picked = await pickRecipient(owner, local.date);
+    const picked = await pickRecipient(owner, local.date, random);
     if (!picked) return note("Nobody is left to message");
     const text = textFor(picked.sheet, picked.recipient, random);
     if (!text && !imagesOf(picked.sheet).length) {
@@ -225,24 +341,41 @@ async function tickOwner(owner, now = Date.now(), random = Math.random) {
     }
     const send = await dispatch({ owner, tablet, sheet: picked.sheet, recipient: picked.recipient, phone: picked.recipient.phone, name: picked.recipient.name, text, kind: "scheduled", day: local.date, now, random });
     if (!send) return note("The tablet queue is full");
-    const gap = s.testMode ? 0.25 : nextGapMinutes(s, random);
+    const gap = s.testMode ? 0.25 : nextGapMinutes(s, random, day.plan);
     await WaSettings.updateOne({ owner }, { $set: { nextDueAt: new Date(now + gap * 60000), status: `Sent to the tablet: ${picked.recipient.name || picked.recipient.phone}`, lastTickAt: new Date(now) } });
     return { did: "queued", send, sheet: picked.sheet.name };
 }
 
 /**
  * When each sheet's next message goes out, for the website. Mirrors tickOwner and pickRecipient without changing anything:
- * the account-wide gate first (off, tablet offline, outside the window, done for today, waiting for the gap), then the order the
- * sheets are served in (the one with the fewest sends today first). Returns { next, sheets: { [id]: plan } } with plan { state, at, reason }.
+ * the account-wide gate first (off, tablet offline, a rest day, before today's start or after today's stop, done for today, waiting
+ * for the gap), then the order the sheets are served in (the one with the fewest sends today first). `day` is rhythmOf's answer
+ * (without it: no rest days, the whole window and the whole limit). Returns { next, sheets: { [id]: plan } } with plan { state, at, reason }.
  * state: "next" (this sheet is next), "later" (in turn, `at` is an estimate), "blocked" (reason says why).
  */
-function schedulePlan({ settings: s, local, now, tablet, sentToday, waiting, sheets, today, pendingBy }) {
+function schedulePlan({ settings: s, local, now, tablet, sentToday, waiting, sheets, today, pendingBy, day = null }) {
+    const d = day || { rest: false, plan: plainPlan(s, local.date), nextSendDay: null };
     const gateAt = (() => {
         if (s.testMode) return { at: now, why: "" };
         const from = minutesOf(s.from), to = minutesOf(s.to);
-        if (from != null && to != null && local.minutes < from) return { at: now + (from - local.minutes) * 60000, why: `Opens at ${s.from}` };
-        if (from != null && to != null && local.minutes >= to) return { at: now + (1440 - local.minutes + from) * 60000, why: `Today's window is over; opens tomorrow at ${s.from}` };
-        if (sentToday >= s.dailyLimit && s.dailyLimit > 0) return { at: now + (1440 - local.minutes + (from || 0)) * 60000, why: `Done for today (${sentToday} of ${s.dailyLimit}); starts again tomorrow at ${s.from}` };
+        if (from == null || to == null) return { at: Math.max(now, s.nextDueAt ? new Date(s.nextDueAt).getTime() : now), why: "" };
+        const p = d.plan;
+        // The next day that sends, at the window's opening (that day's own start is picked on the day, up to 75 minutes later).
+        const nextDay = (why) => {
+            const ahead = d.nextSendDay && local.date ? Math.max(1, rhythm.daysBetween(local.date, d.nextSendDay)) : 1;
+            const word = ahead === 1 ? "tomorrow" : `on ${rhythm.dayLabel(d.nextSendDay)}`;
+            return { at: now + ((ahead - 1) * 1440 + 1440 - local.minutes + from) * 60000, why: `${why}; opens ${word} at ${s.from}` };
+        };
+        if (d.rest) return nextDay("Today is a rest day (picked at random)");
+        if (local.minutes < p.start) return { at: now + (p.start - local.minutes) * 60000, why: p.start > from ? `Opens at ${rhythm.hhmm(p.start)} today (a random time after ${s.from})` : `Opens at ${s.from}` };
+        if (local.minutes >= p.end) return nextDay(p.end < to ? `Stopped for today at ${rhythm.hhmm(p.end)} (a random time before ${s.to})` : "Today's window is over");
+        if (sentToday >= p.target && s.dailyLimit > 0) return nextDay(`Done for today (${sentToday} of ${p.target})`);
+        const at = (m) => now + (m - local.minutes) * 60000;
+        if (rhythm.atLunch(p, local.minutes)) return { at: at(p.lunch.end), why: `Lunch break until ${rhythm.hhmm(p.lunch.end)}` };
+        if (sentToday >= rhythm.allowedBy(p, local.minutes)) {
+            const r = rhythm.nextRound(p, local.minutes);
+            if (r) return { at: at(r.at), why: `Break between rounds; the next round (${r.count}) starts at ${rhythm.hhmm(r.at)}` };
+        }
         return { at: Math.max(now, s.nextDueAt ? new Date(s.nextDueAt).getTime() : now), why: "" };
     })();
     let blocked = "";
@@ -321,8 +454,8 @@ const REPORT_TRIES = 3;
 /** The numbers the nightly report goes to (the defaults for an account that never set them). */
 const reportNumbersOf = (s) => (Array.isArray(s.reportNumbers) ? s.reportNumbers : DEFAULT_REPORT_NUMBERS).filter(Boolean);
 
-/** Text of the day's report: what went out, what did not, and what is still waiting. */
-async function buildReport(owner, s, local, now) {
+/** Text of the day's report: what went out, what did not, and what is still waiting (and whether tomorrow is a rest day). */
+async function buildReport(owner, s, local, now, day = null) {
     const rows = await WaSend.find({ owner, day: local.date, kind: "scheduled" }).lean();
     const sent = rows.filter((r) => r.status === "sent").length;
     const failed = rows.filter((r) => r.status === "failed");
@@ -342,6 +475,10 @@ async function buildReport(owner, s, local, now) {
     const why = Object.entries(reasons).sort((a, b) => b[1] - a[1]).slice(0, 3);
     if (why.length) lines.push("", "Why some did not go:", ...why.map(([k, n]) => `- ${n} × ${k}`));
     lines.push("", `⏳ Still to send: ${pending}`);
+    if (day && !s.testMode) {
+        if (day.rest) lines.push("😴 Today is a rest day (picked at random).");
+        if (day.restDays.includes(rhythm.addDays(local.date, 1))) lines.push("😴 Tomorrow is a rest day (picked at random): nothing goes out.");
+    }
     return lines.join("\n").slice(0, 900);
 }
 
@@ -350,28 +487,42 @@ async function buildReport(owner, s, local, now) {
  * window has ended), only when something was sent or tried today. Each number gets it in turn; a failed report is tried up to three times.
  * Returns the queued send, or null when there is nothing to do right now. Test mode never reports.
  */
-async function reportTick(owner, s, local, now, tablet) {
+async function reportTick(owner, s, local, now, tablet, day = null) {
     const forced = s.reportNowDay === local.date;                     // "Send the report now" was pressed today
     if (!forced && (s.reportEnabled === false || s.testMode)) return null;
     const numbers = reportNumbersOf(s);
     if (!numbers.length) return null;
     if (!forced && !(await WaSend.countDocuments({ owner, day: local.date, kind: "scheduled" }))) return null;
-    if (!forced && local.minutes < (minutesOf(s.to) || 0)) {
+    const plan = day ? day.plan : plainPlan(s, local.date);              // today's own stop time and number of messages
+    if (!forced && local.minutes < (plan.end || minutesOf(s.to) || 0)) {
         if (!s.enabled) return null;
         const sentNow = await WaSend.countDocuments({ owner, day: local.date, kind: "scheduled", status: { $in: ["queued", "sent"] } });
         const enabledIds = (await WaSheet.find({ owner, enabled: true }).select("_id").lean()).map((x) => x._id);
         const left = await WaRecipient.exists({ owner, status: "pending", sheet: { $in: enabledIds } });
-        if (sentNow < s.dailyLimit && left) return null;                  // still sending today
+        if (sentNow < plan.target && left) return null;                   // still sending today
     }
     const done = await WaSend.find({ owner, day: local.date, kind: "report" }).lean();
     for (const phone of numbers) {
         if (done.some((r) => r.phone === phone && r.status === "sent")) continue;
         if (done.filter((r) => r.phone === phone && r.status === "failed").length >= REPORT_TRIES) continue;
         if (done.some((r) => r.status === "queued")) return null;
-        const text = await buildReport(owner, s, local, now);
+        const text = await buildReport(owner, s, local, now, day);
         return dispatch({ owner, tablet, sheet: null, recipient: null, phone, name: "Report", text, kind: "report", day: local.date, now });
     }
     return null;
 }
 
-module.exports = { schedulePlan, onDelivered, addSteps, buildReport, reportTick, safeToRetry, waLeads, imagesOf, normalizePhone, windowMinutes, inWindow, nextGapMinutes, settingsOf, tabletOf, finishSend, pickRecipient, textFor, tickOwner, tickAll, onAck, sendTest, expireQueued };
+/** Today's rhythm as the website shows it: the two weeks with their rest days, today's plan as clock times, the next day that sends. */
+function rhythmForWeb(day, s) {
+    return {
+        perWeek: day.perWeek, rest: day.rest, testMode: Boolean(s.testMode), weeks: day.weeks,
+        nextSendDay: day.nextSendDay, nextSendLabel: rhythm.dayLabel(day.nextSendDay),
+        today: {
+            target: day.plan.target, limit: Math.max(0, Number(s.dailyLimit) || 0), start: rhythm.hhmm(day.plan.start), end: rhythm.hhmm(day.plan.end),
+            lunch: day.plan.lunch ? { start: rhythm.hhmm(day.plan.lunch.start), end: rhythm.hhmm(day.plan.lunch.end) } : null,
+            rounds: (day.plan.rounds || []).map((r) => ({ at: rhythm.hhmm(r.at), count: r.count }))
+        }
+    };
+}
+
+module.exports = { rhythmOf, rhythmForWeb, describeRhythm, replanRest, ensureRest, ensureDayPlan, restPerWeek, schedulePlan, onDelivered, addSteps, buildReport, reportTick, safeToRetry, waLeads, imagesOf, normalizePhone, windowMinutes, inWindow, nextGapMinutes, settingsOf, tabletOf, finishSend, pickRecipient, textFor, tickOwner, tickAll, onAck, sendTest, expireQueued };

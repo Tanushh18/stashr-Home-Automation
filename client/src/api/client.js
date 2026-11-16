@@ -594,6 +594,7 @@ export const deleteHouseModel = () => instance.delete("/home/map/model").then((r
 /* WhatsApp sender: sheets, limits, on/off and test messages sent from the tablet. */
 export const getWaOverview = () => instance.get("/wa/overview").then((r) => r.data);
 export const saveWaSettings = (body) => instance.put("/wa/settings", body).then((r) => r.data);
+export const shuffleWaRestDays = () => instance.post("/wa/rest-days/shuffle", {}).then((r) => r.data);
 /* SMS sender: Shine One's SMS to the We Three sheets, sent by the SMS Service phones and managed here. */
 export const getSmsOverview = () => instance.get("/sms/overview", { timeout: 60000 }).then((r) => r.data);
 export const saveSmsSettings = (body) => instance.put("/sms/settings", body).then((r) => r.data);
