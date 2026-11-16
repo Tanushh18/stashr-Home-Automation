@@ -20,6 +20,7 @@ import android.widget.ImageView
 import android.widget.TextView
 import com.tanush.stashr.hub.core.Api
 import com.tanush.stashr.hub.core.Ui
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -78,6 +79,7 @@ class SlideshowActivity : Activity() {
                 val r = Api(this).slideshow()
                 val arr = r.optJSONArray("photos")
                 val list = (0 until (arr?.length() ?: 0)).map { arr!!.getJSONObject(it).optString("id") }.filter { it.isNotEmpty() }.shuffled()
+                pruneCache(list.toSet())
                 main.post {
                     if (list.isEmpty()) message.text = r.optString("error").ifEmpty { "No photos in the slideshow folder yet. Add some to the Google Drive folder chosen on the Smart home page." }
                     else { ids = list; next() }
@@ -114,13 +116,46 @@ class SlideshowActivity : Activity() {
         val id = ids[index % ids.size]
         index++
         thread {
-            val bmp = try { decode(Api(this).slideshowFile(id)) } catch (e: Exception) { null }
+            val bmp = try { decode(photoBytes(id)) } catch (e: Exception) { null }
             main.post {
                 if (!alive) return@post
                 if (bmp != null) show(bmp)
                 main.postDelayed({ next() }, if (bmp != null) 8_000 else 1_000)
             }
         }
+    }
+
+    /**
+     * Each photo is downloaded once and kept on the tablet. Before this, every photo came through the server again each
+     * time it was shown (about one every 8 seconds, all day), which used most of the server's included bandwidth.
+     */
+    private fun cacheFile(id: String): File {
+        val dir = File(cacheDir, "slideshow").also { it.mkdirs() }
+        return File(dir, id.filter { it.isLetterOrDigit() || it == '-' || it == '_' }.take(80) + ".img")
+    }
+
+    private fun photoBytes(id: String): ByteArray {
+        val f = cacheFile(id)
+        if (f.length() > 0) { try { return f.readBytes() } catch (e: Exception) { f.delete() } }
+        val bytes = Api(this).slideshowFile(id)
+        try {
+            val tmp = File(f.parentFile, f.name + ".tmp")
+            tmp.writeBytes(bytes)
+            if (!tmp.renameTo(f)) tmp.delete()
+        } catch (e: Exception) { /* no space: the photo is still shown, just not kept */ }
+        return bytes
+    }
+
+    /** Forgets photos that are no longer in the Drive folder, and keeps the cache under about 300 MB. */
+    private fun pruneCache(keep: Set<String>) {
+        try {
+            val dir = File(cacheDir, "slideshow")
+            val files = dir.listFiles() ?: return
+            val wanted = keep.map { cacheFile(it).name }.toSet()
+            files.filter { it.name !in wanted }.forEach { it.delete() }
+            var total = 0L
+            dir.listFiles()?.sortedBy { it.lastModified() }?.reversed()?.forEach { total += it.length(); if (total > 300L * 1024 * 1024) it.delete() }
+        } catch (e: Exception) { /* a cache problem must never stop the slideshow */ }
     }
 
     private fun show(bmp: Bitmap) {
