@@ -80,6 +80,8 @@ class HomeActivity : Activity() {
         super.onCreate(savedInstanceState)
         ui = Ui(this)
         setContentView(build())
+        // a gentle entrance: the whole home eases up and fades in
+        findViewById<View>(android.R.id.content).let { v -> v.alpha = 0f; v.translationY = ui.dp(18).toFloat(); v.animate().alpha(1f).translationY(0f).setDuration(900).setInterpolator(android.view.animation.DecelerateInterpolator(1.6f)).start() }
         // Weather and headlines come straight from the server. The saved copy is only a fallback for a few minutes, never a 24 hour old picture.
         tvHome = try { Prefs(this).takeIf { System.currentTimeMillis() - it.homeCacheAt < HOME_CACHE_MAX_MS }?.homeCache?.takeIf { it.isNotEmpty() }?.let { Logic.parseTvHome(JSONObject(it)) } } catch (e: Exception) { null }
         renderHome()
@@ -118,7 +120,7 @@ class HomeActivity : Activity() {
             letterSpacing = 0.32f; compoundDrawablePadding = ui.dp(10)
             setCompoundDrawablesRelative(androidx.core.content.ContextCompat.getDrawable(context, com.tanush.stashr.tv.R.drawable.ic_brand)?.apply { setBounds(0, 0, ui.dp(30), ui.dp(30)) }, null, null, null)
         })
-        clock = ui.text("", 72f, Color.WHITE, bold = true).apply { letterSpacing = -0.02f; setShadowLayer(10f, 0f, 3f, 0x99000000.toInt()) }
+        clock = ui.text("", 76f, Color.WHITE).apply { typeface = android.graphics.Typeface.create("sans-serif-light", android.graphics.Typeface.NORMAL); letterSpacing = -0.03f; setShadowLayer(10f, 0f, 3f, 0x99000000.toInt()) }
         brand.addView(clock)
         head.addView(brand)
         val left = ui.column(2).apply { setPadding(ui.dp(8), 0, 0, 0); minimumWidth = ui.dp(260) }
@@ -151,7 +153,8 @@ class HomeActivity : Activity() {
         // Three big cards, like the smart-TV home screens: weather, the headline of the moment, and where the family is.
         fun card(title: String, width: Int, body: View, focusable: Boolean = false, onOpen: (() -> Unit)? = null) = ui.column(6).apply {
             layoutParams = LinearLayout.LayoutParams(0, ui.dp(104), width / 100f); clipChildren = false   // width is a share of the row, so all three fit any screen
-            background = if (focusable) ui.glass(22) else ui.rounded(Color.argb(46, 255, 255, 255), Color.argb(70, 255, 255, 255), 22, 1)
+            background = if (focusable) ui.glass(24) else android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(Color.argb(70, 255, 255, 255), Color.argb(24, 255, 255, 255))).apply { cornerRadius = ui.dp(24).toFloat(); setStroke(ui.dp(1), Color.argb(56, 255, 255, 255)) }
+            elevation = ui.dp(6).toFloat()
             setPadding(ui.dp(20), ui.dp(10), ui.dp(20), ui.dp(10))
             addView(ui.text(title.uppercase(), 13f, 0xB3FFFFFF.toInt(), bold = true).apply { letterSpacing = 0.12f })
             addView(body)

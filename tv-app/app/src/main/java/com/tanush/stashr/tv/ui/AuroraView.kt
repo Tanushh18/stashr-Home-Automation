@@ -134,6 +134,9 @@ class AuroraView(ctx: Context) : View(ctx) {
         paint.shader = null
         drawSky(c, t, w, h)
         art.draw(c, scene, t, w, h)
+        // premium depth: a soft vignette darkens the corners so the middle glows
+        paint.shader = RadialGradient(w / 2, h * 0.45f, maxOf(w, h) * 0.75f, intArrayOf(Color.TRANSPARENT, Color.TRANSPARENT, Color.argb(120, 2, 6, 12)), floatArrayOf(0f, 0.55f, 1f), Shader.TileMode.CLAMP)
+        c.drawRect(0f, 0f, w, h, paint); paint.shader = null
         // keep the apps readable
         c.drawColor(Color.argb(60, 4, 10, 16))
     }
