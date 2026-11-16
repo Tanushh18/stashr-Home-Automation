@@ -50,9 +50,8 @@ class HomeActivity : Activity() {
     private val groupTitles = LinkedHashMap<Logic.AppGroup, TextView>()
     private lateinit var familyRow: LinearLayout
     private lateinit var usbButton: TextView
-    private lateinit var moviesTitle: TextView
-    private lateinit var moviesRow: LinearLayout
-    private lateinit var moviesScroll: HorizontalScrollView
+    /** One titled row of movies per drive: each pendrive gets its own row. */
+    private lateinit var moviesBox: LinearLayout
     private lateinit var weatherChip: TextView
     private lateinit var weatherSub: TextView
     private lateinit var comingBox: LinearLayout
@@ -75,7 +74,8 @@ class HomeActivity : Activity() {
         super.onCreate(savedInstanceState)
         ui = Ui(this)
         setContentView(build())
-        tvHome = try { Prefs(this).takeIf { com.tanush.stashr.tv.core.LocalPolicy.homeFresh(it.homeCacheAt, System.currentTimeMillis()) }?.homeCache?.takeIf { it.isNotEmpty() }?.let { Logic.parseTvHome(JSONObject(it)) } } catch (e: Exception) { null }
+        // Weather and headlines come straight from the server. The saved copy is only a fallback for a few minutes, never a 24 hour old picture.
+        tvHome = try { Prefs(this).takeIf { System.currentTimeMillis() - it.homeCacheAt < HOME_CACHE_MAX_MS }?.homeCache?.takeIf { it.isNotEmpty() }?.let { Logic.parseTvHome(JSONObject(it)) } } catch (e: Exception) { null }
         renderHome()
         androidx.core.content.ContextCompat.registerReceiver(this, screenOn, IntentFilter(Intent.ACTION_SCREEN_ON), androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED)
     }
@@ -111,9 +111,9 @@ class HomeActivity : Activity() {
         clock = ui.text("", 72f, Color.WHITE, bold = true).apply { letterSpacing = -0.02f; setShadowLayer(10f, 0f, 3f, 0x99000000.toInt()) }
         brand.addView(clock)
         head.addView(brand)
-        val left = ui.column(2).apply { setPadding(ui.dp(8), 0, 0, 0) }
+        val left = ui.column(2).apply { setPadding(ui.dp(8), 0, 0, 0); minimumWidth = ui.dp(260) }
         hello = ui.text("", 24f, Color.WHITE, bold = true).apply { maxLines = 1 }; date = ui.text("", 22f, 0xDDFFFFFF.toInt()).apply { maxLines = 1 }
-        offlineChip = ui.text("", 18f, 0xFFFFE08A.toInt(), bold = true).apply { visibility = View.GONE }
+        offlineChip = ui.text("", 18f, 0xFFFFE08A.toInt(), bold = true).apply { visibility = View.GONE; maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END }
         left.addView(hello); left.addView(date); left.addView(offlineChip)
         head.addView(ui.fill(left))
         val right = ui.column(6).apply { gravity = Gravity.END }
@@ -128,14 +128,15 @@ class HomeActivity : Activity() {
         buttons.addView(roundButton("bluetooth", "Bluetooth") { openSettings(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS) })
         buttons.addView(roundButton("pin", "Live location") { startActivity(Intent(this, LiveMapActivity::class.java)) })
         buttons.addView(roundButton("sliders", "Settings") { openSettings(android.provider.Settings.ACTION_SETTINGS) })
-        syncLine = ui.text("", 18f, 0xFFFFE08A.toInt()).apply { gravity = Gravity.END }
+        // One short line: a long download error must never squeeze the greeting column down to a sliver.
+        syncLine = ui.text("", 18f, 0xFFFFE08A.toInt()).apply { gravity = Gravity.END; maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; maxWidth = ui.dp(420) }
         right.addView(buttons); right.addView(syncLine)
         head.addView(right)
         col.addView(head)
 
         // Three big cards, like the smart-TV home screens: weather, the headline of the moment, and where the family is.
         fun card(title: String, width: Int, body: View, focusable: Boolean = false, onOpen: (() -> Unit)? = null) = ui.column(6).apply {
-            layoutParams = LinearLayout.LayoutParams(ui.dp(width), ui.dp(104)); clipChildren = false
+            layoutParams = LinearLayout.LayoutParams(0, ui.dp(104), width / 100f); clipChildren = false   // width is a share of the row, so all three fit any screen
             background = if (focusable) ui.glass(22) else ui.rounded(Color.argb(46, 255, 255, 255), Color.argb(70, 255, 255, 255), 22, 1)
             setPadding(ui.dp(20), ui.dp(10), ui.dp(20), ui.dp(10))
             addView(ui.text(title.uppercase(), 13f, 0xB3FFFFFF.toInt(), bold = true).apply { letterSpacing = 0.12f })
@@ -150,7 +151,7 @@ class HomeActivity : Activity() {
         weatherSub = ui.text("", 17f, 0xDDFFFFFF.toInt()).apply { maxLines = 2 }
         newsStrip = ui.text("", 21f, Color.WHITE, bold = true).apply { maxLines = 3; ellipsize = android.text.TextUtils.TruncateAt.END }
         familyRow = ui.column(2)
-        val cards = ui.row(16).apply { clipChildren = false; setPadding(ui.dp(6), ui.dp(4), ui.dp(48), ui.dp(4)) }
+        val cards = ui.row(16).apply { clipChildren = false; setPadding(ui.dp(6), ui.dp(4), ui.dp(48), ui.dp(4)); layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT) }
         cards.addView(card("Weather", 300, ui.column(2).apply { addView(weatherChip); addView(weatherSub) }))
         cards.addView(card("In the news", 560, newsStrip))
         cards.addView(card("Family", 300, familyRow, focusable = true) { startActivity(Intent(this, LiveMapActivity::class.java)) })
@@ -179,10 +180,8 @@ class HomeActivity : Activity() {
             col.addView(line)
         }
 
-        moviesTitle = ui.h2("Movies").apply { setTextColor(Color.WHITE) }
-        moviesRow = ui.row(20).apply { clipChildren = false; setPadding(ui.dp(8), ui.dp(12), ui.dp(56), ui.dp(12)) }
-        moviesScroll = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; clipChildren = false; clipToPadding = false; addView(moviesRow) }
-        col.addView(moviesTitle); col.addView(moviesScroll)
+        moviesBox = ui.column(4).apply { clipChildren = false }
+        col.addView(moviesBox)
         scroll.addView(col)
         morning = ui.column(18).apply {
             setBackgroundColor(0xF0140F3A.toInt()); setPadding(ui.dp(96), ui.dp(64), ui.dp(96), ui.dp(48)); visibility = View.GONE; isFocusable = true; isClickable = true
@@ -199,17 +198,19 @@ class HomeActivity : Activity() {
     private fun refreshHome() {
         if (!Prefs(this).linked) return
         thread {
+            var failed: Boolean
             try {
                 val j = Api(this).tvHome()
                 Prefs(this).homeCache = j.toString(); Prefs(this).homeCacheAt = System.currentTimeMillis()
                 val parsed = Logic.parseTvHome(j)
                 main.post { tvHome = parsed; renderHome(); maybeMorning() }
-            } catch (e: Exception) { /* keep what is on screen */ }
+                failed = false
+            } catch (e: Exception) { failed = true /* keep what is on screen, try again soon */ }
+            main.post { main.removeCallbacks(homeTimer); if (alive) main.postDelayed(homeTimer, if (failed) 30_000L else 5 * 60_000L) }
         }
-        main.removeCallbacks(homeTimer)
-        if (alive) main.postDelayed(homeTimer, 15 * 60_000L)
     }
     private val homeTimer = Runnable { refreshHome() }
+    private val HOME_CACHE_MAX_MS = 10 * 60_000L
 
     /** Where the family's phones are, as small chips next to the buttons. Polled once a minute while the launcher is showing. */
     private fun refreshFamily() {
@@ -298,7 +299,9 @@ class HomeActivity : Activity() {
         val now = Date()
         clock.text = clockFmt.format(now); date.text = dateFmt.format(now)
         hello.text = Logic.greeting(Calendar.getInstance().get(Calendar.HOUR_OF_DAY))
-        val usb = usbName(); usbButton.visibility = if (usb != null) View.VISIBLE else View.GONE; usbButton.text = usb?.take(16) ?: ""
+        val drives = MovieStore.drives(this)
+        usbButton.visibility = if (drives.isNotEmpty()) View.VISIBLE else View.GONE
+        usbButton.text = if (drives.isEmpty()) "" else "${drives.size} USB · ${Logic.size(drives.sumOf { it.free })} free of ${Logic.size(drives.sumOf { it.total })}"
         val prefs = Prefs(this)
         val local = com.tanush.stashr.tv.service.TvService.localMode
         offlineChip.visibility = if (local) View.VISIBLE else View.GONE
@@ -423,11 +426,14 @@ class HomeActivity : Activity() {
             main.post {
                 if (isFinishing) return@post
                 lastMovieKey = list.joinToString("|") { it.name + it.size }
-                moviesRow.removeAllViews()
-                val show = list.isNotEmpty()
-                moviesTitle.visibility = if (show) View.VISIBLE else View.GONE
-                moviesScroll.visibility = if (show) View.VISIBLE else View.GONE
-                for (m in list) moviesRow.addView(tile(260, 146, Logic.title(m.name), Logic.size(m.size), null, { play(m) }, { confirmDelete(m) }))
+                moviesBox.removeAllViews()
+                for ((drive, movies) in MovieStore.byDrive(this)) {
+                    moviesBox.addView(ui.h2(if (drive == null) "Movies" else "Movies · ${drive.label} · ${Logic.size(drive.free)} free of ${Logic.size(drive.total)}").apply { setTextColor(Color.WHITE) })
+                    if (movies.isEmpty()) moviesBox.addView(ui.text("No movies on this drive yet", 17f, 0xDDFFFFFF.toInt()).apply { setPadding(ui.dp(8), ui.dp(4), 0, ui.dp(12)) })
+                    val row = ui.row(20).apply { clipChildren = false; setPadding(ui.dp(8), ui.dp(12), ui.dp(56), ui.dp(12)) }
+                    for (m in movies) row.addView(tile(260, 146, Logic.title(m.name), Logic.size(m.size), null, { play(m) }, { confirmDelete(m) }))
+                    moviesBox.addView(HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; clipChildren = false; clipToPadding = false; addView(row) })
+                }
                 renderNight()
             }
         }

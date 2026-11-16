@@ -20,34 +20,52 @@ object MovieStore {
     private const val FOLDER = "Stashr Movies"
     private const val INDEX = ".stashr-index.json"
 
-    /** The first removable volume (USB / SD) if present, else the app's own folder on internal storage. */
-    fun dir(ctx: Context): File {
-        val roots = ctx.getExternalFilesDirs(null).filterNotNull()
-        val usb = roots.firstOrNull { try { Environment.isExternalStorageRemovable(it) } catch (e: Exception) { false } }
-        val base = usb ?: roots.firstOrNull() ?: ctx.filesDir
-        return File(base, FOLDER).also { it.mkdirs() }
+    /** Every removable volume (each pendrive / SD card) that is plugged in, else the app's own folder on internal storage. */
+    private fun roots(ctx: Context): List<File> {
+        val all = ctx.getExternalFilesDirs(null).filterNotNull()
+        val usb = all.filter { try { Environment.isExternalStorageRemovable(it) } catch (e: Exception) { false } }
+        return usb.ifEmpty { listOf(all.firstOrNull() ?: ctx.filesDir) }
     }
+
+    /** The movie folder on every drive, in plug-in order. With no pendrive this is just the internal folder. */
+    fun dirs(ctx: Context): List<File> = roots(ctx).map { File(it, FOLDER).also { d -> d.mkdirs() } }
+
+    /** The first drive's folder (kept for callers that only need one). */
+    fun dir(ctx: Context): File = dirs(ctx).first()
+
+    /** Where to download [name] of [size] bytes: the drive already holding its half file, else the first drive with room, so a full pendrive falls through to the next. Null when none has room. */
+    fun dirFor(ctx: Context, name: String, size: Long): File? {
+        val dirs = dirs(ctx)
+        dirs.firstOrNull { File(it, "$name.part").exists() }?.let { return it }
+        return dirs.firstOrNull { free(it) >= size + 64L * 1024 * 1024 }
+    }
+
+    private fun free(d: File): Long = try { StatFs(d.path).availableBytes } catch (e: Exception) { 0 }
 
     fun onUsb(ctx: Context): Boolean {
         val roots = ctx.getExternalFilesDirs(null).filterNotNull()
         return roots.any { try { Environment.isExternalStorageRemovable(it) } catch (e: Exception) { false } }
     }
 
-    private fun indexFile(ctx: Context) = File(dir(ctx), INDEX)
+    /** Which downloads this app made lives inside the app, so it survives swapping pendrives (older copies on the drives are still read). */
+    private fun indexFile(ctx: Context) = File(ctx.filesDir, INDEX)
 
     /** Names this app downloaded (and so may delete again). */
     fun index(ctx: Context): MutableSet<String> {
-        val f = indexFile(ctx)
-        if (!f.exists()) return mutableSetOf()
-        return try { val a = JSONArray(f.readText()); (0 until a.length()).map { a.getString(it) }.toMutableSet() } catch (e: Exception) { mutableSetOf() }
+        val out = mutableSetOf<String>()
+        for (f in listOf(indexFile(ctx)) + dirs(ctx).map { File(it, INDEX) }) {
+            if (!f.exists()) continue
+            try { val a = JSONArray(f.readText()); for (i in 0 until a.length()) out.add(a.getString(i)) } catch (e: Exception) { /* unreadable: skip */ }
+        }
+        return out
     }
 
     fun saveIndex(ctx: Context, names: Set<String>) { try { indexFile(ctx).writeText(JSONArray(names.sorted()).toString()) } catch (e: Exception) { /* storage gone */ } }
 
-    /** Every complete movie file on the storage, newest first. */
+    /** Every complete movie file on every drive, newest first. */
     fun list(ctx: Context): List<Movie> {
         val ours = index(ctx)
-        return (dir(ctx).listFiles() ?: emptyArray())
+        return dirs(ctx).flatMap { d -> (d.listFiles() ?: emptyArray()).toList() }
             .filter { it.isFile && !it.name.startsWith(".") && !it.name.endsWith(".part") && it.length() > 0 }
             .sortedByDescending { it.lastModified() }
             .map { Movie(it.name, it.length(), it, it.name in ours) }
@@ -55,16 +73,44 @@ object MovieStore {
 
     fun find(ctx: Context, name: String): Movie? { val n = Logic.safeName(name) ?: return null; return list(ctx).firstOrNull { it.name == n } }
 
-    /** Deletes a movie from the storage. Only files directly inside the movie folder. */
+    /** Deletes a movie from the storage. Only files directly inside a movie folder. */
     fun remove(ctx: Context, name: String): Boolean {
-        val m = find(ctx, name) ?: return false
-        val ok = m.file.delete()
-        if (ok) saveIndex(ctx, index(ctx).also { it.remove(m.name) })
-        return ok
+        val n = Logic.safeName(name) ?: return false
+        var any = false
+        for (d in dirs(ctx)) { val f = File(d, n); if (f.isFile && f.delete()) any = true }
+        if (any) saveIndex(ctx, index(ctx).also { it.remove(n) })
+        return any
     }
 
-    fun freeBytes(ctx: Context): Long = try { StatFs(dir(ctx).path).availableBytes } catch (e: Exception) { 0 }
-    fun totalBytes(ctx: Context): Long = try { StatFs(dir(ctx).path).totalBytes } catch (e: Exception) { 0 }
+    /** A plugged-in pendrive / SD card with its room. */
+    data class Drive(val label: String, val free: Long, val total: Long, val dir: File)
+
+    /** Every mounted removable drive, in plug-in order. Empty when no pendrive is in. */
+    fun drives(ctx: Context): List<Drive> {
+        if (!onUsb(ctx)) return emptyList()
+        val sm = ctx.getSystemService(Context.STORAGE_SERVICE) as? android.os.storage.StorageManager
+        return dirs(ctx).map { d ->
+            val label = (try { sm?.getStorageVolume(d)?.getDescription(ctx) } catch (e: Exception) { null })?.takeIf { it.isNotBlank() } ?: "USB drive"
+            val st = try { StatFs(d.path) } catch (e: Exception) { null }
+            Drive(label, st?.availableBytes ?: 0, st?.totalBytes ?: 0, d)
+        }
+    }
+
+    /** One entry per drive (empty drives too), movies newest first. Without a pendrive: the internal storage as one unnamed drive. */
+    fun byDrive(ctx: Context): List<Pair<Drive?, List<Movie>>> {
+        val ours = index(ctx)
+        fun moviesIn(d: File) = (d.listFiles() ?: emptyArray())
+            .filter { it.isFile && !it.name.startsWith(".") && !it.name.endsWith(".part") && it.length() > 0 }
+            .sortedByDescending { it.lastModified() }
+            .map { Movie(it.name, it.length(), it, it.name in ours) }
+        val usb = drives(ctx)
+        if (usb.isEmpty()) return moviesIn(dir(ctx)).let { if (it.isEmpty()) emptyList() else listOf(null to it) }
+        return usb.map { it to moviesIn(it.dir) }
+    }
+
+    /** The most room on any single drive: what the biggest next movie can use. */
+    fun freeBytes(ctx: Context): Long = dirs(ctx).maxOfOrNull { free(it) } ?: 0
+    fun totalBytes(ctx: Context): Long = dirs(ctx).sumOf { try { StatFs(it.path).totalBytes } catch (e: Exception) { 0L } }
     fun usedByMovies(ctx: Context): Long = list(ctx).sumOf { it.size }
 }
 
@@ -108,12 +154,11 @@ class MovieSync(private val ctx: Context) {
             val mode = if (grant.optString("mode") == "move") "move" else "mirror"
             data class Item(val name: String, val size: Long, val id: String)
             val items = drive.list().mapNotNull { f -> Logic.safeName(f.name)?.let { Item(it, f.size, f.id) } }
-            val dir = MovieStore.dir(ctx)
             val ours = MovieStore.index(ctx)
 
             // The USB copy follows the Drive folder ("mirror"): drop what this app downloaded and Drive no longer has.
             for (gone in Logic.mirrorDeletes(mode, ours, items.map { it.name }.toSet())) {
-                File(dir, gone).delete(); ours.remove(gone)
+                MovieStore.dirs(ctx).forEach { File(it, gone).delete() }; ours.remove(gone)
             }
             MovieStore.saveIndex(ctx, ours)
 
@@ -123,7 +168,8 @@ class MovieSync(private val ctx: Context) {
             onChange()
             for ((name, size) in todo) {
                 val item = items.first { it.name == name }
-                if (MovieStore.freeBytes(ctx) < size + 64L * 1024 * 1024) { state = SyncState(active = true, name = name, error = "Not enough free space for $name"); transfers.fail(name, size, "Not enough free space on the drive", System.currentTimeMillis()); saveTransfers(); onChange(); continue }
+                val dir = MovieStore.dirFor(ctx, name, size)
+                if (dir == null) { state = SyncState(active = true, name = name, error = "Not enough free space for $name"); transfers.fail(name, size, "Not enough free space on the drive", System.currentTimeMillis()); saveTransfers(); onChange(); continue }
                 try {
                     download(drive, item.id, File(dir, name), size, { from -> transfers.start(name, size, from, System.currentTimeMillis()); saveTransfers(); onChange() }) { pct, done ->
                         transfers.progress(name, done, System.currentTimeMillis()); state = SyncState(active = true, name = name, pct = pct); onChange()
