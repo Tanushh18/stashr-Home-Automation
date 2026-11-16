@@ -104,4 +104,14 @@ router.post("/deploy-ops/projects/:projectId/sync", writeLimiter, async (req, re
   } catch (error) { return send(res, error); }
 });
 
+/* Make all servers of this one project carry the same variables (the fullest env wins). Preview unless apply. Never touches other projects. */
+router.post("/deploy-ops/projects/:projectId/sync-group", writeLimiter, async (req, res) => {
+  const b = req.body || {};
+  try {
+    const result = await ops.syncGroupEnv(req.rootUser, req.params.projectId, { apply: b.apply === true, deploy: b.deploy === true, overwrite: b.overwrite !== false });
+    res.set("Cache-Control", "no-store");
+    return res.json(result);
+  } catch (error) { return send(res, error); }
+});
+
 module.exports = router;

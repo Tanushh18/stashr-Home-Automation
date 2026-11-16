@@ -275,6 +275,67 @@ async function syncEnv(user, projectId, { apply = false, overwrite = false, depl
   return { ...summary, applied: true, results };
 }
 
+
+/**
+ * Makes every server of ONE project (one service: its servers on any host) carry the same variables. The reference is the
+ * server with the most variables (the freshest, fullest env); any variable that only another server has is added to the
+ * reference too, so nothing is lost. A differing value is replaced by the reference's. Other projects are never touched, and a
+ * variable a host will not reveal is never overwritten. Preview unless `apply`.
+ */
+async function syncGroupEnv(user, projectId, { apply = false, deploy = false, overwrite = true } = {}) {
+  const { dataKey, fields } = await loadProject(user, projectId);
+  const targets = targetsOf(user, dataKey, fields).slice(0, MAX_TARGETS);
+  if (targets.length < 2) throw fail(400, "This project needs at least two linked servers to sync.");
+  const reads = await mapWithConcurrency(targets, 3, async (t) => ({ t, info: await inspectTarget(t), read: await readVars(t) }));
+  const readable = reads.filter((r) => r.read.ok);
+  if (readable.length < 2) throw fail(502, "Could not read the variables of at least two servers.");
+  const countOf = (r) => r.read.vars.filter((v) => v.value !== null).length;
+  // Fullest first; a tie goes to the server that was deployed most recently, then to the main one.
+  const stamp = (r) => (r.info && r.info.ok && r.info.latestDeploy && r.info.latestDeploy.at ? new Date(r.info.latestDeploy.at).getTime() || 0 : 0);
+  const ranked = [...readable].sort((a, b) => countOf(b) - countOf(a) || stamp(b) - stamp(a) || Number(b.t.main) - Number(a.t.main));
+  const source = ranked[0];
+  const merged = new Map(source.read.vars.filter((v) => v.value !== null).map((v) => [v.key, v.value]));
+  for (const r of ranked.slice(1)) for (const v of r.read.vars) if (v.value !== null && !merged.has(v.key)) merged.set(v.key, v.value);
+  const rows = [...merged].map(([key, value]) => ({ key, value }));
+
+  const plans = reads.map((r) => {
+    if (!r.read.ok) return { ...r, error: r.read.error };
+    const unreadable = new Set(r.read.vars.filter((v) => v.value === null).map((v) => v.key));
+    return { ...r, unreadable, plan: planEnvSync(rows, r.read.vars.filter((v) => v.value !== null)) };
+  });
+  const summary = {
+    source: { ref: source.t.ref, name: source.t.name, count: countOf(source) },
+    total: rows.length,
+    targets: plans.map((p) => ({
+      ref: p.t.ref, name: p.t.name, label: p.t.label, error: p.error || "",
+      create: p.plan ? p.plan.create : [], update: p.plan ? p.plan.update.filter((n) => !p.unreadable.has(n)) : [], same: p.plan ? p.plan.same.length : 0,
+      unreadable: p.unreadable ? [...p.unreadable] : [], isSource: p.t === source.t
+    })),
+    applied: false, results: []
+  };
+  if (!apply) return summary;
+
+  const results = [];
+  for (const p of plans) {
+    if (p.error || !p.plan) { results.push({ ref: p.t.ref, name: p.t.name, written: 0, failed: [], deployed: false, error: p.error || "" }); continue; }
+    const names = pendingNames(p.plan, { overwrite }).filter((n) => !p.unreadable.has(n));
+    const written = [];
+    const failedNames = [];
+    let note = "";
+    for (const name of names) {
+      const r = await writeVar(p.t, name, p.plan.values.get(name));
+      if (r.ok) written.push(name); else { failedNames.push(name); note = r.error; if (/no longer|connection was removed|not connected/.test(r.error)) break; }
+    }
+    let deployedNow = false;
+    if (deploy && written.length) {
+      if (p.info && p.info.suspended) note = "Suspended, so it was not redeployed.";
+      else { const d = await redeployTarget(p.t); deployedNow = d.ok; if (!d.ok) note = d.error; }
+    }
+    results.push({ ref: p.t.ref, name: p.t.name, written: written.length, failed: failedNames, deployed: deployedNow, error: note });
+  }
+  return { ...summary, applied: true, results };
+}
+
 /** Switches a linked hosting account for non-Render sites. Render needs a real service migration, never an account-reference swap. */
 async function moveAccount(user, projectId, ref, accountId) {
   const { entry, dataKey, fields } = await loadProject(user, projectId);
@@ -296,4 +357,4 @@ async function moveAccount(user, projectId, ref, accountId) {
   return { ref, accountId: String(accountId), name: target.name };
 }
 
-module.exports = { listTargets, findTarget, readVars, writeVar, redeployTarget, deploysOf, logsOf, setBranchOf, syncEnv, listAllServers, moveAccount };
+module.exports = { listTargets, findTarget, readVars, writeVar, redeployTarget, deploysOf, logsOf, setBranchOf, syncEnv, syncGroupEnv, listAllServers, moveAccount };

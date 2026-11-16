@@ -403,6 +403,7 @@ export const getDeployLogs = (projectId, ref, deployId = "") => instance.get(dep
 export const setDeployBranch = (projectId, ref, branch, deploy = true) => instance.put(deployOpsPath(projectId) + "/branch", { ref, branch, deploy }, { timeout: 120000 }).then((r) => r.data);
 export const moveDeployAccount = (projectId, ref, accountId) => instance.put(deployOpsPath(projectId) + "/account", { ref, accountId }).then((r) => r.data);
 export const getAllDeployServers = () => instance.get("/deploy-ops/servers").then((r) => r.data);
+export const syncGroupEnv = (projectId, body) => instance.post(deployOpsPath(projectId) + "/sync-group", body, { timeout: 240000 }).then((r) => r.data);
 export const syncDeployEnv = (projectId, body) => instance.post(deployOpsPath(projectId) + "/sync", body, { timeout: 180000 }).then((r) => r.data);
 const movePath = (projectId) => "/move-server/" + encodeURIComponent(projectId);
 /* Move one Render server to another account, one step per call (plan, create, status, frontends, relink, delete-old). */

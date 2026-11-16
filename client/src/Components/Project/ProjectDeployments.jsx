@@ -4,6 +4,7 @@ import { getDeployTargets, redeployDeployTarget, syncDeployEnv, unlinkHostSite }
 import { usePolling } from "../../Pages/Render/renderHooks";
 import { timeAgo, errorMessage } from "../../Pages/Render/renderUtils";
 import ServerEnvCopy from "./ServerEnvCopy";
+import ServerEnvMatch from "./ServerEnvMatch";
 import EnvGroupSync from "./EnvGroupSync";
 import RenderMatrix from "./RenderMatrix";
 import MoveServerWizard from "./MoveServerWizard";
@@ -31,6 +32,7 @@ export default function ProjectDeployments({ project, refreshKey, hideRefresh })
   const [comparing, setComparing] = useState(false);
   const [syncFrom, setSyncFrom] = useState(null);
   const [copyFor, setCopyFor] = useState(null);
+  const [matchOpen, setMatchOpen] = useState(false);
   const [moveFor, setMoveFor] = useState(null);
   const [moveTargetAccountId, setMoveTargetAccountId] = useState("");
   const [moveTargetSnapshot, setMoveTargetSnapshot] = useState(null);
@@ -147,6 +149,7 @@ export default function ProjectDeployments({ project, refreshKey, hideRefresh })
                         <div className="pdep__branch">
                           <button type="button" className="btn btn--ghost btn--sm" aria-expanded={logsOpen} onClick={() => toggleLogs(t.ref)}>{logsOpen ? "Hide logs" : "Logs"}</button>
                           {t.capabilities?.env ? <button type="button" className="btn btn--ghost btn--sm" onClick={() => setCopyFor(t.ref)}>Copy env</button> : null}
+                          {t.capabilities?.env && list.length > 1 ? <button type="button" className="btn btn--ghost btn--sm" title="Make every server of this project carry the same, freshest env" onClick={() => setMatchOpen(true)}>Sync env</button> : null}
                           <button type="button" className="btn btn--ghost btn--sm" disabled={busyRef === t.ref} onClick={() => void redeploy(t)}>{busyRef === t.ref ? "Deploying…" : "Redeploy"}</button>
                           {t.provider !== "render" ? <button type="button" className="btn btn--ghost btn--sm" onClick={() => void unlink(t)}>Unlink</button> : <button type="button" className="btn btn--ghost btn--sm" onClick={() => { setMoveTargetAccountId(""); setMoveTargetSnapshot(t); setMoveFor(t.ref); }}>Move to account</button>}
                           {t.dashboardUrl ? <a href={t.dashboardUrl} target="_blank" rel="noopener noreferrer" aria-label={"Open " + t.name + " on " + t.label}>{t.label} ↗</a> : null}
@@ -168,6 +171,7 @@ export default function ProjectDeployments({ project, refreshKey, hideRefresh })
 
       {syncFrom ? <EnvGroupSync projectId={project.id} targets={list} initialSource={syncFrom} open={Boolean(syncFrom)} onClose={() => setSyncFrom(null)} onDone={() => { setCompare(null); void load({ quiet: true }); }} /> : null}
       {moveFor ? <MoveServerWizard projectId={project.id} target={list.find((t) => t.ref === moveFor) || moveTargetSnapshot} initialTargetAccountId={moveTargetAccountId} open={Boolean(moveFor)} onClose={() => { setMoveFor(null); setMoveTargetAccountId(""); setMoveTargetSnapshot(null); }} onDone={() => { setCompare(null); void load({ quiet: true }); }} /> : null}
+      {matchOpen ? <ServerEnvMatch projectId={project.id} open={matchOpen} onClose={() => setMatchOpen(false)} onDone={() => { setCompare(null); void load({ quiet: true }); }} /> : null}
       {copyFor ? <ServerEnvCopy projectId={project.id} target={list.find((t) => t.ref === copyFor)} targets={list} open={Boolean(copyFor)} onClose={() => setCopyFor(null)} onDone={() => { setCompare(null); void load({ quiet: true }); }} /> : null}
     </section>
   );
