@@ -383,12 +383,56 @@ function LiveMapCard() {
   );
 }
 
+/** Type (or dictate with the keyboard mic) what the house should do: "tv volume down", "who is home", "movie night". */
+const PHRASES = ["Who is home", "Status", "TV mute", "TV volume down", "TV play pause", "Lights off"];
+function AskHouse({ scenes = [] }) {
+  const act = useAct();
+  const [text, setText] = useState("");
+  const [reply, setReply] = useState("");
+  const run = (sentence) => act(async () => {
+    const r = await home.assistant(sentence);
+    setReply(r.reply || (r.sent && r.sent.length ? "Sent." : "Done."));
+    setText("");
+  });
+  return (
+    <Box title="Ask the house" subtitle="Say it in your own words. The keyboard's mic works too.">
+      <Row wrap={false}>
+        <Input value={text} onChangeText={setText} placeholder="e.g. tv band karo" style={{ flex: 1 }} autoCapitalize="sentences" onSubmitEditing={() => text.trim() && run(text.trim())} />
+        <Btn label="Go" kind="primary" disabled={!text.trim()} onPress={() => run(text.trim())} />
+      </Row>
+      <Row>{PHRASES.map((p) => <Btn key={p} label={p} onPress={() => run(p)} />)}</Row>
+      {scenes.length ? <Row>{scenes.slice(0, 6).map((sc) => <Btn key={sc.id || sc.name} label={`▶ ${sc.name}`} onPress={() => act(async () => { await home.runScene(sc.id); setReply(`${sc.name} started.`); })} />)}</Row> : null}
+      {reply ? <Txt>{reply}</Txt> : null}
+    </Box>
+  );
+}
+
+/** One tap for the whole family's phones: lock every lockable phone. */
+function QuickControls({ phones, reload }) {
+  const act = useAct();
+  const lockable = phones.filter((p) => !p.paused);
+  if (!lockable.length) return null;
+  return (
+    <Box title="Quick controls">
+      <Row>
+        <Btn label={`Lock all phones (${lockable.length})`} kind="danger" onPress={async () => {
+          if (!(await ask("Lock every phone?", "Each phone that has remote lock turned on will be locked now.", "Lock all", true))) return;
+          act(async () => { const r = await Promise.allSettled(lockable.map((p) => home.lockPhone(p.id))); reload(); return r; }, "Lock sent to the phones");
+        }} />
+        <Btn label="Refresh now" onPress={() => reload()} />
+      </Row>
+    </Box>
+  );
+}
+
 export default function Devices({ ctx }) {
   const { devices, people, settings, save, reload } = ctx;
   const phones = devices.filter((d) => d.kind === "phone");
   return (
     <>
+      <Boundary name="Ask the house"><AskHouse scenes={(settings && settings.scenes) || []} /></Boundary>
       <Boundary name="Who is home"><PeopleCard people={people} /></Boundary>
+      <Boundary name="Quick controls"><QuickControls phones={phones} reload={reload} /></Boundary>
       {devices.length === 0 ? <Box><Dim>Nothing connected yet. Install Stashr Hub on the always-on tablet and type a code from “Link the home tablet or TV” below. Your TV joins once Stashr TV is open.</Dim></Box> : null}
       {devices.filter((d) => d.kind !== "phone").map((d) => (
         <Boundary key={d.id} name={d.name}>{d.kind === "tv" ? <TvCard device={d} reload={reload} /> : <HubCard device={d} reload={reload} />}</Boundary>
