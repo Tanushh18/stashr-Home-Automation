@@ -15,6 +15,10 @@ to a checkout of Lawnchair at the commit pinned in `UPSTREAM`.
   "Stashr". Web addresses are left alone. The search-provider revenue-share notice, which described the Lawnchair project's own agreement, is
   rewritten without any name. Class names and internal links inside the code still say "lawnchair" (people never see them), and the
   license text in Settings → About stays as the Apache License requires.
+- A "Stashr Search" search provider (one Kotlin file, `overlay/lawnchair/src/.../StashrSearch.kt`, registered with one line) that opens the Stashr
+  app's search from the dock search bar; it is the default when the Stashr app is installed.
+- Default settings: squircle icons, no icon reload on every start, no top shadow or scrollbar, and no network calls for announcements or
+  nightly updates (everything can be changed in Settings).
 - The launcher icon (adaptive, round and themed/monochrome) is the Stashr house drawing.
 
 "Lawnchair" is the name of someone else's project. Stashr Launcher is an independent build and is not made, endorsed or supported by the
