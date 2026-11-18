@@ -256,6 +256,8 @@ router.post("/expenses/sms", authenticate, smsLimiter, async (req, res) => {
         const saved = await st.append(fresh);
         duplicates += saved.duplicates;
         if (copy) copy.append(saved.stored);
+        const repeats = saved.added > 0 ? await removeRepeats(st, copy).catch(() => 0) : 0;
+        duplicates += repeats;
         // Messages from a second phone fill gaps in the balance chain: clear the flags that were only about those gaps.
         let cleared = 0;
         if (saved.added > 0 && existing.some((t) => t.status === "Flagged")) {
@@ -386,6 +388,74 @@ router.put("/expenses/rules", authenticate, writeLimiter, async (req, res) => {
     } catch (e) { return fail(res, e, "Could not save the rules."); }
 });
 
+/** Removes repeats of the same payment (two messages for one payment, a message and a statement line). The best entry stays and gets any detail only the repeat had. */
+async function removeRepeats(st, copy) {
+    const groups = ex.findDuplicates(await st.list());
+    const gone = groups.flatMap((g) => g.remove);
+    if (!gone.length) return 0;
+    const fills = groups.filter((g) => Object.keys(g.fill).length).map((g) => ({ index: g.keep.index, fields: g.fill, tx: g.keep }));
+    if (fills.length) { await st.updateMany(fills); if (copy) copy.update(fills); }
+    const removed = await st.removeMany(gone.map((t) => t.index));
+    if (copy) copy.removeMany(gone);
+    return removed;
+}
+
+// Clean up repeats now (also done by itself after every message batch and statement check).
+router.post("/expenses/dedupe", authenticate, writeLimiter, async (req, res) => {
+    try {
+        const s = await settingsOf(req.rootUser._id);
+        const { st, copy } = await storeFor(req, s);
+        return res.json({ removed: await removeRepeats(st, copy) });
+    } catch (e) { return fail(res, e, "Could not clean up repeats."); }
+});
+
+// Add a payment by hand (cash, a payment with no message...). It counts at once ("Confirmed") and a bank message or statement line for the same payment later joins it instead of doubling it.
+router.post("/expenses/manual", authenticate, writeLimiter, async (req, res) => {
+    try {
+        const owner = req.rootUser._id, s = await settingsOf(owner);
+        const { st, copy } = await storeFor(req, s);
+        const b = req.body || {};
+        const type = b.type === "Credit" ? "Credit" : b.type === "Debit" ? "Debit" : "";
+        const amount = ex.round2(Number(b.amount));
+        const today = ex.ist(Date.now());
+        const date = ex.parseDate(b.date || today);
+        const clean = (v, n) => String(v || "").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, n);
+        if (!type) return res.status(400).json({ error: "Choose money in (Credit) or money out (Debit)." });
+        if (!Number.isFinite(amount) || amount <= 0 || amount > 1e9) return res.status(400).json({ error: "Enter an amount above zero." });
+        if (!date || date > ex.ist(Date.now() + 86400000)) return res.status(400).json({ error: "Pick a date that is not in the future." });
+        if (st.mode === "db" && date < cutoffDate()) return res.status(400).json({ error: "That date is older than 4 months; Stashr keeps only the last 4 months." });
+        const time = /^\d{1,2}:\d{2}$/.test(String(b.time || "")) ? String(b.time).padStart(5, "0") : "";
+        const merchant = clean(b.merchant, 60);
+        const asSalary = b.salary === true || b.category === "Salary";
+        const category = asSalary && type === "Credit" ? "Salary" : clean(b.category, 40) || ex.categorize(merchant, type, "Other", userRules(s));
+        const p = { date, time, amount, type, counterparty: merchant, account: "", method: "Manual", ref: "", balance: null };
+        const known = await st.list();
+        const twin = known.find((t) => ex.isTwin(t, { ...p, merchant }));
+        if (twin && b.again !== true) return res.status(409).json({ error: "This looks like a payment you already have.", duplicate: { date: twin.date, amount: twin.amount, merchant: twin.merchant, status: twin.status } });
+        if (twin && !p.time) p.time = new Date(Date.now() + 5.5 * 3600000).toISOString().slice(11, 19);    // "add anyway": a time apart makes it its own payment
+        const tx = ex.makeTx(p, category, "Manual", "Confirmed", clean(b.note, 120), 0, []);
+        const saved = await st.append([tx]);
+        if (!saved.added) return res.status(409).json({ error: "This payment is already saved." });
+        if (copy) copy.append(saved.stored);
+        return res.json({ added: 1, tx: saved.stored[0] });
+    } catch (e) { return fail(res, e, "Could not add the payment."); }
+});
+
+// Does Stashr add up to the bank? Last month's closing balance, today's expected balance, the difference, and the salary cycle.
+// ?month=YYYY-MM  ?bank=<the balance you read in your bank app>
+router.get("/expenses/balance", authenticate, async (req, res) => {
+    try {
+        res.set("Cache-Control", "no-store");
+        const owner = req.rootUser._id, s = await settingsOf(owner);
+        const { st } = await storeFor(req, s);
+        const today = ex.ist(Date.now());
+        const month = /^\d{4}-\d{2}$/.test(String(req.query.month || "")) ? String(req.query.month) : today.slice(0, 7);
+        const lines = await saved.loadLines(owner, await req.rootUser.getDataKey(), {});
+        const bank = req.query.bank === undefined || req.query.bank === "" ? null : Number(req.query.bank);
+        return res.json(balance.balanceReport(await st.list(), lines, { month, today, bank: Number.isFinite(bank) ? bank : null }));
+    } catch (e) { return fail(res, e, "Could not work out the balance."); }
+});
+
 // After a statement: remove, in one go, every entry the statement did not have (the owner decided the statement is right).
 router.post("/expenses/remove-unmatched", authenticate, writeLimiter, async (req, res) => {
     try {
@@ -400,15 +470,19 @@ router.post("/expenses/remove-unmatched", authenticate, writeLimiter, async (req
 
 const { processStatement: runStatement } = require("../utils/statementRun");
 const saved = require("../utils/statementSearch");
+const balance = require("../utils/moneyBalance");
 const officeCrypto = require("../utils/officeCrypto");
 const statementPdf = require("../utils/statementPdf");
 
 /** The statement check for this account, with its rules, the 4-month cut-off and where the result summary is saved. */
-const processStatement = ({ owner, s, st, copy, bytes, table = null, lines = null, source = "", progress, month = "", filename = "", dataKey }) => runStatement({
+const processStatement = async ({ owner, s, st, copy, bytes, table = null, lines = null, source = "", progress, month = "", filename = "", dataKey }) => { const done = await runStatement({
     s, st, copy, bytes, table, lines, source, progress, month, rules: userRules(s), cutoff: cutoffDate(),
     saveSummary: (summary) => Settings.updateOne({ owner }, { $set: { lastStatement: summary } }),
     saveLines: lines ? async () => {} : ({ lines: got }) => saved.saveStatement(owner, dataKey, { filename, month, lines: got })     // kept (encrypted) so it can be searched later (not again when these ARE the saved lines)
 });
+    if (st.mode) await removeRepeats(st, copy).catch(() => 0);     // a statement line and an old message for one payment never stay as two
+    return done;
+};
 
 router.post("/expenses/statement", authenticate, writeLimiter, express.raw({ type: "application/octet-stream", limit: "8mb" }), async (req, res) => {
     try {

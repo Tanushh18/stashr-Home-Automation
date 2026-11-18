@@ -492,3 +492,31 @@ describe("the money API (Stashr storage, the default)", () => {
         expect((await request(app).put("/expenses/storage").set(auth).send({ mode: "nonsense" })).status).toBe(400);
     });
 });
+
+describe("manual entries, repeats and the balance check (Stashr storage)", () => {
+    const msg = (body, iso, address = "VM-FEDBNK-S") => ({ address, body, date: ms(iso) });
+    test("a hand-added payment counts, is not doubled by its own message, and the balance route sees it", async () => {
+        const realNow = Date.now;
+        Date.now = () => Date.parse("2026-10-24T06:00:00Z");
+        try {
+            const auth = await signUp();
+            await request(app).post("/expenses/start").set(auth).send({ date: "2026-06-01" });
+            expect((await request(app).post("/expenses/manual").set(auth).send({ type: "Debit", amount: 0, date: "2026-10-22" })).status).toBe(400);
+            expect((await request(app).post("/expenses/manual").set(auth).send({ type: "Debit", amount: 5, date: "2027-01-01" })).status).toBe(400);
+            const cash = await request(app).post("/expenses/manual").set(auth).send({ type: "Debit", amount: 100, date: "2026-10-21", time: "19:42", merchant: "Meta Verifie", note: "paid in cash" });
+            expect(cash.status).toBe(200); expect(cash.body.tx.status).toBe("Confirmed"); expect(cash.body.tx.source).toBe("Manual");
+            const again = await request(app).post("/expenses/manual").set(auth).send({ type: "Debit", amount: 100, date: "2026-10-21", time: "19:42", merchant: "Meta Verifie" });
+            expect(again.status).toBe(409);
+            // the bank's own message for the same payment joins it instead of showing twice
+            const r = await sms(auth, [msg(SAMPLE, "2026-10-21T14:12:00Z")]);
+            expect(r.body.added).toBe(0); expect(r.body.duplicates).toBe(1);
+            const pay = await request(app).post("/expenses/manual").set(auth).send({ type: "Credit", amount: 40000, date: "2026-10-23", merchant: "ACME", salary: true });
+            expect(pay.body.tx.category).toBe("Salary");
+            const list = (await request(app).get("/expenses?month=2026-10").set(auth)).body;
+            expect(list.rows.length).toBe(2); expect(list.totals.debit).toBe(100); expect(list.totals.credit).toBe(40000);
+            const b = (await request(app).get("/expenses/balance?month=2026-10&bank=1").set(auth)).body;
+            expect(b.credits).toBe(40000); expect(b.debits).toBe(100); expect(b.salary.received).toBe(40000); expect(b.salary.left).toBe(40000);
+            expect((await request(app).post("/expenses/dedupe").set(auth)).body.removed).toBe(0);
+        } finally { Date.now = realNow; }
+    });
+});
