@@ -12,7 +12,7 @@ import org.json.JSONObject
  * The other Stashr board widgets. Each draws from the snapshot the app saved (WidgetStore) and never calls the network itself.
  * A button that does something (scene, TV, camera) opens a signed stashr://action link: the app asks for the unlock, checks the
  * per-install key and only then calls the Stashr server, showing the server's real answer.
- * Request codes: Home 100, TV 300+, Quick 400+, Money 500, Network 600, Phones 700+ (one per button, so taps never mix).
+ * Request codes: Home 100, TV 300+, Quick 400+, Money 500, Network 600, Phones 700+, Search 800+ (one per button, so taps never mix).
  */
 
 private fun obj(o: JSONObject?, key: String): JSONObject? = o?.optJSONObject(key)
@@ -148,6 +148,22 @@ class StashrNetWidget : AppWidgetProvider() {
       Board.row(v, R.id.row_health, R.id.net_health, str(n, "health"))
       v.setOnClickPendingIntent(R.id.widget_root, Board.link(context, "stashr://home?tab=media", 600))
       Board.clock(context, v, R.id.widget_updated, if (n != null) o else null)
+      return v
+    }
+  }
+}
+
+/** A search bar for the home screen: a tap opens Stashr Search in the app (through the unlock), "ASK AI" opens it ready for a question. */
+class StashrSearchWidget : AppWidgetProvider() {
+  override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {
+    for (id in ids) manager.updateAppWidget(id, views(context))
+  }
+
+  companion object {
+    internal fun views(context: Context): RemoteViews {
+      val v = RemoteViews(context.packageName, R.layout.stashr_search_widget)
+      v.setOnClickPendingIntent(R.id.widget_root, Board.link(context, "stashr://search", 800))
+      v.setOnClickPendingIntent(R.id.search_ask, Board.link(context, "stashr://search?ai=1", 801))
       return v
     }
   }

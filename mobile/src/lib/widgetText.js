@@ -96,11 +96,21 @@ export function inr(n) {
 // Same as the server (server/utils/expenses.js): these are not counted until they are confirmed.
 const DOUBTFUL = ["Flagged", "Not in statement", "Mismatch"];
 
+/** "Matches bank ✓", "₹120 off the bank" and "Salary left ₹48,500" from GET /expenses/balance (empty when there is nothing to say). */
+export function balanceWord(bal) {
+  if (!bal) return "";
+  const parts = [];
+  if (bal.match === true) parts.push("Matches bank ✓");
+  else if (bal.match === false && bal.difference != null) parts.push(`${inr(Math.abs(bal.difference))} off the bank`);
+  if (bal.salary && Number.isFinite(Number(bal.salary.left))) parts.push(`Salary left ${inr(bal.salary.left)}`);
+  return parts.join(" · ");
+}
+
 /**
  * The Money widget from GET /expenses (this month): spent today, spent this month, the biggest category and how many entries
  * still need a look. `today` is "YYYY-MM-DD" in India time. Returns null when there is nothing to show.
  */
-export function moneyLines(list, today) {
+export function moneyLines(list, today, bal = null) {
   if (!list || !list.totals) return null;
   const rows = Array.isArray(list.rows) ? list.rows : [];
   const spentToday = rows
@@ -112,7 +122,7 @@ export function moneyLines(list, today) {
     today: inr(spentToday),
     month: inr(list.totals.debit),
     top: top ? `${clean(top.category)} · ${inr(top.amount)}` : "",
-    check: check ? `${check} to check` : "All sorted",
+    check: [check ? `${check} to check` : "All sorted", balanceWord(bal)].filter(Boolean).join(" · "),
   };
 }
 

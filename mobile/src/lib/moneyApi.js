@@ -22,5 +22,8 @@ export const money = {
   // Statements kept (encrypted) for searching later.
   savedStatements: () => request("/expenses/statement/saved", { timeout: 30000 }),
   searchStatements: (q, month) => request(`/expenses/statement/search?q=${encodeURIComponent(q)}${month ? `&month=${encodeURIComponent(month)}` : ""}`, { timeout: 30000 }),
+  balance: (month, bank) => request(`/expenses/balance?${month ? `month=${encodeURIComponent(month)}` : ""}${bank !== undefined && bank !== "" ? `&bank=${encodeURIComponent(bank)}` : ""}`, { timeout: 30000 }),
+  dedupe: () => j("/expenses/dedupe", "POST", undefined, 40000),
+  addManual: (body) => j("/expenses/manual", "POST", body, 30000),
   deleteSavedStatement: (id) => j(`/expenses/statement/saved/${id}`, "DELETE"),
 };

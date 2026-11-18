@@ -16,6 +16,7 @@ const rateLimit = require("../middlewares/rateLimit");
 const HomeDevice = require("../models/homeDevice");
 const HomeSettings = require("../models/homeSettings");
 const home = require("../utils/home");
+const together = require("../utils/homeTogether");
 const automation = require("../utils/homeAutomation");
 const { record } = require("../utils/homeEvents");
 const route = require("../utils/homeRoute");
@@ -118,7 +119,18 @@ const forgetDevices = (owner) => devCache.delete(String(owner));
 // Every family phone's last 24 hours are kept (placeFixes; the database deletes each point after 24 hours): the Places card and the
 // "where did everyone go" day on the website and in Telegram read them.
 
-function answer(res, out, settings, where, now, device, loc, batt) {
+/** Who travels with this phone right now, and whether it is this phone's turn to report at the normal pace. */
+function togetherInfo(device, list, state, settings, now) {
+    const spot = settings.homeSpot;
+    const phones = (list || []).filter((x) => x.kind === "phone" && !x.syncPaused);
+    const groups = automation.groupTogether(phones, state || {}, now, spot);
+    const members = together.membersOf(String(device._id), phones, groups);
+    if (!members.length) return { grouped: false, isLead: true, members: [] };
+    const lead = together.pickLead(members, now);
+    return { grouped: true, isLead: !lead || lead === String(device._id), members };
+}
+
+function answer(res, out, settings, where, now, device, loc, batt, tog) {
     const tvLiveOn = Boolean(settings.liveUntil && new Date(settings.liveUntil).getTime() > now) && settings.tvLive?.enabled !== false && where.state !== "home";
     // "Refresh location" on the page: every phone, home or not, answers fast for a minute and a half.
     const locateOn = Boolean(settings.locateUntil && new Date(settings.locateUntil).getTime() > now);
@@ -126,7 +138,9 @@ function answer(res, out, settings, where, now, device, loc, batt) {
     const watch = !liveOn && device ? placeTrail.watchFor(settings.places, device._id, loc, automation.localParts(now, settings.timezone || "Asia/Kolkata").minutes, batt) : { near: false };
     return res.json({
         roomOn: Boolean(device && device.roomOn), roomAuto: device ? roomLive.autoOf(device).on : true, live: liveOn, ok: true, state: where.state, traffic: Boolean(where.traffic), distanceKm: where.distanceKm ?? null, etaMinutes: where.state === "home" ? 0 : where.etaMinutes ?? null,
-        nextCheckSec: liveOn ? 8 : watch.near ? Math.min(automation.checkInterval(where, batt), watch.sec) : automation.checkInterval(where, batt), home: { set: where.state !== "unset" },
+        nextCheckSec: liveOn ? 8 : watch.near ? Math.min(automation.checkInterval(where, batt), watch.sec)
+            : together.nextCheck(automation.checkInterval(where, batt), !tog || tog.isLead, Boolean(tog && tog.grouped), where.state === "coming" && Number(where.distanceKm) <= 5), home: { set: where.state !== "unset" },
+        together: Boolean(tog && tog.grouped),
         // near one of its places during an arrive/leave window: look closely (every 3 minutes, a real fix every time)
         precise: watch.near,
         notices: (out.commands || []).filter((c) => c.type === "notice").map((c) => ({ id: c.id, text: (c.args || {}).text || "" })).filter((n) => n.text)
@@ -167,7 +181,7 @@ router.post("/home/agent/location", agentLimiter, (req, res, next) => homeRouter
             const same = { pct: b.battery && Number.isFinite(num(b.battery.pct)) ? num(b.battery.pct) : (d.status || {}).battery, charging: b.battery ? b.battery.charging === true : (d.status || {}).charging === true };
             // A "still here" call carries the battery too: a phone sinking to 20% is announced even when it never moves.
             if (Number(same.pct) <= 20 && !same.charging) void automation.lowBatteryNow(d.owner, { ...d.toObject(), status: { ...(d.status || {}), location: { ...prev, at: now }, battery: same.pct, charging: same.charging } }, settings, now).catch(() => {});
-            return answer(res, { commands: notices.map((c) => ({ id: c.id, type: c.type, args: c.args })) }, settings, where, now, d, prev, same);
+            return answer(res, { commands: notices.map((c) => ({ id: c.id, type: c.type, args: c.args })) }, settings, where, now, d, prev, same, togetherInfo(d, await devicesOf(d.owner, now), settings.etaState, settings, now));
         }
 
         const lat = num(b.lat), lon = num(b.lon);
@@ -199,7 +213,13 @@ router.post("/home/agent/location", agentLimiter, (req, res, next) => homeRouter
         const me = all.find((x) => String(x._id) === String(d._id)) || d;
         const where = automation.whereIs({ ...settings, etaState: state }, me, now);
         void placeFixes.keep(d.owner, d._id, loc, { now }).catch(() => {});
-        return answer(res, out, settings, where, now, d, loc, { pct: status.battery, charging: status.charging === true });
+        // Phones travelling together share one position: this fix also becomes the position of a mate whose own fix is older (never a phone with syncing off).
+        const tog = togetherInfo(d, all, state, settings, now);
+        for (const mate of together.mirrorTargets(d._id, tog.members, loc)) {
+            await HomeDevice.updateOne({ _id: mate._id, syncPaused: { $ne: true } }, { $set: { "status.location": { ...loc, shared: true, from: String(d._id) } } }).catch(() => {});
+        }
+        if (tog.members.length) forgetDevices(d.owner);
+        return answer(res, out, settings, where, now, d, loc, { pct: status.battery, charging: status.charging === true }, tog);
     } catch (e) { return fail(res, e, "Could not save the location."); }
 });
 

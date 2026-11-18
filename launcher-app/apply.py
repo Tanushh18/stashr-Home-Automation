@@ -9,7 +9,7 @@ What it does, and nothing else:
   2. renames "Lawnchair" to "Stashr" in the text the person sees (strings.xml in every language; web links untouched); the revenue-share notice is rewritten without any name;
   3. copies launcher-app/overlay/ over the checkout (the Stashr icon and colour).
 
-It only changes data (strings, resources, Gradle constants). It does not touch Lawnchair's Kotlin or Java code. See launcher-app/README.md.
+It changes data (strings, resources, Gradle constants, default settings) and adds Stashr's own Kotlin file (overlay/.../StashrSearch.kt) plus one line registering it. See launcher-app/README.md.
 """
 import pathlib
 import re
@@ -33,6 +33,52 @@ EDITS = [
     ("build.gradle",
      '        versionCode 16_00_02_01_00\n        versionName "${versionDisplayName}"\n',
      '        versionCode((System.getenv("STASHR_VERSION_CODE") ?: "1600020100") as int)\n        versionName(System.getenv("STASHR_VERSION_NAME") ?: "${versionDisplayName}")\n'),
+    # the dock search bar opens Stashr Search (AI, Google, statements, the house) when the Stashr app is installed; otherwise the next provider is used
+    ("lawnchair/res/values/config.xml",
+     '<string name="config_default_qsb_search_provider_id" translatable="false">google</string>',
+     '<string name="config_default_qsb_search_provider_id" translatable="false">stashr_search</string>'),
+    ("lawnchair/src/app/lawnchair/qsb/providers/QsbSearchProvider.kt",
+     "        fun values() = listOf(\n            AppSearch,\n",
+     "        fun values() = listOf(\n            StashrSearch,\n            AppSearch,\n"),
+    # squircle icons (cleaner than the system shape on most phones; changeable in Settings)
+    ("lawnchair/res/values/config.xml", '<string name="config_default_icon_shape" translatable="false">system</string>', '<string name="config_default_icon_shape" translatable="false">squircle</string>'),
+    # a faster, cleaner first start: no icon reload on every launch, no top shadow or scrollbar, no network calls for announcements or nightly updates
+    ("lawnchair/res/values/config.xml", '<bool name="config_default_always_reload_icons">true</bool>', '<bool name="config_default_always_reload_icons">false</bool>'),
+    ("lawnchair/res/values/config.xml", '<bool name="config_default_show_top_shadow">true</bool>', '<bool name="config_default_show_top_shadow">false</bool>'),
+    ("lawnchair/res/values/config.xml", '<bool name="config_default_show_scrollbar">true</bool>', '<bool name="config_default_show_scrollbar">false</bool>'),
+    ("lawnchair/res/values/config.xml", '<bool name="config_default_live_information_enabled">true</bool>', '<bool name="config_default_live_information_enabled">false</bool>'),
+    ("lawnchair/res/values/config.xml", '<bool name="config_default_live_information_show_announcements">true</bool>', '<bool name="config_default_live_information_show_announcements">false</bool>'),
+    ("lawnchair/res/values/config.xml", '<bool name="config_default_enable_nightly_auto_updater">true</bool>', '<bool name="config_default_enable_nightly_auto_updater">false</bool>'),
+    # ---- payments keep working: no Accessibility service ----
+    # Google Pay and other banking apps refuse to run while an accessibility service is switched on. Lawnchair's lock-the-screen gesture
+    # picked the accessibility route first; here it uses Device admin (the same lock, no accessibility) and the service is not declared at all,
+    # so it can never be switched on by mistake. (Other gestures that need it, such as opening the notification shade, simply show a note.)
+    ("lawnchair/src/app/lawnchair/gestures/handlers/SleepGestureHandler.kt",
+     "        SleepMethodRoot(context),\n        SleepMethodPieAccessibility(context),\n        SleepMethodDeviceAdmin(context),\n",
+     "        SleepMethodRoot(context),\n        SleepMethodDeviceAdmin(context),\n"),
+    ("lawnchair/src/app/lawnchair/gestures/handlers/SleepGestureHandler.kt",
+     "SleepMode.ACCESSIBILITY -> methods.filterIsInstance<SleepMethodPieAccessibility>().first()",
+     "SleepMode.ACCESSIBILITY -> methods.filterIsInstance<SleepMethodDeviceAdmin>().first()"),
+    ("lawnchair/AndroidManifest.xml",
+     """        <service
+            android:name="app.lawnchair.LawnchairAccessibilityService"
+            android:exported="false"
+            android:label="@string/derived_app_name"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+
+""",
+     ""),
+    # ---- nothing typed leaves the phone by default: no web suggestions while typing in search (can be switched on in Settings → Search) ----
+    ("lawnchair/src/app/lawnchair/preferences/PreferenceManager.kt",
+     'BoolPref("pref_searchResultStartPageSuggestion", true, recreate)',
+     'BoolPref("pref_searchResultStartPageSuggestion", false, recreate)'),
     # the accent colour a fresh install starts with (the Stashr green); the person can still change it in Settings
     ("lawnchair/res/values/config.xml",
      '<string name="config_default_accent_color" translatable="false">no_default</string>',

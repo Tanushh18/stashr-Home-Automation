@@ -87,7 +87,7 @@ function assess(tx, ctx = {}) {
 
 /* ───────── categories ───────── */
 
-const DEFAULT_CATEGORIES = ["Meta Ads", "Food", "Groceries", "Travel", "Shopping", "Bills & Recharge", "Subscriptions", "Health", "Education", "Rent & Home", "Investments", "Transfers", "Cash", "Salary & Income", "Other", "Uncategorized"];
+const DEFAULT_CATEGORIES = ["Meta Ads", "Food", "Groceries", "Travel", "Shopping", "Bills & Recharge", "Subscriptions", "Health", "Education", "Rent & Home", "Investments", "Transfers", "Cash", "Salary", "Salary & Income", "Other", "Uncategorized"];
 // keyword (lower case, found inside the merchant text) -> category. The owner's own rules win over these.
 const DEFAULT_RULES = [
     ["meta", "Meta Ads"], ["facebook", "Meta Ads"], ["fb ads", "Meta Ads"], ["instagram", "Meta Ads"],
@@ -104,7 +104,7 @@ const DEFAULT_RULES = [
     ["tea", "Food"], ["chai", "Food"], ["coffee", "Food"], ["sweets", "Food"], ["bakery", "Food"], ["juice", "Food"], ["dhaba", "Food"], ["canteen", "Food"], ["tiffin", "Food"], ["dairy", "Food"], ["bbnow", "Groceries"], ["vegetable", "Groceries"],
     ["petrol", "Travel"], ["hpcl", "Travel"], ["bpcl", "Travel"], ["iocl", "Travel"], ["fastag", "Travel"], ["toll", "Travel"], ["parking", "Travel"],
     ["recharge", "Bills & Recharge"], ["broadband", "Bills & Recharge"], ["fibernet", "Bills & Recharge"], ["tata play", "Bills & Recharge"], ["dth", "Bills & Recharge"], ["gym", "Health"],
-    ["atm", "Cash"], ["cash", "Cash"], ["bank charges", "Other"], ["salary", "Salary & Income"], ["interest", "Salary & Income"], ["refund", "Salary & Income"]
+    ["atm", "Cash"], ["cash", "Cash"], ["bank charges", "Other"], ["salary", "Salary"], ["payroll", "Salary"], ["interest", "Salary & Income"], ["refund", "Salary & Income"]
 ];
 
 const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9& ]+/g, " ").replace(/\s+/g, " ").trim();
@@ -187,7 +187,67 @@ function reclearBalanceFlags(all) {
     return out;
 }
 
-const sameTx = (a, b) => (a.ref && b.ref ? a.ref === b.ref : a.date === b.date && a.time === b.time && a.amount === b.amount && norm(a.merchant) === norm(b.merchant));
+/** A reference compared loosely: case, spaces, dashes and leading zeros do not make two references different. */
+const refKey = (r) => String(r || "").toUpperCase().replace(/[^A-Z0-9]/g, "").replace(/^0+/, "");
+const dayGapOf = (a, b) => Math.abs(Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`)) / 86400000;
+const minutesOf = (t) => { const m = /^(\d{1,2}):(\d{2})/.exec(t || ""); return m ? Number(m[1]) * 60 + Number(m[2]) : null; };
+
+/**
+ * Are these two entries the SAME payment seen twice (two messages for one payment, an SMS and a statement line, a re-read inbox)?
+ * Same type and amount, and then: the same reference (loosely) = same payment, different references = two payments. When one of them has no
+ * reference (a statement line), the same balance-after close in time, or the same day with a compatible name and times within 5 minutes, is the same payment.
+ */
+function isTwin(a, b) {
+    if (!a || !b || a.type !== b.type || Math.abs(a.amount - b.amount) >= 0.005) return false;
+    if (a.account && b.account && a.account !== b.account) return false;
+    if (a.source === "Statement" && b.source === "Statement") return false;     // two lines of the bank's own statement are two payments
+    const ra = refKey(a.ref), rb = refKey(b.ref);
+    if (ra && rb) return ra === rb;                 // two different references are two payments, whatever else matches
+    if (a.balance != null && b.balance != null && Math.abs(a.balance - b.balance) < 0.005 && dayGapOf(a.date, b.date) <= 1) {
+        const ta0 = minutesOf(a.time), tb0 = minutesOf(b.time);
+        if (ta0 == null || tb0 == null || Math.abs(ta0 - tb0) <= 5) return true;     // same balance-after, and not hours apart (debit, credit, debit can repeat a balance)
+    }
+    if (a.date !== b.date) return false;
+    const ta = minutesOf(a.time), tb = minutesOf(b.time);
+    if (ta != null && tb != null && Math.abs(ta - tb) > 5) return false;
+    const na = norm(a.merchant), nb = norm(b.merchant);
+    return !na || !nb || na === nb || na.includes(nb) || nb.includes(na);
+}
+
+const sameTx = (a, b) => isTwin(a, b) || (a.ref && b.ref ? a.ref === b.ref : a.date === b.date && a.time === b.time && a.amount === b.amount && norm(a.merchant) === norm(b.merchant));
+
+const RANK = { Verified: 5, Confirmed: 4, Unverified: 3, Flagged: 1, "Not in statement": 0, Mismatch: 0 };
+const richness = (t) => (RANK[t.status] ?? 2) * 10 + (t.ref ? 3 : 0) + (t.time ? 2 : 0) + (t.balance != null ? 1 : 0) + (t.source === "Manual" ? 4 : 0) + (t.category && t.category !== "Uncategorized" ? 1 : 0);
+
+/**
+ * Finds entries that are repeats of another. -> [{ keep: tx, remove: [tx...] }]. The best one of a group stays (verified by the bank,
+ * then confirmed by the owner, then the one with most detail); what is only on a removed one (a reference, a time, a category) is
+ * handed to the kept one in `fill`. Nothing is removed here: the caller decides.
+ */
+function findDuplicates(all) {
+    const rows = all.filter((t) => t.date && t.amount > 0);
+    const seen = new Set(), out = [];
+    rows.forEach((t, i) => {
+        if (seen.has(i)) return;
+        const group = [t];
+        for (let j = i + 1; j < rows.length; j++) if (!seen.has(j) && group.some((g) => isTwin(g, rows[j]))) { group.push(rows[j]); seen.add(j); }
+        if (group.length < 2) return;
+        seen.add(i);
+        group.sort((a, b) => richness(b) - richness(a));
+        const [keep, ...remove] = group;
+        const fill = {};
+        for (const r of remove) for (const k of ["ref", "time", "balance", "account", "method"]) if ((keep[k] === "" || keep[k] == null) && !fill[k] && r[k] !== "" && r[k] != null) fill[k] = r[k];
+        if (keep.category === "Uncategorized") { const c = remove.find((r) => r.category && r.category !== "Uncategorized"); if (c) fill.category = c.category; }
+        out.push({ keep, remove, fill });
+    });
+    return out;
+}
+
+/* ───────── salary ───────── */
+
+const SALARY_WORDS = /\b(salary|sal|payroll|stipend|wages?)\b/i;
+/** A credit that is the salary: the owner's own rule says so, or the text has "salary"/"payroll"…; a manual entry may say so too. */
+const isSalary = (t) => t && t.type === "Credit" && !DOUBTFUL.includes(t.status) && (t.category === "Salary" || SALARY_WORDS.test(`${t.merchant || ""} ${t.note || ""}`));
 
 /** Entries that are not counted in the totals until the owner decides: doubtful messages, and rows the bank statement did not confirm. */
 const DOUBTFUL = ["Flagged", "Not in statement", "Mismatch"];
@@ -458,4 +518,4 @@ function reconcile(sheetRows, stmt, userRules = [], opts = {}) {
         closingBalance: stmt.length ? stmt[stmt.length - 1].balance : null, balanceBreaks: breaks.slice(0, 20), balanceBreakCount: breaks.length } };
 }
 
-module.exports = { vpaOf, makeTx, txToRow, assess, bankSender, ist, parseDate, parseSms, categorize, ruleKey, norm, DEFAULT_CATEGORIES, DEFAULT_RULES, HEADERS, rowFromTx, txFromRow, sameTx, reclearBalanceFlags, DOUBTFUL, limitStatement, summarize, parseCsv, parseXlsx, statementRows, reconcile, round2 };
+module.exports = { vpaOf, makeTx, txToRow, assess, bankSender, ist, parseDate, parseSms, categorize, ruleKey, norm, DEFAULT_CATEGORIES, DEFAULT_RULES, HEADERS, rowFromTx, txFromRow, sameTx, isTwin, refKey, findDuplicates, isSalary, reclearBalanceFlags, DOUBTFUL, limitStatement, summarize, parseCsv, parseXlsx, statementRows, reconcile, round2 };

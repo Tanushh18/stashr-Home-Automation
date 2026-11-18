@@ -3,6 +3,7 @@ import { Linking, View } from "react-native";
 import { Page } from "../components/kit";
 import { Box, Btn, Dim, Row, useAct } from "../components/home/h";
 import { activeServer } from "../lib/api";
+import { router } from "expo-router";
 
 /** The Stashr apps and where to download them (the server serves the newest build of each). */
 const APPS = [
@@ -21,6 +22,10 @@ export default function Apps() {
   return (
     <Page title="Apps" subtitle="Download or update any Stashr app. Android will ask you to confirm the install.">
       <View style={{ gap: 14 }}>
+        <Box title="Phone setup" subtitle="Make the phone fast and keep payments working">
+          <Dim>A checklist: Home app, accessibility off (for Google Pay), battery, unused apps, animations.</Dim>
+          <Row><Btn kind="primary" label="Open the checklist" onPress={() => router.push("/phone-setup")} /></Row>
+        </Box>
         {APPS.map((a) => (
           <Box key={a.key} title={a.name} subtitle={a.for}>
             <Dim>{a.text}</Dim>

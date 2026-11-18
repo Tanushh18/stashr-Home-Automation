@@ -21,9 +21,9 @@ export const widgetCount = () => {
   try { return Number(native.widgetCount()) || 0; } catch (e) { return 0; }
 };
 
-/** Placed widgets per kind: { home, scenes, tv, quick, money, net }. */
+/** Placed widgets per kind: { home, scenes, tv, quick, money, net, search }. */
 export const widgetCounts = () => {
-  const none = { home: 0, scenes: 0, tv: 0, quick: 0, money: 0, net: 0 };
+  const none = { home: 0, scenes: 0, tv: 0, quick: 0, money: 0, net: 0, search: 0 };
   if (!native) return none;
   try { return { ...none, ...(native.widgetCounts() || {}) }; } catch (e) { return none; }
 };
