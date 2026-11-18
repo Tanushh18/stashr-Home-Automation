@@ -31,13 +31,21 @@ describe("one payment is never shown twice", () => {
     test("same reference written differently", () => {
         expect(ex.isTwin(tx({ date: "2026-10-21", type: "Debit", amount: 100, ref: "0629482059838" }), tx({ date: "2026-10-21", type: "Debit", amount: 100, ref: "629482059838" }))).toBe(true);
     });
-    test("two messages with different references but the same balance-after are one payment", () => {
+    test("different references are never merged, even with the same balance", () => {
         const a = tx({ date: "2026-10-21", time: "19:42", type: "Debit", amount: 100, ref: "111111111111", balance: 2507.75 });
         const b = tx({ date: "2026-10-21", time: "19:43", type: "Debit", amount: 100, ref: "222222222222", balance: 2507.75 });
-        expect(ex.isTwin(a, b)).toBe(true);
+        expect(ex.isTwin(a, b)).toBe(false);
+    });
+    test("a statement line with the same balance-after is the SMS's twin; hours apart it is not", () => {
+        const sms = tx({ date: "2026-10-21", time: "19:42", type: "Debit", amount: 100, ref: "111111111111", balance: 900, merchant: "Shop" });
+        expect(ex.isTwin(sms, tx({ date: "2026-10-21", type: "Debit", amount: 100, balance: 900, merchant: "UPI shop x" }))).toBe(true);
+        expect(ex.isTwin(sms, tx({ date: "2026-10-21", time: "09:00", type: "Debit", amount: 100, balance: 900, merchant: "Other" }))).toBe(false);
     });
     test("an SMS and a statement line (no time, no reference) are one payment", () => {
         expect(ex.isTwin(tx({ date: "2026-10-21", time: "19:42", type: "Debit", amount: 100, merchant: "Meta Verifie", ref: "629482059838" }), tx({ date: "2026-10-21", type: "Debit", amount: 100, merchant: "Meta Verified", source: "Statement" }))).toBe(true);
+    });
+    test("two statement lines are never twins of each other", () => {
+        expect(ex.isTwin(tx({ date: "2026-10-21", type: "Debit", amount: 100, merchant: "X", source: "Statement" }), tx({ date: "2026-10-21", type: "Debit", amount: 100, merchant: "X", source: "Statement", ref: "ABC123" }))).toBe(false);
     });
     test("two real payments of the same amount stay two", () => {
         const a = tx({ date: "2026-10-21", time: "10:00", type: "Debit", amount: 100, ref: "111111111111", balance: 900 });

@@ -49,7 +49,8 @@ class StashrWidgetModule : Module() {
         "tv" to Board.ids(context, StashrTvWidget::class.java).size,
         "quick" to Board.ids(context, StashrQuickWidget::class.java).size,
         "money" to Board.ids(context, StashrMoneyWidget::class.java).size,
-        "net" to Board.ids(context, StashrNetWidget::class.java).size
+        "net" to Board.ids(context, StashrNetWidget::class.java).size,
+        "search" to Board.ids(context, StashrSearchWidget::class.java).size
       )
     }
 

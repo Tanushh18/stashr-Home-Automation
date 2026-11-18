@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Stashr Search bar for the home screen: one tap opens Stashr Search (screens, statements, the house, Google, AI). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+  android:id="@+id/widget_root"
+  android:layout_width="match_parent"
+  android:layout_height="match_parent"
+  android:gravity="center_vertical"
+  android:orientation="horizontal"
+  android:background="@drawable/stashr_widget_bg"
+  android:paddingStart="16dp"
+  android:paddingEnd="16dp">
+  <ImageView
+    android:layout_width="8dp"
+    android:layout_height="8dp"
+    android:layout_marginEnd="10dp"
+    android:src="@drawable/stashr_widget_dot"
+    android:importantForAccessibility="no" />
+  <TextView
+    android:id="@+id/search_hint"
+    android:layout_width="0dp"
+    android:layout_height="wrap_content"
+    android:layout_weight="1"
+    android:text="@string/stashr_search_hint"
+    android:textColor="#F2F0E6"
+    android:textSize="15sp"
+    android:maxLines="1" />
+  <TextView
+    android:id="@+id/search_ask"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:background="@drawable/stashr_widget_tile"
+    android:paddingStart="8dp"
+    android:paddingEnd="8dp"
+    android:paddingTop="3dp"
+    android:paddingBottom="3dp"
+    android:text="@string/stashr_search_ai"
+    android:textColor="#F5C86A"
+    android:textSize="12sp"
+    android:fontFamily="monospace"
+    android:textStyle="bold" />
+</LinearLayout>

@@ -194,17 +194,19 @@ const minutesOf = (t) => { const m = /^(\d{1,2}):(\d{2})/.exec(t || ""); return 
 
 /**
  * Are these two entries the SAME payment seen twice (two messages for one payment, an SMS and a statement line, a re-read inbox)?
- * Same type and amount, and then any one of: the same reference (loosely); the same balance-after within a day (a balance after a payment
- * belongs to that payment alone, even when the two messages quote different reference numbers); or, with no reference to tell them apart,
- * the same day, a compatible name and times within 5 minutes. Two payments with DIFFERENT references and balances stay two.
+ * Same type and amount, and then: the same reference (loosely) = same payment, different references = two payments. When one of them has no
+ * reference (a statement line), the same balance-after close in time, or the same day with a compatible name and times within 5 minutes, is the same payment.
  */
 function isTwin(a, b) {
     if (!a || !b || a.type !== b.type || Math.abs(a.amount - b.amount) >= 0.005) return false;
     if (a.account && b.account && a.account !== b.account) return false;
+    if (a.source === "Statement" && b.source === "Statement") return false;     // two lines of the bank's own statement are two payments
     const ra = refKey(a.ref), rb = refKey(b.ref);
-    if (ra && rb && ra === rb) return true;
-    if (a.balance != null && b.balance != null && Math.abs(a.balance - b.balance) < 0.005 && dayGapOf(a.date, b.date) <= 1) return true;
-    if (ra && rb) return false;
+    if (ra && rb) return ra === rb;                 // two different references are two payments, whatever else matches
+    if (a.balance != null && b.balance != null && Math.abs(a.balance - b.balance) < 0.005 && dayGapOf(a.date, b.date) <= 1) {
+        const ta0 = minutesOf(a.time), tb0 = minutesOf(b.time);
+        if (ta0 == null || tb0 == null || Math.abs(ta0 - tb0) <= 5) return true;     // same balance-after, and not hours apart (debit, credit, debit can repeat a balance)
+    }
     if (a.date !== b.date) return false;
     const ta = minutesOf(a.time), tb = minutesOf(b.time);
     if (ta != null && tb != null && Math.abs(ta - tb) > 5) return false;

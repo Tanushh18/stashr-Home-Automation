@@ -8,3 +8,7 @@ Android only. Two things on the phone's home screen, for any launcher (Stashr La
   background, only while a widget is on the home screen (`src/lib/homeWidget.js`).
 - **Long-press shortcuts** on the Stashr icon (`setShortcuts`): Smart home, TV remote, Camera, Money, Passwords. Each opens a
   `stashr://` link inside this app only.
+
+- **Stashr Search widget** (`StashrSearchWidget`): a search bar for the home screen (any launcher, Stashr Launcher included). A tap opens
+  `stashr://search`; "ASK AI" opens the same screen. It draws nothing from the network and holds no token. Long-press the home screen →
+  Widgets → Stashr Search.

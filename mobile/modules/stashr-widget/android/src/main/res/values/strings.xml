@@ -11,6 +11,10 @@
   <string name="stashr_quick_label">Stashr Quick actions</string>
   <string name="stashr_quick_title">STASHR · QUICK</string>
   <string name="stashr_quick_description">Ask Stashr, camera photo, Money and Passwords</string>
+  <string name="stashr_search_label">Stashr Search</string>
+  <string name="stashr_search_hint">Search or ask anything…</string>
+  <string name="stashr_search_ai">ASK AI</string>
+  <string name="stashr_search_description">A search bar for your home screen: Stashr screens, bank statement lines, the house, Google and AI answers</string>
   <string name="stashr_money_label">Stashr Money</string>
   <string name="stashr_money_title">STASHR · MONEY</string>
   <string name="stashr_money_description">Spent today and this month, the top category and entries to check</string>
