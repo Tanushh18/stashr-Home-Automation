@@ -481,6 +481,11 @@ const processStatement = async ({ owner, s, st, copy, bytes, table = null, lines
     saveLines: lines ? async () => {} : ({ lines: got }) => saved.saveStatement(owner, dataKey, { filename, month, lines: got })     // kept (encrypted) so it can be searched later (not again when these ARE the saved lines)
 });
     if (st.mode) await removeRepeats(st, copy).catch(() => 0);     // a statement line and an old message for one payment never stay as two
+    // the statement has now settled these days: show whether the balance matches the bank straight after
+    try {
+        const today = ex.ist(Date.now());
+        done.report.balance = balance.balanceReport(await st.list(), await saved.loadLines(owner, dataKey, {}), { month: (month || today.slice(0, 7)), today });
+    } catch (e) { /* the check itself already succeeded; the balance card loads it on its own */ }
     return done;
 };
 

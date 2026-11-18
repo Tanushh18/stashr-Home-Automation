@@ -10,7 +10,7 @@ function tone(theme, t) { return { ok: theme.ok, bad: theme.danger, warn: theme.
 
 export function StatusBadge({ status }) {
   const { theme } = useTheme();
-  return <Badge text={status === "Verified" ? "Verified ✓" : status || "Unverified"} color={tone(theme, status)} />;
+  return <Badge text={status === "Verified" ? "Confirmed by statement ✓" : status || "Unverified"} color={tone(theme, status)} />;
 }
 
 /** Choose a category for one entry; "remember" makes it the rule for that merchant. */
