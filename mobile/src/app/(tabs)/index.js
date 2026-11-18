@@ -122,6 +122,8 @@ export default function Vault() {
         </View>
         <IconButton name={selecting ? "close" : "check"} active={selecting} onPress={() => (selecting ? stopSelecting() : setSelecting(true))} />
         <View style={{ width: 10 }} />
+        <IconButton name="search" onPress={() => router.push("/search")} />
+        <View style={{ width: 10 }} />
         <IconButton name="folder" onPress={() => router.push("/projects")} />
         <View style={{ width: 10 }} />
         <IconButton name="lock" onPress={lock} />

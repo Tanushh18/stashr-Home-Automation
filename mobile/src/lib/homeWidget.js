@@ -17,6 +17,7 @@ export { widgetSupported, widgetCount, widgetCounts, actionKey, requestPin, pinS
 
 /** Long-press shortcuts. Each link is a route in this app; the lock screen still comes first when the vault is locked. */
 export const SHORTCUTS = [
+  { id: "search", label: "Search", long: "Search and ask AI", url: "stashr://search", icon: "home" },
   { id: "home", label: "Stashr Home", long: "Open Stashr Home", url: "stashr://stashr-home", icon: "home" },
   { id: "tv", label: "TV remote", long: "TV and devices", url: "stashr://home?tab=devices", icon: "tv" },
   { id: "camera", label: "Camera", long: "Camera and alerts", url: "stashr://home?tab=security", icon: "camera" },
@@ -25,7 +26,7 @@ export const SHORTCUTS = [
 ];
 
 /** Paths the shortcuts and the widget open; used by the root layout to resume them after the unlock. */
-export const LINK_PATHS = ["/home", "/stashr-home", "/money", "/action", "/"];
+export const LINK_PATHS = ["/home", "/stashr-home", "/money", "/search", "/action", "/"];
 
 export function installShortcuts() {
   return setShortcuts(SHORTCUTS);
@@ -51,7 +52,7 @@ let extras = null;
 async function loadExtras(dash, counts) {
   const out = {};
   if (counts.money > 0) {
-    try { out.money = moneyLines(await money.list(), todayIndia()); } catch (e) { out.money = extras ? extras.money : null; }
+    try { out.money = moneyLines(await money.list(), todayIndia(), await money.balance().catch(() => null)); } catch (e) { out.money = extras ? extras.money : null; }
   }
   if (counts.net > 0) {
     try {
