@@ -49,6 +49,36 @@ EDITS = [
     ("lawnchair/res/values/config.xml", '<bool name="config_default_live_information_enabled">true</bool>', '<bool name="config_default_live_information_enabled">false</bool>'),
     ("lawnchair/res/values/config.xml", '<bool name="config_default_live_information_show_announcements">true</bool>', '<bool name="config_default_live_information_show_announcements">false</bool>'),
     ("lawnchair/res/values/config.xml", '<bool name="config_default_enable_nightly_auto_updater">true</bool>', '<bool name="config_default_enable_nightly_auto_updater">false</bool>'),
+    # ---- payments keep working: no Accessibility service ----
+    # Google Pay and other banking apps refuse to run while an accessibility service is switched on. Lawnchair's lock-the-screen gesture
+    # picked the accessibility route first; here it uses Device admin (the same lock, no accessibility) and the service is not declared at all,
+    # so it can never be switched on by mistake. (Other gestures that need it, such as opening the notification shade, simply show a note.)
+    ("lawnchair/src/app/lawnchair/gestures/handlers/SleepGestureHandler.kt",
+     "        SleepMethodRoot(context),\n        SleepMethodPieAccessibility(context),\n        SleepMethodDeviceAdmin(context),\n",
+     "        SleepMethodRoot(context),\n        SleepMethodDeviceAdmin(context),\n"),
+    ("lawnchair/src/app/lawnchair/gestures/handlers/SleepGestureHandler.kt",
+     "SleepMode.ACCESSIBILITY -> methods.filterIsInstance<SleepMethodPieAccessibility>().first()",
+     "SleepMode.ACCESSIBILITY -> methods.filterIsInstance<SleepMethodDeviceAdmin>().first()"),
+    ("lawnchair/AndroidManifest.xml",
+     """        <service
+            android:name="app.lawnchair.LawnchairAccessibilityService"
+            android:exported="false"
+            android:label="@string/derived_app_name"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+
+""",
+     ""),
+    # ---- nothing typed leaves the phone by default: no web suggestions while typing in search (can be switched on in Settings → Search) ----
+    ("lawnchair/src/app/lawnchair/preferences/PreferenceManager.kt",
+     'BoolPref("pref_searchResultStartPageSuggestion", true, recreate)',
+     'BoolPref("pref_searchResultStartPageSuggestion", false, recreate)'),
     # the accent colour a fresh install starts with (the Stashr green); the person can still change it in Settings
     ("lawnchair/res/values/config.xml",
      '<string name="config_default_accent_color" translatable="false">no_default</string>',

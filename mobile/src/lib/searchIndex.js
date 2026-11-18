@@ -7,6 +7,7 @@ export const SCREENS = [
   { title: "Photos", sub: "Photo cloud and albums", path: "/albums", words: "photo picture album gallery" },
   { title: "Projects", sub: "Servers, env, deploys", path: "/projects", words: "project server env deploy github" },
   { title: "WhatsApp sender", sub: "Send messages", path: "/whatsapp", words: "whatsapp message send lead" },
+  { title: "Phone setup", sub: "Fast phone checklist, default Home app, payments", path: "/phone-setup", words: "setup fast speed slow battery accessibility gpay payment default home launcher cleanup" },
   { title: "Apps", sub: "Download or update Stashr apps and the launcher", path: "/apps", words: "app update launcher download install" },
   { title: "Monitoring", sub: "Service health", path: "/monitoring", words: "monitor health uptime incident" },
 ];
