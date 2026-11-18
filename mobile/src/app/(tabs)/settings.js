@@ -4,7 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import Constants from "expo-constants";
 import * as Updates from "expo-updates";
-import * as FileSystem from "expo-file-system/legacy";
+import { downloadApk, installApk } from "../../lib/apkInstall";
 import { LinearGradient } from "expo-linear-gradient";
 import Aurora from "../../components/Aurora";
 import Icon from "../../components/Icon";
@@ -89,6 +89,7 @@ export default function Settings() {
   const [updateStatus, setUpdateStatus] = useState("Not checked this session");
   const [updateProgress, setUpdateProgress] = useState(null);     // { pct, got, total } while the APK downloads
   const [updateBusy, setUpdateBusy] = useState(false);
+  const [readyApk, setReadyApk] = useState(null);                  // { uri, versionCode } once an APK is downloaded and checked
   const releaseInfo = getReleaseInfo();
 
   useEffect(() => {
@@ -124,41 +125,31 @@ export default function Settings() {
 
   const mb = (n) => (Number(n) / (1024 * 1024)).toFixed(1);
 
-  /** Downloads the APK with a live percentage, checks that all of it arrived, and opens Android's installer. */
+  /** Downloads the APK (or reuses a finished download) with a live percentage, checks that all of it arrived and opens Android's installer. */
+  const openInstaller = async (uri, versionCode) => {
+    try {
+      const r = await installApk(uri);
+      setUpdateStatus(r === "installer" ? `Build ${versionCode} is ready. Confirm the install on Android's screen. If nothing appears, press "Install downloaded update".` : "Allow Stashr to install apps on the screen that opened, come back and press \"Install downloaded update\".");
+    } catch (error) {
+      setUpdateStatus(`Could not open the installer: ${error.message || "unknown error"}. Press "Install downloaded update" to try again.`);
+    }
+  };
+
   const downloadUpdate = async (manifest) => {
     setUpdateBusy(true);
     const total = Number(manifest.sizeBytes) || 0;
-    let lastPct = -1, lastAt = Date.now(), lastBytes = 0, speed = "";
     try {
-      const destination = `${FileSystem.cacheDirectory}stashr-update-${manifest.versionCode}.apk`;
-      try { await FileSystem.deleteAsync(destination, { idempotent: true }); } catch (_) { /* nothing left over */ }
       setUpdateProgress({ pct: 0, got: 0, total });
       setUpdateStatus(`Starting the download of build ${manifest.versionCode}…`);
-      const task = FileSystem.createDownloadResumable(manifest.downloadUrl, destination, {}, ({ totalBytesWritten, totalBytesExpectedToWrite }) => {
-        const expected = totalBytesExpectedToWrite > 0 ? totalBytesExpectedToWrite : total;
-        const pct = expected > 0 ? Math.min(99, Math.floor((totalBytesWritten / expected) * 100)) : 0;
-        const now = Date.now();
-        if (now - lastAt >= 1000) { speed = ` · ${((((totalBytesWritten - lastBytes) / (now - lastAt)) * 1000) / (1024 * 1024)).toFixed(1)} MB/s`; lastAt = now; lastBytes = totalBytesWritten; }
-        if (pct !== lastPct) {
-          lastPct = pct;
-          setUpdateProgress({ pct, got: totalBytesWritten, total: expected });
-          setUpdateStatus(`Downloading build ${manifest.versionCode}: ${pct}% (${mb(totalBytesWritten)} of ${expected ? mb(expected) : "?"} MB)${speed}`);
-        }
+      const uri = await downloadApk("stashr", manifest, (p) => {
+        setUpdateProgress(p);
+        setUpdateStatus(`Downloading build ${manifest.versionCode}: ${p.pct}% (${mb(p.got)} of ${p.total ? mb(p.total) : "?"} MB)`);
       });
-      const downloaded = await task.downloadAsync();
-      if (!downloaded || downloaded.status !== 200) throw new Error(`the server answered HTTP ${downloaded ? downloaded.status : "nothing"}`);
-      setUpdateProgress({ pct: 100, got: total, total });
-      setUpdateStatus("Download finished (100%). Checking the file…");
-      const info = await FileSystem.getInfoAsync(downloaded.uri);
-      if (!info.exists || !info.size) throw new Error("the downloaded file is missing");
-      if (total && info.size !== total) throw new Error(`incomplete: ${mb(info.size)} of ${mb(total)} MB arrived`);
-      setUpdateStatus(`File checked: ${mb(info.size)} MB, the size matches. Opening Android's installer…`);
-      const contentUri = await FileSystem.getContentUriAsync(downloaded.uri);
-      await Linking.openURL(contentUri);
-      setUpdateStatus(`Build ${manifest.versionCode} downloaded (100%). Confirm the install on Android's screen.`);
-      toast("APK downloaded. Confirm installation in Android to update Stashr.", "info");
+      setReadyApk({ uri, versionCode: manifest.versionCode });
+      setUpdateStatus(`File checked: build ${manifest.versionCode}, the size matches. Opening Android's installer…`);
+      await openInstaller(uri, manifest.versionCode);
     } catch (error) {
-      setUpdateStatus(`Download failed${lastPct >= 0 ? ` at ${lastPct}%` : ""}: ${error.message || "unknown error"}. Tap Check for updates to try again.`);
+      setUpdateStatus(`Download failed: ${error.message || "unknown error"}. Tap Check for updates to try again.`);
       toast(error.message || "Could not download the update", "error");
       try { await Linking.openURL(manifest.downloadUrl); } catch (_) { /* no browser either */ }
     } finally {
@@ -430,6 +421,7 @@ export default function Settings() {
                 <Text style={{ color: theme.textMuted, fontFamily: theme.font.bodySemi, fontSize: 12 }}>{`${updateProgress.pct}%${updateProgress.total ? ` · ${mb(updateProgress.got)} of ${mb(updateProgress.total)} MB` : ""}`}</Text>
               </View>
             ) : null}
+            {readyApk ? <Row icon="download" title="Install downloaded update" subtitle={`Build ${readyApk.versionCode} is already on this phone: opens Android's installer, no new download`} onPress={() => openInstaller(readyApk.uri, readyApk.versionCode)} /> : null}
             <Row icon="phone" title="Open the website" subtitle="Same vault, bigger screen" onPress={() => Linking.openURL(WEBSITE)} />
           </Section>
 
