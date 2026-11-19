@@ -486,11 +486,18 @@ async function brainView(req, s) {
     const lines = await saved.loadLines(owner, await req.rootUser.getDataKey(), {});
     const insights = brain.analyze(rows, lines, { today });
     const rec = plan.recurring(rows, { today });
+    const odd = plan.anomalies(rows, { today });
+    const high = odd.filter((a) => a.severity === "high");
+    if (high.length) {                                       // a likely double charge is never "healthy"
+        if (insights.verdict === "healthy") insights.verdict = "watch";
+        insights.reasons = insights.reasons.filter((r) => !/^Nothing unusual/.test(r)).concat(high.slice(0, 2).map((a) => a.text));
+        insights.actions.unshift({ id: "double", text: "Check the possible double charge in your bank app and ask the merchant for a refund if it is one." });
+    }
     const month = today.slice(0, 7), done = insights.months.filter((m) => m.month < month);
     const monthlyNet = done.length ? done.reduce((n, m) => n + m.net, 0) / done.length : 0;
     return {
         rows, lines, today, insights, recurring: rec,
-        anomalies: plan.anomalies(rows, { today }),
+        anomalies: odd,
         budgets: plan.budgetStatus(rows, s.budgets || {}, month),
         forecast: plan.salaryForecast(balance.salaryCycle(rows, today), rec, { today }),
         goals: plan.goalProgress(s.goals || [], monthlyNet),
@@ -507,6 +514,20 @@ router.get("/expenses/insights", authenticate, async (req, res) => {
         const { rows, lines, today, insights, ...extras } = v;
         return res.json({ ...insights, ...extras });
     } catch (e) { return fail(res, e, "Could not work out the insights."); }
+});
+
+// A short written summary of the month. ?ai=1 lets a connected AI (Groq, Claude, OpenAI, Gemini) rephrase it; only category totals are sent, never names or references.
+router.get("/expenses/summary", authenticate, async (req, res) => {
+    try {
+        res.set("Cache-Control", "no-store");
+        const v = await brainView(req, await settingsOf(req.rootUser._id));
+        const d = plan.digest({ ...v.insights, anomalies: v.anomalies, budgets: v.budgets, forecast: v.forecast });
+        if (req.query.ai === "1" && require("../utils/aiAssistant").available().length) {
+            try { const r = await require("../utils/aiAssistant").ask(`Rewrite as 3 friendly sentences of money advice, keep every number: ${d.compact}`); return res.json({ text: r.answer, plain: d.text, ai: r.label }); }
+            catch (e) { /* the written digest still answers */ }
+        }
+        return res.json({ text: d.text, plain: d.text, ai: "" });
+    } catch (e) { return fail(res, e, "Could not write the summary."); }
 });
 
 router.put("/expenses/budgets", authenticate, writeLimiter, async (req, res) => {

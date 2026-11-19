@@ -99,7 +99,7 @@ const DEFAULT_RULES = [
     ["netflix", "Subscriptions"], ["spotify", "Subscriptions"], ["hotstar", "Subscriptions"], ["prime video", "Subscriptions"], ["youtube", "Subscriptions"], ["google play", "Subscriptions"], ["google one", "Subscriptions"], ["apple", "Subscriptions"], ["openai", "Subscriptions"], ["anthropic", "Subscriptions"], ["render", "Subscriptions"], ["github", "Subscriptions"], ["namecheap", "Subscriptions"], ["godaddy", "Subscriptions"],
     ["pharm", "Health"], ["apollo", "Health"], ["medic", "Health"], ["hospital", "Health"], ["clinic", "Health"], ["1mg", "Health"], ["lab", "Health"], ["dental", "Health"], ["doctor", "Health"],
     ["school", "Education"], ["college", "Education"], ["course", "Education"], ["udemy", "Education"], ["coaching", "Education"], ["fees", "Education"],
-    ["rent", "Rent & Home"], ["maintenance", "Rent & Home"], ["society", "Rent & Home"], ["furniture", "Rent & Home"],
+    ["rent", "Rent & Home"], ["landlord", "Rent & Home"], ["house owner", "Rent & Home"], ["pg ", "Rent & Home"], ["maintenance", "Rent & Home"], ["society", "Rent & Home"], ["furniture", "Rent & Home"],
     ["zerodha", "Investments"], ["groww", "Investments"], ["upstox", "Investments"], ["mutual", "Investments"], ["sip", "Investments"], ["lic", "Investments"], ["insurance", "Investments"],
     ["tea", "Food"], ["chai", "Food"], ["coffee", "Food"], ["sweets", "Food"], ["bakery", "Food"], ["juice", "Food"], ["dhaba", "Food"], ["canteen", "Food"], ["tiffin", "Food"], ["dairy", "Food"], ["bbnow", "Groceries"], ["vegetable", "Groceries"],
     ["petrol", "Travel"], ["hpcl", "Travel"], ["bpcl", "Travel"], ["iocl", "Travel"], ["fastag", "Travel"], ["toll", "Travel"], ["parking", "Travel"],

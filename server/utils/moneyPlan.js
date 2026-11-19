@@ -28,7 +28,7 @@ function anomalies(rows, { today }) {
         const a = recent[i], b = recent[j];
         if (a.date !== b.date || a.amount !== b.amount || !who(a) || who(a) !== who(b) || (a.ref && a.ref === b.ref)) continue;
         const ma = minutes(a), mb = minutes(b);
-        if (ma != null && mb != null && Math.abs(ma - mb) <= 10) out.push({ kind: "double", severity: "high", index: b.index, text: `₹${a.amount} to ${a.merchant || "the same payee"} twice within ${Math.abs(ma - mb)} min on ${a.date}.` });
+        if (ma != null && mb != null && Math.abs(ma - mb) <= 10) out.push({ kind: "double", severity: "high", index: b.index, text: `₹${a.amount} to ${a.merchant || "the same payee"} twice ${Math.abs(ma - mb) === 0 ? "at the same minute" : `${Math.abs(ma - mb)} min apart`} on ${a.date}: one may be a double charge.` });
     }
     // very large: far above the usual payment
     const amounts = debits.map((t) => t.amount);
@@ -194,6 +194,12 @@ function ask(question, rows, { today, categories = ex.DEFAULT_CATEGORIES }) {
         const top = spendRows(inMonth).sort((a, b) => b.amount - a.amount).slice(0, 3);
         return top.length ? { answer: `Your biggest payments ${label}: ` + top.map((t) => `₹${t.amount} to ${t.merchant || "someone"} (${t.date})`).join("; ") + ".", rows: top.map((t) => t.index) } : { answer: `No payments ${label}.` };
     }
+    if (/where|breakdown|category|categories|what.*(spend|spent)|split/.test(q) && !cat) {
+        const by = new Map();
+        for (const t of spendRows(inMonth)) by.set(t.category || "Uncategorized", r2((by.get(t.category || "Uncategorized") || 0) + t.amount));
+        const top = [...by].sort((a, b) => b[1] - a[1]).slice(0, 4), total = sum(spendRows(inMonth));
+        return top.length ? { answer: `Of ₹${total} spent ${label}: ` + top.map(([c, v]) => `${c} ₹${v} (${Math.round((v / total) * 100)}%)`).join(", ") + "." } : { answer: `No spending ${label}.` };
+    }
     if (/income|earn|received|credited|salary/.test(q)) { const c = inMonth.filter((t) => t.type === "Credit"); return { answer: `You received ₹${sum(c)} ${label} (${c.length} credit${c.length === 1 ? "" : "s"}).` }; }
     if (/save|saving|left|profit|loss|net/.test(q)) { const inc = sum(inMonth.filter((t) => t.type === "Credit")), sp = sum(spendRows(inMonth)); return { answer: `${label[0].toUpperCase() + label.slice(1)}: ₹${inc} in, ₹${sp} spent, so ${inc - sp >= 0 ? "a profit of" : "a loss of"} ₹${Math.abs(r2(inc - sp))}.` }; }
     if (cat) { const c = inMonth.filter((t) => t.type === "Debit" && t.category === cat); return { answer: `You spent ₹${sum(c)} on ${cat} ${label} (${c.length} payment${c.length === 1 ? "" : "s"}).`, rows: c.map((t) => t.index) }; }
@@ -203,4 +209,23 @@ function ask(question, rows, { today, categories = ex.DEFAULT_CATEGORIES }) {
     return { answer: null };
 }
 
-module.exports = { anomalies, recurring, budgetStatus, dueAlerts, salaryForecast, goalProgress, metaAds, suggestCategories, ask };
+/**
+ * A short plain-English digest of the month from the brain's own numbers (always available, no AI needed), and a compact line of totals
+ * (categories and amounts only: no names, no references) that an optional AI can rephrase.
+ */
+function digest(v) {
+    const m = v.thisMonth, parts = [];
+    parts.push(v.headline);
+    const top = m.byCategory.slice(0, 3).filter((c) => c.amount > 0);
+    if (top.length) parts.push(`Most went to ${top.map((c) => `${c.category} (₹${c.amount})`).join(", ")}.`);
+    if (v.average && v.average.spend && m.spend) parts.push(`That is ${Math.round((m.spend / v.average.spend) * 100)}% of your usual month's spending (₹${Math.round(v.average.spend)}).`);
+    if (v.forecast) parts.push(v.forecast.status === "short" ? "You are likely to run short before the next salary." : `You can safely spend about ₹${Math.round(v.forecast.safePerDay)} a day until the next salary.`);
+    if (v.anomalies && v.anomalies.length) parts.push(`${v.anomalies.length} payment${v.anomalies.length === 1 ? "" : "s"} look unusual.`);
+    const bad = (v.budgets || []).filter((b) => b.level !== "ok");
+    if (bad.length) parts.push(`Budget watch: ${bad.map((b) => `${b.category} ${b.pct}%`).join(", ")}.`);
+    parts.push(v.verdict === "healthy" ? "Overall: healthy." : v.verdict === "watch" ? "Overall: keep an eye on it." : "Overall: needs attention.");
+    const compact = `Month ${m.month}: in ₹${m.income}, spent ₹${m.spend}, net ₹${m.net}. ` + top.map((c) => `${c.category} ${c.amount}`).join(", ") + `. Verdict ${v.verdict}.`;
+    return { text: parts.join(" "), compact: compact.slice(0, 380) };
+}
+
+module.exports = { digest, anomalies, recurring, budgetStatus, dueAlerts, salaryForecast, goalProgress, metaAds, suggestCategories, ask };

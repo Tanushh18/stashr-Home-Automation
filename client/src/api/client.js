@@ -561,6 +561,13 @@ export const requestExpenseSync = () => instance.post("/expenses/sync-request").
 export const postExpenseSms = (messages) => instance.post("/expenses/sms", { messages }).then((r) => r.data);
 export const getExpenses = (month) => instance.get("/expenses", { params: month ? { month } : {} }).then((r) => r.data);
 export const setExpenseDescription = (index, description) => instance.put("/expenses/description", { index, description }).then((r) => r.data);
+export const getMoneyInsights = () => instance.get("/expenses/insights").then((r) => r.data);
+export const saveMoneyBudgets = (budgets) => instance.put("/expenses/budgets", { budgets }).then((r) => r.data);
+export const saveMoneyGoals = (goals) => instance.put("/expenses/goals", { goals }).then((r) => r.data);
+export const getMoneySummary = (ai) => instance.get("/expenses/summary", { params: ai ? { ai: 1 } : {} }).then((r) => r.data);
+export const askMoney = (q) => instance.get("/expenses/ask", { params: { q } }).then((r) => r.data);
+export const applyMoneySuggestions = (indexes) => instance.post("/expenses/suggestions/apply", indexes ? { indexes } : {}).then((r) => r.data);
+export const runMoneyAlerts = () => instance.post("/expenses/alerts/run", {}).then((r) => r.data);
 export const getUncategorized = (month) => instance.get("/expenses/uncategorized", { params: month ? { month } : {} }).then((r) => r.data);
 export const setExpenseCategory = (index, category, remember) => instance.put("/expenses/category", { index, category, remember }).then((r) => r.data);
 export const reviewExpense = (index, action) => instance.put("/expenses/review", { index, action }).then((r) => r.data);

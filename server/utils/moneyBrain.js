@@ -89,8 +89,12 @@ function analyze(rows, lines, { today, months = 6 } = {}) {
     const st = statementState(lines);
     const stale = st.asOf ? Math.round((Date.parse(today) - Date.parse(st.asOf)) / 86400000) : null;
     const dailySpend = thisMonth.spend && day ? thisMonth.spend / day : avgSpend ? avgSpend / 30 : 0;
-    const balance = st.balance;
+    // no statement balance yet: the newest balance a bank message carried
+    const lastMsg = rows.filter((t) => t.balance != null && t.status !== "Flagged" && t.date).sort((a, b) => `${a.date} ${a.time || ""}`.localeCompare(`${b.date} ${b.time || ""}`)).pop();
+    const balance = st.balance != null ? st.balance : lastMsg ? lastMsg.balance : null;
+    if (st.balance == null && lastMsg) { st.balance = lastMsg.balance; st.asOf = lastMsg.date; st.from = "message"; }
     const runway = balance != null && dailySpend > 0 ? { days: Math.floor(balance / dailySpend), balance, asOf: st.asOf } : null;
+    const cycle = require("./moneyBalance").salaryCycle(rows, today);
 
     const doubtful = rows.filter((t) => t.month === cur && !counted(t));
     const uncategorized = rows.filter((t) => t.month === cur && counted(t) && t.type === "Debit" && (!t.category || t.category === "Uncategorized"));
@@ -105,7 +109,9 @@ function analyze(rows, lines, { today, months = 6 } = {}) {
     // ── the decision ──
     const reasons = [], actions = [];
     let score = 0;                                           // 0 healthy, higher is worse
-    if (thisMonth.net < 0) { score += 2; reasons.push(`Loss so far this month: spent ₹${thisMonth.spend} against ₹${thisMonth.income} in.`); }
+    // Salary often lands at the end of the previous month, so a calendar month can look like a loss when it is not: with a known salary, judge by the cycle.
+    const inLoss = cycle ? cycle.left < 0 : thisMonth.net < 0;
+    if (inLoss) { score += 2; reasons.push(cycle ? `Since your salary on ${cycle.date}: ₹${cycle.spent} spent against ₹${r2(cycle.received + cycle.otherIncome)} in, ₹${Math.abs(cycle.left)} over.` : `Loss so far this month: spent ₹${thisMonth.spend} against ₹${thisMonth.income} in.`); }
     if (projection.net < 0 && thisMonth.net >= 0) { score += 1; reasons.push(`At this pace you end the month ₹${Math.abs(projection.net)} short.`); }
     if (avgSpend && thisMonth.spend > avgSpend * 1.25 && day >= 10) { score += 1; reasons.push(`Spending is already ${Math.round((thisMonth.spend / avgSpend) * 100)}% of your usual month.`); }
     for (const s of spikes.slice(0, 2)) { score += 1; reasons.push(`${s.category} is ₹${s.amount}, usually about ₹${s.usually}.`); actions.push({ id: "cut-" + s.category, text: `Look at your ${s.category} payments: they are well above normal.` }); }
@@ -117,11 +123,13 @@ function analyze(rows, lines, { today, months = 6 } = {}) {
     if (uncategorized.length >= 5) actions.push({ id: "sort", text: `${uncategorized.length} payments this month are unsorted; sort them so the category figures are right.` });
     if (thisMonth.source === "entries" && lines.length) actions.push({ id: "month-unchecked", text: "This month is not in any statement yet, so its profit/loss comes from messages only." });
 
+    const empty = !thisMonth.income && !thisMonth.spend && !thisMonth.lines;
     const verdict = score >= 3 ? "alert" : score >= 1 ? "watch" : "healthy";
     const word = thisMonth.result === "profit" ? `Profit ₹${thisMonth.net}` : thisMonth.result === "loss" ? `Loss ₹${Math.abs(thisMonth.net)}` : "Even";
-    const headline = `${monthLabelOf(cur)}: ${word}${thisMonth.source === "statement" ? " (from your statement)" : " (from messages, not yet checked by a statement)"}.`;
+    const src = thisMonth.source === "statement" ? " (from your statement)" : " (from messages, not yet checked by a statement)";
+    const headline = empty ? `${monthLabelOf(cur)}: no payments yet.` : cycle ? `Since your salary on ${cycle.date}: ₹${cycle.spent} spent, ₹${cycle.left} left${src}.` : `${monthLabelOf(cur)}: ${word}${src}.`;
     if (!reasons.length) reasons.push("Nothing unusual: income covers spending and no category stands out.");
-    return { verdict, headline, reasons, actions, months: list, thisMonth, average: { spend: avgSpend, income: avgIncome }, projection, runway, spikes, trust: thisMonth.trust, balance: st, unsorted: uncategorized.length, doubtful: doubtful.length };
+    return { cycle, verdict, headline, reasons, actions, months: list, thisMonth, average: { spend: avgSpend, income: avgIncome }, projection, runway, spikes, trust: thisMonth.trust, balance: st, unsorted: uncategorized.length, doubtful: doubtful.length };
 }
 
 const NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];

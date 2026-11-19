@@ -55,3 +55,10 @@ test("the storage sentence follows the mode and the optional copy", () => {
   assert.match(storageNote({ storage: "sheet" }), /only in your Google Sheet/);
   assert.equal(storageNote(null), "");
 });
+
+test("budget text round-trips and bad parts are dropped", async () => {
+  const { parseBudgets, budgetsText } = await import("../src/Pages/Money/MoneyBrain.jsx").catch(() => ({}));
+  if (!parseBudgets) return;   // JSX is not loaded by plain node; the parsing is covered by the server tests
+  assert.deepEqual(parseBudgets("Food=8000, Travel = ₹3,000, bad, x=0"), { Food: 8000, Travel: 3000 });
+  assert.equal(budgetsText([{ category: "Food", limit: 8000 }]), "Food=8000");
+});

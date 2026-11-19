@@ -6,6 +6,7 @@ import {
 import { Section, Skeleton, useConfirm } from "../Render/RenderUi";
 import { errorMessage } from "../Render/renderUtils";
 import { inr, monthLabel, shiftMonth, dayLabel, groupByDay, withShares, startDateChip, STATUS_LABEL, statusTone, storageNote } from "../../lib/money";
+import MoneyBrain from "./MoneyBrain";
 import "../Render/RenderDashboard.css";
 import "./Money.css";
 
@@ -766,6 +767,7 @@ export default function Money() {
               <PhoneStatus phone={phone} settings={settings} />
               {!data ? <Skeleton lines={5} /> : (
                 <>
+                  <CardBoundary><MoneyBrain refreshKey={data.rows} onChanged={reload} /></CardBoundary>
                   <CardBoundary><Tiles totals={data.totals} flagged={(data.flagged || []).length} /></CardBoundary>
                   <CardBoundary><FlaggedCard rows={data.flagged || []} onChanged={reload} /></CardBoundary>
                   <CardBoundary><QuickSortCard month={month} categories={categories} onChanged={reload} refreshKey={data.rows} /></CardBoundary>

@@ -68,3 +68,15 @@ describe("money brain over the API", () => {
         expect(al.status).toBe(200);
     });
 });
+
+describe("the written summary", () => {
+    test("the month is summed up in words without any AI", async () => {
+        const auth = await signUp();
+        await request(app).post("/expenses/start").set(auth).send({ date: recent(30) });
+        await seed([{ merchant: "Cafe", amount: 300, category: "Food" }, { merchant: "Client A", amount: 9000, type: "Credit" }]);
+        const r = await request(app).get("/expenses/summary").set(auth);
+        expect(r.status).toBe(200);
+        expect(r.body.text).toMatch(/Food/);
+        expect(r.body.ai).toBe("");
+    });
+});
