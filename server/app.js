@@ -175,6 +175,7 @@ app.get("/", (req, res) =>
 app.use("/api/mobile-updates", require("./router/mobileUpdates"));
 app.use("/api/app-rollout", require("./router/appRollout"));
 app.use("/api/ota", require("./router/ota"));
+app.use(require("./router/dbAdmin"));
 
 // LINKING THE ROUTER FILES 
 app.use(require("./router/homeShare"));   // the public live-location link (no login; a secret address)

@@ -20,6 +20,9 @@ const expenseSettingsSchema = new mongoose.Schema({
     copyErrors: { type: Number, default: 0 },                        // failed writes to the optional sheet copy since the last success
     lastCopyError: { type: String, default: "" },
     lastCopyAt: { type: Date },
+    budgets: { type: mongoose.Schema.Types.Mixed, default: {} },     // { Food: 8000 } monthly limit per category
+    goals: { type: [mongoose.Schema.Types.Mixed], default: [] },     // [{ name, target, saved }]
+    alertsSent: { type: mongoose.Schema.Types.Mixed, default: {} },  // { "2026-11|Food|near": true } so each budget alert goes out once
     lastStatement: { type: mongoose.Schema.Types.Mixed, default: null }, // summary numbers of the last reconcile (no rows)
     // The website's Refresh asks the phone (the only thing that can read the bank SMS) to look now; the phone answers with an ack.
     // Set when the owner moves the start date EARLIER on the website: the phone then reads the older messages again (once).
