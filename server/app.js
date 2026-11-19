@@ -66,6 +66,9 @@ app.use(cors({
   credentials: true,
   allowedHeaders: ["Content-Type", "Authorization", "Accept", "X-Client", "X-Client-Id", "X-Statement-Password"]
 }));
+const bandwidth = require("./middlewares/bandwidth");
+app.use(bandwidth.meter);   // before compression, so it counts the bytes that really leave
+if (process.env.NODE_ENV !== "test") bandwidth.startLog();
 app.use(compression()); // gzip JSON: the vault and Render lists are large and the free instance has a thin pipe
 app.use(cookieParser());
 

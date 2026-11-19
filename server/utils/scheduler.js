@@ -23,6 +23,26 @@ const INSTANCE_ID = crypto.randomUUID();
 let running = null;
 let last = null;
 
+/*
+ * Bandwidth: the free hosting plan has a small monthly allowance and every step talks to GitHub, Render, other hosts or the database.
+ * The health pings, the Render monitoring and the hours count stay on every tick; the syncs that only copy data between services
+ * (links, projects, environment variables, registry, usage, status pages, URL propagation) run at most every HEAVY_STEP_MINUTES
+ * (default 30). Pages that need fresh data trigger their own sync, and a tick started from outside (cron) runs everything.
+ */
+const HEAVY_STEPS = new Set(["autoLink", "projectSync", "envSync", "registrySync", "usage", "statusPages", "stashrUrlSync"]);
+const heavyEveryMs = () => Math.max(5, Number(process.env.HEAVY_STEP_MINUTES) || 30) * 60 * 1000;
+/** A due-check with its own memory: true the first time, then only once `everyMs` has passed. */
+function makeDueGate(everyMs = heavyEveryMs()) {
+  const lastAt = new Map();
+  return (name, now = Date.now()) => {
+    if (!HEAVY_STEPS.has(name)) return true;
+    if (now - (lastAt.get(name) || 0) < everyMs) return false;
+    lastAt.set(name, now);
+    return true;
+  };
+}
+const dueGate = makeDueGate();
+
 async function persistRun(run) {
   if (mongoose.connection.readyState !== 1) return false;
   try {
@@ -105,16 +125,18 @@ async function runTick(source = "internal") {
       const started = Date.now();
       const startedAt = new Date(started).toISOString();
       const steps = [];
+      const force = source === "external";
+      const step = (name, fn) => (force || dueGate(name) ? executeStep(name, fn, steps) : Promise.resolve({ skipped: true }));
       const pings = await executeStep("pings", runAllPings, steps);
       const monitoring = await executeStep("monitoring", () => renderOps.runAllEnabledMonitoring(), steps);
-      const autoLink = await executeStep("autoLink", runAllAutoLink, steps);
-      const projectSync = await executeStep("projectSync", runAllProjectSync, steps);
-      const envSync = await executeStep("envSync", runAllEnvSync, steps);
-      const registrySync = await executeStep("registrySync", runAllRegistrySync, steps);
-      const usage = await executeStep("usage", runAllUsage, steps);
+      const autoLink = await step("autoLink", runAllAutoLink);
+      const projectSync = await step("projectSync", runAllProjectSync);
+      const envSync = await step("envSync", runAllEnvSync);
+      const registrySync = await step("registrySync", runAllRegistrySync);
+      const usage = await step("usage", runAllUsage);
       const renderHours = await executeStep("renderHours", runAllRenderHours, steps);
-      const statusPages = await executeStep("statusPages", runAllStatusPages, steps);
-      const stashrUrlSync = await executeStep("stashrUrlSync", runAllPropagation, steps);
+      const statusPages = await step("statusPages", runAllStatusPages);
+      const stashrUrlSync = await step("stashrUrlSync", runAllPropagation);
       const telegram = await executeStep("telegram", runAllDigests, steps);
       const completedAt = new Date().toISOString();
       const status = overallStatus(steps);
@@ -182,4 +204,4 @@ async function getSchedulerStatus(limit = 10) {
 
 const lastTick = () => last;
 
-module.exports = { runTick, startScheduler, lastTick, getSchedulerStatus, executeStep, persistRun, acquireLease, releaseLease };
+module.exports = { makeDueGate, HEAVY_STEPS, runTick, startScheduler, lastTick, getSchedulerStatus, executeStep, persistRun, acquireLease, releaseLease };

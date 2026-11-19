@@ -7,6 +7,7 @@ import { mergeDelta, createSseParser, reconnectDelay } from "../lib/sync";
 import { normalizeProject } from "../lib/projectItems";
 import { computeHealth } from "../lib/health";
 import { pwnedCount } from "../lib/breach";
+import { isUserActive, onUserReturn } from "../lib/activity";
 
 /**
  * Session + vault state for the website.
@@ -34,7 +35,9 @@ const readPrefs = () => {
   }
 };
 
-const SYNC_MS = 60 * 1000;            // passwords + projects re-read from the server while the tab is visible
+const SYNC_MS = 60 * 1000;            // delta check while the tab is visible and the live stream is not connected
+const SYNC_MS_STREAMING = 10 * 60 * 1000;   // the live stream already says when something changed: only a slow safety check
+const FULL_RELOAD_MS = 6 * 60 * 60 * 1000;  // the whole vault + projects again (big): only now and then; deltas keep it current
 // Cheap fingerprint of the lists, so an unchanged background sync does not re-render everything.
 const signature = (list) => (list || []).map((e) => e._id + ":" + (e.updatedAt || "")).join("|");
 
@@ -209,14 +212,14 @@ export function VaultProvider({ children }) {
   const deltaOk = useRef(true);  // false once the server turned out not to support /vault/changes
   useEffect(() => {
     if (status !== "ready") return undefined;
-    let timer = null, stopped = false, running = false, queued = false, fullAt = Date.now();
+    let timer = null, stopped = false, running = false, queued = false, fullAt = Date.now(), streamUp = false, lastDeltaAt = 0;
     const signedOut = (e) => { if (e?.response?.status === 401) { clearVault(); setProfile(null); setStatus("signedOut"); } };
     const sync = async () => {
-      if (document.hidden || stopped) return;
+      if (document.hidden || stopped || !isUserActive()) return;
       if (running) { queued = true; return; }
       running = true;
       try {
-        const needFull = !deltaOk.current || !syncedAt.current || Date.now() - fullAt > 10 * 60 * 1000;
+        const needFull = !deltaOk.current || !syncedAt.current || Date.now() - fullAt > FULL_RELOAD_MS;
         if (needFull) {
           const startedAt = new Date().toISOString();
           await loadProfile();
@@ -239,6 +242,7 @@ export function VaultProvider({ children }) {
         syncedAt.current = null; // next round does a full reload
       } finally {
         running = false;
+        lastDeltaAt = Date.now();
         if (queued) { queued = false; void sync(); }
       }
     };
@@ -252,6 +256,7 @@ export function VaultProvider({ children }) {
           const res = await api.openVaultEvents(controller.signal);
           if (!res.ok || !res.body) throw new Error("stream " + res.status);
           attempt = 0;
+          streamUp = true;
           const parse = createSseParser((ev) => {
             if (ev.event !== "change") return;
             try { if (JSON.parse(ev.data).source === api.CLIENT_ID) return; } catch (e) { /* treat as foreign */ }
@@ -261,8 +266,10 @@ export function VaultProvider({ children }) {
           const decoder = new TextDecoder();
           for (;;) { const { done, value } = await reader.read(); if (done) break; parse(decoder.decode(value, { stream: true })); }
         } catch (e) {
+          streamUp = false;
           if (stopped || e?.name === "AbortError") return;
         }
+        streamUp = false;
         if (stopped) return;
         await new Promise((r) => window.setTimeout(r, reconnectDelay(attempt)));
         attempt += 1;
@@ -271,11 +278,12 @@ export function VaultProvider({ children }) {
     void sync();
     void stream();
     const onVisible = () => { if (!document.hidden) void sync(); };
-    timer = window.setInterval(() => void sync(), SYNC_MS);
+    timer = window.setInterval(() => { if (streamUp && Date.now() - lastDeltaAt < SYNC_MS_STREAMING) return; void sync(); }, SYNC_MS);
+    const stopReturn = onUserReturn(onVisible);
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onVisible);
     return () => {
-      stopped = true; controller.abort(); window.clearInterval(timer);
+      stopped = true; controller.abort(); window.clearInterval(timer); stopReturn();
       document.removeEventListener("visibilitychange", onVisible); window.removeEventListener("focus", onVisible);
     };
   }, [status, loadProfile, clearVault]);

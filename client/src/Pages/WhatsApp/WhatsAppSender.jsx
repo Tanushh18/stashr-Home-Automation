@@ -11,6 +11,7 @@ import { contactsFromFile, filterContacts, peopleFromLines, peopleFromRows, plan
 import { STARTER_QUOTES, textsToBox, boxToTexts } from "../../lib/waStarter";
 import "../Render/RenderDashboard.css";
 import "./WhatsAppSender.css";
+import { isUserActive } from "../../lib/activity";
 
 const MAX_IMAGE = 2 * 1024 * 1024;
 
@@ -591,7 +592,7 @@ export default function WhatsAppSender() {
       if (!editing.current) setSettings((cur) => cur || { dailyLimit: d.settings.dailyLimit, from: d.settings.from, to: d.settings.to, gapMin: d.settings.gapMin, gapMax: d.settings.gapMax });
     } catch (e) { setError(errorMessage(e)); }
   }, []);
-  useEffect(() => { load(); const t = setInterval(load, 5000); return () => clearInterval(t); }, [load]);
+  useEffect(() => { load(); const t = setInterval(() => { if (!document.hidden && isUserActive()) load(); }, 5000); return () => clearInterval(t); }, [load]);
 
   const set = async (body, ok) => {
     try { await saveWaSettings(body); if (ok) toast.success(ok); await load(); } catch (e) { toast.error(errorMessage(e)); }

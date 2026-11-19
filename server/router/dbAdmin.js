@@ -17,4 +17,8 @@ router.post("/system/db/migrate", authenticate, requireAdmin, (req, res) => {
 });
 router.post("/system/db/stop", authenticate, requireAdmin, (req, res) => { migrate.stop(); return res.json({ stopping: true }); });
 
+const bandwidth = require("../middlewares/bandwidth");
+router.get("/system/bandwidth", authenticate, requireAdmin, (req, res) => { res.set("Cache-Control", "no-store"); return res.json(bandwidth.report(Math.min(60, Number(req.query.limit) || 25))); });
+router.post("/system/bandwidth/reset", authenticate, requireAdmin, (req, res) => { bandwidth.reset(); return res.json({ reset: true }); });
+
 module.exports = router;
