@@ -59,15 +59,12 @@
   --sidebar-bg: #fbfcf9;
 }
 
-/* Photos is out of scope for the redesign: App.jsx puts body.route-photos on its routes,
-   and every global tweak below skips it so Photos renders exactly as before. */
-
 /* Small-caps eyebrows were shouting; keep them quiet and readable. */
-body:not(.route-photos) .eyebrow { letter-spacing: 0.06em; font-size: var(--fs-xs); }
+body .eyebrow { letter-spacing: 0.06em; font-size: var(--fs-xs); }
 
 .btn--danger { background: var(--danger) !important; color: #fff !important; border-color: transparent; }
 .btn--danger:not(:disabled):hover { background: var(--danger-deep) !important; }
-body:not(.route-photos) .btn:disabled { opacity: 0.55; }
+body .btn:disabled { opacity: 0.55; }
 
 @keyframes ui-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes ui-rise { from { opacity: 0; transform: translateY(8px) scale(0.985); } to { opacity: 1; transform: none; } }
@@ -78,8 +75,8 @@ body:not(.route-photos) .btn:disabled { opacity: 0.55; }
 
 body.has-sidebar { padding-left: var(--sidebar-w); }
 /* Sticky offsets across pages use --nav-h: there is no top bar beside the sidebar, and the phone bar is 56px. */
-body.has-sidebar:not(.route-photos) { --nav-h: 0px; }
-body.has-bottomnav:not(.route-photos) { --nav-h: 56px; }
+body.has-sidebar { --nav-h: 0px; }
+body.has-bottomnav { --nav-h: 56px; }
 body.has-sidebar.sidebar-collapsed { padding-left: var(--sidebar-w-collapsed); }
 /* No top bar beside the sidebar, so pages start closer to the top. */
 body.has-sidebar .page { min-height: 100vh; padding-top: clamp(1.5rem, 3vw, 2.25rem); }

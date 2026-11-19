@@ -16,8 +16,6 @@ import Settings from "./Pages/Settings/Settings";
 import Servers from "./Pages/Servers/Servers";
 import Security from "./Pages/Security/Security";
 // Loaded on demand: operations screens are large and only needed on their routes.
-const PhotoImport = lazy(() => import("./Pages/PhotoCloud/PhotoImport"));
-const SharedFolder = lazy(() => import("./Pages/PhotoCloud/SharedFolder"));
 const Media = lazy(() => import("./Pages/Media/Media"));
 const Admin = lazy(() => import("./Pages/Admin/Admin"));
 const AppUpdates = lazy(() => import("./Pages/AppUpdates/AppUpdates"));
@@ -36,8 +34,6 @@ const Generator = lazy(() => import("./Pages/Generator/Generator"));
 import Privacy from "./Pages/Privacy/Privacy";
 import Apps from "./Pages/Apps/Apps";
 import Logout from "./Pages/Logout/Logout";
-import PhotoCloud from "./Pages/PhotoCloud/PhotoCloud";
-import PhotoShare from "./Pages/PhotoCloud/PhotoShare";
 import Navbar from "./Components/Navbar/Navbar";
 import InstallPrompt from "./Components/InstallPrompt/InstallPrompt";
 import CommandPalette from "./Components/CommandPalette/CommandPalette";
@@ -87,10 +83,6 @@ function HomeOrDashboard() {
 function ScrollToTop() {
   const { pathname } = useLocation();
   useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
-  // Photos keeps its pre-redesign look: styles/system.css skips body.route-photos.
-  useEffect(() => {
-    document.body.classList.toggle("route-photos", pathname.startsWith("/photos") || pathname.startsWith("/share/photos"));
-  }, [pathname]);
   return null;
 }
 
@@ -130,11 +122,7 @@ export default function App() {
           <Route path="/forgot-password" element={<GuestOnly><Suspense fallback={<Splash />}><Forgot /></Suspense></GuestOnly>} />
           <Route path="/signup" element={<Navigate to="/signin" replace />} />
           <Route path="/passwords" element={<RequireVault><Vault /></RequireVault>} />
-          <Route path="/photos" element={<RequireVault><RequireFeature feature="photos"><PhotoCloud /></RequireFeature></RequireVault>} />
-          <Route path="/photos/import" element={<RequireVault><RequireFeature feature="photoImport"><Suspense fallback={<Splash />}><PhotoImport /></Suspense></RequireFeature></RequireVault>} />
-          <Route path="/photos/shared/:id" element={<RequireVault><RequireFeature feature="photos"><Suspense fallback={<Splash />}><SharedFolder /></Suspense></RequireFeature></RequireVault>} />
           <Route path="/admin" element={<RequireVault><RequireFeature feature="adminPanel"><Suspense fallback={<Splash />}><Admin /></Suspense></RequireFeature></RequireVault>} />
-          <Route path="/share/photos/:token" element={<PhotoShare />} />
           <Route path="/projects" element={<RequireVault><Projects /></RequireVault>} />
           <Route path="/projects/new" element={<RequireVault><ProjectForm /></RequireVault>} />
           <Route path="/projects/deploy" element={<RequireVault><ProjectDeploy /></RequireVault>} />

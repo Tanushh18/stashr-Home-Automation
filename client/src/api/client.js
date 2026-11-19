@@ -232,39 +232,9 @@ export const updateShineSite = (key, update) => instance.put("/shine/site/" + en
 export const getRegistryVisitors = () => instance.get("/registry/stats").then((r) => r.data);
 export const checkServer = (url) => instance.post("/registry/check", { url }, { timeout: 30000 });
 
-/* ── Personal AI Photo Cloud ── */
-export const getPhotoCloudDashboard = () => instance.get("/photo-cloud/dashboard", { timeout: 30000 }).then((r) => r.data);
-export const setPhotoFavorite = (id, favorite) => instance.patch(`/photo-cloud/media/${encodeURIComponent(id)}`, { favorite }).then((r) => r.data);
-export const removePhotoMedia = (id) => instance.delete(`/photo-cloud/media/${encodeURIComponent(id)}`).then((r) => r.data);
-export const connectPhotoGoogleAccount = (data) => instance.post("/photo-cloud/connections", data).then((r) => r.data);
-export const startPhotoGoogleOAuth = (label, returnTo) => instance.get("/photo-cloud/google/start", { params: { label, ...(returnTo ? { returnTo } : {}) } }).then((r) => r.data);
 export const getBlob = (path) => instance.get(path, { responseType: "blob", timeout: 60000 }).then((r) => r.data);
 export const getAdminUsers = (q = "") => instance.get("/admin/users", { params: { q, limit: 300 } }).then((r) => r.data);
 export const setUserFeature = (id, key, enabled) => instance.put(`/admin/users/${encodeURIComponent(id)}/features`, { key, enabled }).then((r) => r.data);
-export const listPhotoImports = () => instance.get("/photo-import/batches").then((r) => r.data);
-export const createPhotoImport = (data) => instance.post("/photo-import/batches", data, { timeout: 60000 }).then((r) => r.data);
-export const getPhotoImport = (id) => instance.get(`/photo-import/batches/${encodeURIComponent(id)}`, { timeout: 30000 }).then((r) => r.data);
-export const photoImportAction = (id, action) => instance.post(`/photo-import/batches/${encodeURIComponent(id)}/${action}`, {}, { timeout: 60000 }).then((r) => r.data);
-export const deletePhotoImport = (id) => instance.delete(`/photo-import/batches/${encodeURIComponent(id)}`).then((r) => r.data);
-export const renamePhotoImport = (id, label) => instance.patch(`/photo-import/batches/${encodeURIComponent(id)}`, { label }).then((r) => r.data);
-export const createFolderShare = (data) => instance.post("/photo-cloud/folder-shares", data).then((r) => r.data);
-export const listFolderShares = () => instance.get("/photo-cloud/folder-shares").then((r) => r.data);
-export const revokeFolderShare = (id) => instance.delete(`/photo-cloud/folder-shares/${encodeURIComponent(id)}`).then((r) => r.data);
-export const getSharedWithMe = () => instance.get("/photo-cloud/shared-with-me").then((r) => r.data);
-export const getSharedMedia = (id) => instance.get(`/photo-cloud/shared/${encodeURIComponent(id)}/media`, { timeout: 30000 }).then((r) => r.data);
-export const importExistingPhotos = () => instance.post("/photo-cloud/import-existing", {}, { timeout: 180000 }).then((r) => r.data);
-export const createPhotoFolder = (name, parentId) => instance.post("/photo-cloud/folders", { name, parentId }).then((r) => r.data);
-export const deletePhotoFolder = (id) => instance.delete(`/photo-cloud/folders/${encodeURIComponent(id)}`).then((r) => r.data);
-export const syncPhotoGoogleAccount = (id) => instance.post(`/photo-cloud/connections/${encodeURIComponent(id)}/sync`).then((r) => r.data);
-export const updatePhotoConnection = (id, data) => instance.put(`/photo-cloud/connections/${encodeURIComponent(id)}`, data).then((r) => r.data);
-export const disconnectPhotoConnection = (id) => instance.delete(`/photo-cloud/connections/${encodeURIComponent(id)}`).then((r) => r.data);
-export const exportPhotoManifest = () => instance.get("/photo-cloud/export").then((r) => r.data);
-export const savePhotoRoutingPolicy = (data) => instance.put("/photo-cloud/routing-policy", data).then((r) => r.data);
-export const createPhotoBackupJob = (data) => instance.post("/photo-cloud/backup/jobs", data).then((r) => r.data);
-export const createPhotoShare = (data) => instance.post("/photo-cloud/shares", data).then((r) => r.data);
-export const getPhotoShares = () => instance.get("/photo-cloud/shares").then((r) => r.data);
-export const revokePhotoShare = (id) => instance.delete(`/photo-cloud/shares/${encodeURIComponent(id)}`).then((r) => r.data);
-export const getPublicPhotoShare = (token) => instance.get(`/public/photo-cloud/shares/${encodeURIComponent(token)}`, { withCredentials: false }).then((r) => r.data);
 
 /* ── Auth ── */
 // Several screens ask for the profile at once on load; share one in-flight request instead of loading the vault N times.

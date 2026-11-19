@@ -1,7 +1,7 @@
 const VIDEO_EXT = /\.(mp4|m4v|mov|webm|avi|mkv|mpeg|mpg|3gp|3g2|mts|m2ts|wmv|flv|ogv)$/i;
 const IMAGE_EXT = /\.(jpe?g|png|gif|webp|heic|heif|avif|bmp|svg|tiff?|raw|dng|cr2|nef|arw|orf|rw2)$/i;
 
-/** Classifies a Photo Cloud item from its MIME type, file name and type hint. */
+/** Classifies a media item from its MIME type, file name and type hint. */
 export function mediaKind(item) {
   const mime = String(item.mimeType || "").trim().toLowerCase();
   const name = String(item.filename || item.name || "").trim().toLowerCase();

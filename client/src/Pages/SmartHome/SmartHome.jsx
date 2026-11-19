@@ -269,7 +269,7 @@ function DeviceMenu({ device, onChanged }) {
   );
 }
 
-/** Movies from a Google Drive folder to the TV's USB drive, through a Google account connected right here (Photo Cloud is not needed). */
+/** Movies from a Google Drive folder to the TV's USB drive, through a Google account connected right here. */
 /** Every movie the TV is downloading or has downloaded lately: how much is here, the status, when it started, the speed, the time left. */
 function DownloadsList({ tvs }) {
   const withRows = (tvs || []).map((tv) => ({ tv, rows: downloadRows(tv.status) })).filter((x) => x.rows.length);
@@ -350,7 +350,7 @@ function MoviesCard({ tvs }) {
     <Section title="Movies from Google Drive" subtitle="Put a movie in the Drive folder and the TV copies it to its USB drive on its own.">
       {data.connections.length === 0 ? (
         <div className="sh-movies-form">
-          <p className="sh-dim">Connect the Google account whose Drive holds your movies. Photo Cloud is not needed.</p>
+          <p className="sh-dim">Connect the Google account whose Drive holds your movies.</p>
           <label className="sh-switch">
             <input type="checkbox" checked={fullAccess} onChange={(e) => setFullAccess(e.target.checked)} />
             Also allow removing a movie from Drive after it reaches the TV (asks for full Drive access)

@@ -28,11 +28,6 @@ test("admin entries need isAdmin; the admin panel also needs its feature", () =>
   assert.ok(labels(navGroups({ isAdmin: true, features: { adminPanel: true } })).includes("Admin panel"));
 });
 
-test("Photos keeps its place in the navigation (Workspace, first)", () => {
-  const ws = navGroups({ features: { photos: true } }).find((g) => g.id === "workspace");
-  assert.equal(ws.items[0].to, "/photos");
-});
-
 test("the most specific entry is active", () => {
   const groups = navGroups({ features: {} });
   assert.equal(activeEntry(groups, "/services/map").to, "/services/map");
