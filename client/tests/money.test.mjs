@@ -86,3 +86,11 @@ test("importing the same items again skips them, also inside one file", async ()
   assert.deepEqual(r.fresh.map((i) => i.name + ":" + i.password), ["Netflix:p2", "Gmail:g"]);
   assert.equal(importKey(have[0]), importKey(file[0]));
 });
+
+test("duplicate extras: one copy of each identical item stays, a favourite first, then the newest; trash is ignored", async () => {
+  const { duplicateExtras } = await import("../src/lib/items.js");
+  const mk = (id, o = {}) => ({ id, type: "login", name: "Netflix", username: "a", url: "", password: "p", updatedAt: "2026-01-01T00:00:00Z", ...o });
+  assert.deepEqual(duplicateExtras([mk("1"), mk("2", { updatedAt: "2026-06-01T00:00:00Z" }), mk("3", { deletedAt: "2026-07-01" })]), ["1"]);
+  assert.deepEqual(duplicateExtras([mk("1", { favorite: true }), mk("2", { updatedAt: "2026-06-01T00:00:00Z" })]), ["2"]);
+  assert.deepEqual(duplicateExtras([mk("1"), mk("2", { password: "other" })]), []);
+});

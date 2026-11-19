@@ -229,3 +229,23 @@ export function splitDuplicates(incoming, existing) {
   }
   return { fresh, duplicates };
 }
+
+/**
+ * Ids of the extra copies of items that are exactly the same (see importKey), keeping one of each: a favourite first, then the one
+ * changed most recently. Items in the Trash are not looked at. -> [id, ...]
+ */
+export function duplicateExtras(items) {
+  const groups = new Map();
+  for (const i of items || []) {
+    if (i.deletedAt) continue;
+    const k = importKey(i);
+    (groups.get(k) || groups.set(k, []).get(k)).push(i);
+  }
+  const extras = [];
+  for (const list of groups.values()) {
+    if (list.length < 2) continue;
+    const keep = [...list].sort((a, b) => (Number(Boolean(b.favorite)) - Number(Boolean(a.favorite))) || (Date.parse(b.updatedAt || b.createdAt || 0) - Date.parse(a.updatedAt || a.createdAt || 0)))[0];
+    for (const i of list) if (i !== keep) extras.push(i.id);
+  }
+  return extras;
+}
