@@ -205,3 +205,27 @@ export const rowsToItems = (rows) =>
       })
     )
     .filter((it) => it.name || it.password);
+
+/** What makes two vault items "the same" for an import: type, name, username, website and password, ignoring case and a trailing slash. */
+export function importKey(item) {
+  const n = (v) => String(v == null ? "" : v).trim().toLowerCase().replace(/\/+$/, "");
+  return [n(item.type), n(item.name), n(item.username), n(item.url), String(item.password == null ? "" : item.password)].join("\u0001");
+}
+
+/**
+ * Splits what a file would import into the new items and the ones that are already in the vault (or repeat inside the file), so
+ * importing the same file twice, or one from Chrome and one from Bitwarden, does not double everything.
+ * -> { fresh: [...], duplicates: n }
+ */
+export function splitDuplicates(incoming, existing) {
+  const seen = new Set((existing || []).map(importKey));
+  const fresh = [];
+  let duplicates = 0;
+  for (const item of incoming || []) {
+    const k = importKey(item);
+    if (seen.has(k)) { duplicates++; continue; }
+    seen.add(k);
+    fresh.push(item);
+  }
+  return { fresh, duplicates };
+}

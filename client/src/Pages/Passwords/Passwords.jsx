@@ -387,7 +387,7 @@ export default function Passwords() {
           toast.success("Moved to Trash. You can restore it for 30 days.");
         }}
       />
-      <ImportModal open={importing} onClose={() => setImporting(false)} onImport={importItems} />
+      <ImportModal open={importing} onClose={() => setImporting(false)} onImport={importItems} existing={[...items, ...(trash || [])]} />
     </div>
   );
 }

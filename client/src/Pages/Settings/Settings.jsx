@@ -632,7 +632,7 @@ function DeleteAccount() {
 }
 
 export default function Settings() {
-  const { profile, prefs, setPrefs, lock, importItems, setProfileName } = useVault();
+  const { profile, prefs, setPrefs, lock, importItems, setProfileName, items, trash } = useVault();
   const [name, setName] = useState(profile?.name || "");
   const [importing, setImporting] = useState(false);
 
@@ -780,7 +780,7 @@ export default function Settings() {
           </div>
         </div>
       </div>
-      <ImportModal open={importing} onClose={() => setImporting(false)} onImport={importItems} />
+      <ImportModal open={importing} onClose={() => setImporting(false)} onImport={importItems} existing={[...(items || []), ...(trash || [])]} />
     </div>
   );
 }

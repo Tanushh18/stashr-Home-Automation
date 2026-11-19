@@ -71,3 +71,18 @@ test("text typed in the env box is merged over the rows, keeping notes and dropp
   assert.equal(out[0].purpose, "web");
   assert.equal(out[1].purpose, "");
 });
+
+test("importing the same items again skips them, also inside one file", async () => {
+  const { splitDuplicates, importKey } = await import("../src/lib/items.js");
+  const have = [{ type: "login", name: "Netflix", username: "Ana@x.com", url: "https://netflix.com/", password: "p1" }];
+  const file = [
+    { type: "login", name: "netflix", username: "ana@x.com", url: "https://netflix.com", password: "p1" },   // same, different case and slash
+    { type: "login", name: "Netflix", username: "ana@x.com", url: "https://netflix.com", password: "p2" },   // a different password is a different item
+    { type: "login", name: "Gmail", username: "a", url: "", password: "g" },
+    { type: "login", name: "Gmail", username: "a", url: "", password: "g" }                                  // repeated in the file
+  ];
+  const r = splitDuplicates(file, have);
+  assert.equal(r.duplicates, 2);
+  assert.deepEqual(r.fresh.map((i) => i.name + ":" + i.password), ["Netflix:p2", "Gmail:g"]);
+  assert.equal(importKey(have[0]), importKey(file[0]));
+});
