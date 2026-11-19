@@ -257,8 +257,11 @@ router.post("/home/assistant", authenticate, writeLimiter, async (req, res) => {
 function hubsFor(owned, type) {
     const hubs = owned.filter((d) => d.kind === "hub");
     if (type === "scan_now") return hubs;
-    const smart = hubs.filter((d) => (d.status || {}).agent === "stashr-hub");
-    return (smart.length ? smart : hubs).slice(0, 1);
+    // An old pairing of a tablet that is gone must never win: the tablet that is online now comes first, then the one seen most recently.
+    const now = Date.now();
+    const rank = (d) => [(d.status || {}).agent === "stashr-hub" ? 0 : 1, Boolean(d.online) && home.isOnline(d, now) ? 0 : 1, -(d.lastSeen ? new Date(d.lastSeen).getTime() : 0)];
+    const best = hubs.slice().sort((a, b) => { const x = rank(a), y = rank(b); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; });
+    return best.slice(0, 1);
 }
 
 /** One sentence, from the page, the tablet's microphone or Telegram, to commands. Shared by the routes. */

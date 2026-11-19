@@ -420,6 +420,24 @@ describe("a place's Send test", () => {
     });
 });
 
+describe("a place's Send test with an old tablet still paired", () => {
+    test("goes to the tablet that is online, not to a dead pairing", async () => {
+        const auth = await signUp();
+        const old = await pair(auth, "hub", "Old tablet");
+        const live = await pair(auth, "hub", "Live tablet");
+        await pair(auth, "phone", "Tanush A38");
+        await report(old.token, { status: { agent: "stashr-hub" } });
+        await report(live.token, { status: { agent: "stashr-hub" } });
+        const all = (await devices(auth)).devices;
+        const oldId = all.find((d) => d.name === "Old tablet").id, phoneId = all.find((d) => d.kind === "phone").id;
+        await HomeDevice.updateOne({ _id: oldId }, { $set: { lastSeen: new Date(Date.now() - 6 * 24 * 3600 * 1000), online: false } });
+        const put = await request(app).put("/home/places").set(auth).send({ places: [{ name: "Office", lat: 28.6139, lon: 77.209, radius: 150, phone: phoneId, group: "we three", arriveText: "Reached office" }] });
+        const r = await request(app).post(`/home/places/${put.body.places[0].id}/test`).set(auth).send({});
+        expect(r.status).toBe(200);
+        expect(r.body.sent.device).toBe("Live tablet");
+    });
+});
+
 describe("a place with Telegram updates (work location)", () => {
     test("leaving and reaching the place is sent to Telegram with no WhatsApp group; 'office se nikle ya nahi' is answered from the live location", async () => {
         const auth = await signUp();
