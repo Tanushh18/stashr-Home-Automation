@@ -25,5 +25,12 @@ export const money = {
   balance: (month, bank) => request(`/expenses/balance?${month ? `month=${encodeURIComponent(month)}` : ""}${bank !== undefined && bank !== "" ? `&bank=${encodeURIComponent(bank)}` : ""}`, { timeout: 30000 }),
   dedupe: () => j("/expenses/dedupe", "POST", undefined, 40000),
   addManual: (body) => j("/expenses/manual", "POST", body, 30000),
+  // Money Brain: statement-first profit/loss, verdict, budgets, goals, plain-word questions (server/utils/moneyBrain.js, moneyPlan.js).
+  insights: () => request("/expenses/insights", { timeout: 40000 }),
+  summary: (ai) => request(`/expenses/summary${ai ? "?ai=1" : ""}`, { timeout: 60000 }),
+  saveBudgets: (budgets) => j("/expenses/budgets", "PUT", { budgets }, 30000),
+  saveGoals: (goals) => j("/expenses/goals", "PUT", { goals }, 30000),
+  ask: (q) => request(`/expenses/ask?q=${encodeURIComponent(q)}`, { timeout: 30000 }),
+  applySuggestions: () => j("/expenses/suggestions/apply", "POST", {}, 40000),
   deleteSavedStatement: (id) => j(`/expenses/statement/saved/${id}`, "DELETE"),
 };
