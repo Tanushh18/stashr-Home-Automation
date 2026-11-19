@@ -3,6 +3,8 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Optional, granted once over adb: lets the app reconnect its own Accessibility service after an update (AccessibilityHeal). -->
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <!-- Android shows a Wi-Fi access point's address only to apps that may see the location: the house map uses it to know which zone the tablet is in. -->
@@ -87,6 +89,10 @@
             </intent-filter>
         </receiver>
         <receiver android:name=".update.InstallResultReceiver" android:exported="false" />
+        <!-- Test the number sender from a computer over adb (only the adb shell holds DUMP). -->
+        <receiver android:name=".whatsapp.ShellSend" android:exported="true" android:permission="android.permission.DUMP">
+            <intent-filter><action android:name="com.tanush.stashr.hub.SHELL_SEND" /></intent-filter>
+        </receiver>
         <!-- WorkManager runs a phone report in the foreground when Android asks for it (expedited work). -->
         <service android:name="androidx.work.impl.foreground.SystemForegroundService" android:foregroundServiceType="dataSync" tools:node="merge" />
 

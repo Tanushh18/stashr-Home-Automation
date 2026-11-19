@@ -551,3 +551,78 @@ describe("the website API", () => {
         expect((await request(app).delete(`/wa/sheets/${sheet.id}`).set(bob)).status).toBe(404);
     });
 });
+
+describe("two WhatsApps", () => {
+    const S = { useBusiness: true, useNormal: true, splitMin: 35, splitMax: 60 };
+    // Simulates a day of n messages the way tickOwner does, and returns the account of each.
+    const day = (n, share, seed = 1) => {
+        let x = seed; const random = () => { x = (x * 16807) % 2147483647; return x / 2147483647; };
+        const counts = { business: 0, normal: 0 }; let run = { account: "", left: 0 }; const out = [];
+        for (let i = 0; i < n; i++) { const r = sender.chooseAccount({ settings: S, counts, run, sharePct: share, random }); counts[r.account]++; run = r.run; out.push(r.account); }
+        return { out, counts };
+    };
+    test("the daily share is drawn inside the range", () => {
+        for (let i = 0; i < 100; i++) { const v = sender.drawShare(S); expect(v >= 35 && v <= 60).toBe(true); }
+        expect(sender.drawShare(S, () => 0)).toBe(35);
+        expect(sender.drawShare(S, () => 0.999999)).toBe(60);
+    });
+    test("alternates in runs of 1 to 3 and keeps close to the share", () => {
+        for (const share of [35, 50, 60]) for (const seed of [1, 7, 42, 99]) {
+            const { out, counts } = day(40, share, seed);
+            const frac = (counts.business / 40) * 100;
+            expect(Math.abs(frac - share) <= 10).toBe(true);
+            let run = 1, longest = 1;
+            for (let i = 1; i < out.length; i++) { run = out[i] === out[i - 1] ? run + 1 : 1; longest = Math.max(longest, run); }
+            expect(longest <= 3).toBe(true);
+            expect(counts.business > 0 && counts.normal > 0).toBe(true);
+        }
+    });
+    test("one WhatsApp switched off: everything goes through the other", () => {
+        const r = sender.chooseAccount({ settings: { ...S, useBusiness: false }, counts: { business: 0, normal: 0 }, run: { account: "", left: 0 }, sharePct: 50 });
+        expect(r.account).toBe("normal");
+        expect(sender.accountsOn({ useBusiness: false, useNormal: false })).toEqual(["business"]);
+    });
+    test("a scheduled run uses both, records which one sent, and the tablet is told", async () => {
+        const { auth, hub, o } = await setup({ people: 8 });
+        await request(app).put("/wa/settings").set(auth).send({ dailyLimit: 40, testMode: true });
+        const seen = [];
+        for (let i = 0; i < 8; i++) {
+            const r = await sender.tickOwner(o, NOON + i * 60000, Math.random);
+            expect(r.did).toBe("queued");
+            const send = await WaSend.findById(r.send._id).lean();
+            seen.push(send.account);
+            const out = await hubReport(hub.token);
+            const cmd = out.body.commands.find((c) => c.type === "send_wa");
+            expect(cmd.args.account).toBe(send.account);
+            await hubReport(hub.token, [{ id: cmd.id, ok: true, message: "Sent" }]);
+        }
+        expect(seen.includes("business") && seen.includes("normal")).toBe(true);
+        const ov = await request(app).get("/wa/overview").set(auth);
+        expect(ov.body.recent.every((x) => x.account === "business" || x.account === "normal")).toBe(true);
+        const rec = await WaRecipient.findOne({ status: "sent" }).lean();
+        expect(["business", "normal"].includes(rec.account)).toBe(true);
+    });
+    test("settings: the split is validated", async () => {
+        const { auth } = await setup();
+        expect((await request(app).put("/wa/settings").set(auth).send({ splitMin: 70, splitMax: 40 })).status).toBe(400);
+        expect((await request(app).put("/wa/settings").set(auth).send({ useBusiness: false, useNormal: false })).status).toBe(400);
+        const ok = await request(app).put("/wa/settings").set(auth).send({ splitMin: 30, splitMax: 55, useNormal: true });
+        expect(ok.status).toBe(200);
+        expect(ok.body.splitMin).toBe(30);
+    });
+    test("a custom message goes to the number from the chosen WhatsApp, with the typed text", async () => {
+        const { auth, hub } = await setup();
+        const r = await request(app).post("/wa/test").set(auth).send({ phone: "8130483894", text: "Hello from Stashr", account: "normal" });
+        expect(r.status).toBe(202);
+        expect(r.body.account).toBe("normal");
+        const out = await hubReport(hub.token);
+        const cmd = out.body.commands.find((c) => c.type === "send_wa");
+        expect(cmd.args.account).toBe("normal");
+        expect(cmd.args.text).toBe("Hello from Stashr");
+        expect(cmd.args.phone).toBe("918130483894");
+        const send = await WaSend.findOne({}).lean();
+        expect(send.kind).toBe("custom");
+        // it does not count toward the daily limit
+        expect(await WaSend.countDocuments({ kind: "scheduled" })).toBe(0);
+    });
+});

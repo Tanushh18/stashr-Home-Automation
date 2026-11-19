@@ -268,6 +268,16 @@ router.post("/home/places/:id/test", authenticate, writeLimiter, async (req, res
     } catch (e) { return fail(res, e, "Could not send the test."); }
 });
 
+// What the tablet answered for a test it was given: pending/sent (still working), done or failed with its own words.
+router.get("/home/places/test/:cmd", authenticate, async (req, res) => {
+    try {
+        const hubs = await HomeDevice.find({ owner: req.rootUser._id, kind: "hub", "commands.id": String(req.params.cmd).slice(0, 40) }, { name: 1, commands: 1, lastSeen: 1 }).lean();
+        const hub = hubs[0], c = hub && (hub.commands || []).find((x) => x.id === req.params.cmd);
+        if (!c) return res.status(404).json({ error: "That test is no longer on the tablet's list." });
+        return res.json({ status: c.status, result: c.result || "", tablet: hub.name, lastSeen: hub.lastSeen || null });
+    } catch (e) { return fail(res, e, "Could not read the test."); }
+});
+
 router.put("/home/scenes", authenticate, writeLimiter, async (req, res) => {
     try {
         const list = Array.isArray(req.body && req.body.scenes) ? req.body.scenes : null;

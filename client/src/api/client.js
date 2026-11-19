@@ -499,6 +499,7 @@ export const getHomeShare = () => instance.get("/home/share").then((r) => r.data
 export const saveHomeShare = (body) => instance.put("/home/share", body).then((r) => r.data.share);
 export const getHomePlaceTrail = (id) => instance.get(`/home/places/${id}/trail`).then((r) => r.data);
 export const testHomePlace = (id, text) => instance.post(`/home/places/${id}/test`, { text }).then((r) => r.data);
+export const getHomePlaceTest = (cmd) => instance.get(`/home/places/test/${cmd}`).then((r) => r.data);
 export const saveHomeSchedules = (schedules) => instance.put("/home/schedules", { schedules }).then((r) => r.data);
 export const saveHomeScenes = (scenes) => instance.put("/home/scenes", { scenes }).then((r) => r.data);
 export const runHomeScene = (id) => instance.post(`/home/scenes/${id}/run`).then((r) => r.data);

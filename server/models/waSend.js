@@ -9,7 +9,8 @@ const waSendSchema = new mongoose.Schema({
     phone: { type: String, default: "" },
     name: { type: String, default: "" },
     text: { type: String, default: "" },
-    kind: { type: String, enum: ["scheduled", "test", "report"], default: "scheduled" },
+    kind: { type: String, enum: ["scheduled", "test", "report", "custom"], default: "scheduled" },
+    account: { type: String, enum: ["business", "normal"], default: "business" },   // which WhatsApp sent it
     imageIndex: { type: Number, default: 0 },                      // which of the sheet's pictures this message uses
     status: { type: String, enum: ["queued", "sent", "failed"], default: "queued", index: true },
     result: { type: String, default: "" },

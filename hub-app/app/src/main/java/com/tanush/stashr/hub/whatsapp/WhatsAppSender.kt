@@ -39,7 +39,7 @@ object WhatsAppSender {
     suspend fun send(ctx: Context, group: String, text: String): String {
         val g = group.trim(); val t = text.trim()
         if (g.isEmpty() || t.isEmpty()) throw IllegalArgumentException("Group name and message are needed")
-        if (WhatsAppAccessibility.instance == null) throw IllegalStateException("Turn on Stashr Hub in Accessibility settings")
+        if (!AccessibilityHeal.ensure(ctx)) throw IllegalStateException("Turn on Stashr Hub in Accessibility settings")
         val pkg = installed(ctx) ?: throw IllegalStateException("WhatsApp is not installed (Smart home messages use normal WhatsApp, not WhatsApp Business)")
         if (job != null && job?.done == false && System.currentTimeMillis() < job!!.deadline) throw IllegalStateException("Another message is being sent")
         // A lead message may be going out through WhatsApp Business. Opening this app now would pull WhatsApp to the front and break it,

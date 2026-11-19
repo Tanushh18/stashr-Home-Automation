@@ -91,7 +91,7 @@ router.get("/wa/overview", authenticate, async (req, res) => {
                 const c = bySheet[String(s._id)] || {};
                 return { ...s, hasImage: withImage.has(String(s._id)), imageCount: imageCounts[String(s._id)] || 0, counts: { pending: c.pending || 0, queued: c.queued || 0, sent: c.sent || 0, failed: c.failed || 0, skipped: c.skipped || 0 }, sentToday: today[String(s._id)] || 0, plan: schedule.sheets[String(s._id)] || null };
             }),
-            recent: recent.map((r) => ({ id: r._id, phone: r.phone, name: r.name, status: r.status, kind: r.kind, result: r.result, at: r.createdAt, doneAt: r.doneAt, steps: r.steps || [], failedWhere: r.failedWhere || "" }))
+            recent: recent.map((r) => ({ id: r._id, account: r.account || "business", phone: r.phone, name: r.name, status: r.status, kind: r.kind, result: r.result, at: r.createdAt, doneAt: r.doneAt, steps: r.steps || [], failedWhere: r.failedWhere || "" }))
         });
     } catch (e) { fail(res, e, "Could not load the sender."); }
 });
@@ -110,11 +110,16 @@ router.put("/wa/settings", authenticate, writeLimiter, async (req, res) => {
             if (raw.some((n) => String(n).trim()) && !nums.length) return res.status(400).json({ error: "Enter valid mobile numbers for the report." });
             set.reportNumbers = nums;
         }
+        for (const k of ["useBusiness", "useNormal"]) if (typeof b[k] === "boolean") set[k] = b[k];
+        for (const k of ["splitMin", "splitMax"]) if (b[k] !== undefined) set[k] = clamp(b[k], 0, 100, k === "splitMin" ? 35 : 60);
         if (b.gapMin !== undefined) set.gapMin = clamp(b.gapMin, 1, 120, 6);
         if (b.gapMax !== undefined) set.gapMax = clamp(b.gapMax, 1, 240, 12);
         for (const k of ["from", "to"]) if (b[k] !== undefined) { if (!automation.okTime(b[k])) return res.status(400).json({ error: `"${k}" must be a time like 10:00.` }); set[k] = b[k]; }
         const cur = await sender.settingsOf(owner);
         const next = { ...cur, ...set };
+        if (next.splitMax < next.splitMin) return res.status(400).json({ error: "The highest Business share must not be lower than the lowest." });
+        if (next.useBusiness === false && next.useNormal === false) return res.status(400).json({ error: "Keep at least one WhatsApp switched on." });
+        if (set.splitMin !== undefined || set.splitMax !== undefined) set.shareDay = "";                       // draw today's share again
         if (next.gapMax < next.gapMin) return res.status(400).json({ error: "The longest gap must not be shorter than the shortest." });
         if (sender.windowMinutes(next) <= 0) return res.status(400).json({ error: "The end time must be later than the start time." });
         if (set.enabled === true && !cur.enabled) set.nextDueAt = null;           // turning on: the first message may go now
@@ -261,7 +266,7 @@ router.get("/wa/sheets/:id/people", authenticate, async (req, res) => {
         const limit = clamp(req.query.limit, 1, 100, 50), page = clamp(req.query.page, 1, 100000, 1);
         let stages = null, stageError = "";
         if (sheet.weThree && await WaLink.exists({ owner })) { try { stages = await waLeads.leadStages(owner, { _id: sheet._id, name: sheet.name }, req.query.refresh === "1"); } catch (e) { stageError = e.message; } }
-        const all = await WaRecipient.find({ owner, sheet: sheet._id }).sort({ order: 1 }).select("name phone status error sentAt externalId").lean();
+        const all = await WaRecipient.find({ owner, sheet: sheet._id }).sort({ order: 1 }).select("name phone status error sentAt externalId account").lean();
         const stageOf = (p) => (stages && p.externalId && stages.byId.get(p.externalId)) || null;
         const counts = {}, countsOf = (p) => { const st = stageOf(p); return st ? (st.stage || "none") : "unlinked"; };
         for (const p of all) { const k = countsOf(p); counts[k] = (counts[k] || 0) + 1; }
@@ -275,7 +280,7 @@ router.get("/wa/sheets/:id/people", authenticate, async (req, res) => {
             stages: stageList, noStage: counts.none || 0, unlinked: counts.unlinked || 0,
             people: rows.slice((page - 1) * limit, page * limit).map((p) => {
                 const st = stageOf(p);
-                return { id: p._id, name: p.name, phone: p.phone, status: p.status, error: p.error || "", sentAt: p.sentAt || null, linked: Boolean(p.externalId), stage: st ? st.stage : null, weThreeSentAt: st ? st.whatsappSentAt : null, notes: st ? st.notes : "", updatedBy: st ? st.updatedBy : "", stageAt: st ? st.stageAt : null };
+                return { id: p._id, account: p.account || "", name: p.name, phone: p.phone, status: p.status, error: p.error || "", sentAt: p.sentAt || null, linked: Boolean(p.externalId), stage: st ? st.stage : null, weThreeSentAt: st ? st.whatsappSentAt : null, notes: st ? st.notes : "", updatedBy: st ? st.updatedBy : "", stageAt: st ? st.stageAt : null };
             })
         });
     } catch (e) { fail(res, e, "Could not load the sheet's people."); }
@@ -355,9 +360,9 @@ router.post("/wa/report/now", authenticate, writeLimiter, async (req, res) => {
 router.post("/wa/test", authenticate, writeLimiter, async (req, res) => {
     try {
         const b = req.body || {};
-        const send = await sender.sendTest(req.rootUser._id, { phone: b.phone, sheetId: validId(b.sheetId) ? b.sheetId : undefined });
+        const send = await sender.sendTest(req.rootUser._id, { phone: b.phone, sheetId: validId(b.sheetId) ? b.sheetId : undefined, text: b.text, account: b.account });
         if (!send) return res.status(409).json({ error: "The tablet could not take the message." });
-        res.status(202).json({ id: send._id, phone: send.phone });
+        res.status(202).json({ id: send._id, phone: send.phone, account: send.account });
     } catch (e) { fail(res, e, "Could not send the test."); }
 });
 
@@ -366,7 +371,7 @@ router.get("/wa/sends/:id", authenticate, async (req, res) => {
         if (!validId(req.params.id)) return res.status(404).json({ error: "Not found." });
         const s = await WaSend.findOne({ _id: req.params.id, owner: req.rootUser._id }).lean();
         if (!s) return res.status(404).json({ error: "Not found." });
-        res.json({ id: s._id, phone: s.phone, name: s.name, status: s.status, result: s.result, kind: s.kind, queuedAt: s.queuedAt, doneAt: s.doneAt, steps: s.steps || [], failedWhere: s.failedWhere || "" });
+        res.json({ id: s._id, account: s.account || "business", phone: s.phone, name: s.name, status: s.status, result: s.result, kind: s.kind, queuedAt: s.queuedAt, doneAt: s.doneAt, steps: s.steps || [], failedWhere: s.failedWhere || "" });
     } catch (e) { fail(res, e, "Could not load that message."); }
 });
 

@@ -422,6 +422,15 @@ async function ingest(d, body, seenAt = new Date()) {
         await HomeDevice.updateOne({ _id: d._id }, {
             $set: { "commands.$[c].status": a.ok ? "done" : "failed", "commands.$[c].result": String(a.message || "").slice(0, 200), "commands.$[c].doneAt": new Date() }
         }, { arrayFilters: [{ "c.id": a.id, "c.status": { $in: ["pending", "sent"] } }] });
+        // A WhatsApp group message (a place's "reached office"): what the tablet answered goes to the timeline, so a message that
+        // did not go out is never silent.
+        const grp = (d.commands || []).find((c) => c.id === a.id && c.type === "send_whatsapp" && (c.status === "pending" || c.status === "sent"));
+        if (grp) {
+            const to = grp.args && grp.args.group;
+            await record(a.ok
+                ? { owner: d.owner, device: d._id, deviceName: d.name, kind: "place_sent", text: `✅ WhatsApp sent to ${to}: “${String((grp.args && grp.args.text) || "").slice(0, 80)}”.` }
+                : { owner: d.owner, device: d._id, deviceName: d.name, kind: "place_failed", notify: true, text: `❌ WhatsApp to ${to} was not sent: ${String(a.message || "the tablet gave no reason").slice(0, 160)}.` }).catch(() => {});
+        }
         // A WhatsApp send: the tablet's answer decides whether the message counts as sent.
         if (d.kind === "hub") await waSender.onAck(d, a).catch((e) => console.log("[wa] ack failed:", e.message));
     }

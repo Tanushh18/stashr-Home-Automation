@@ -188,7 +188,7 @@ function PeopleView({ sheet, onChanged }) {
                 <div className="wa-person__main">
                   <span><b>{p.name || "No name"}</b> <em>+{p.phone}</em></span>
                   <span className="wa-muted">
-                    {SEND_LABEL[p.status] || p.status}{p.sentAt ? ` ${dateShort(p.sentAt)}` : ""}{p.error ? ` · ${p.error}` : ""}
+                    {SEND_LABEL[p.status] || p.status}{p.account && (p.status === "sent" || p.status === "queued") ? ` via ${p.account === "normal" ? "WhatsApp" : "WhatsApp Business"}` : ""}{p.sentAt ? ` ${dateShort(p.sentAt)}` : ""}{p.error ? ` · ${p.error}` : ""}
                     {p.linked && p.stage !== null ? ` · We Three: ${p.stage || "no stage yet"}${p.updatedBy ? ` (by ${p.updatedBy}${p.stageAt ? ", " + dateShort(p.stageAt) : ""})` : ""}` : ""}
                     {p.weThreeSentAt ? ` · sent there ${dateShort(p.weThreeSentAt)}` : ""}
                   </span>
@@ -581,6 +581,10 @@ export default function WhatsAppSender() {
   const [testSheet, setTestSheet] = useState("");
   const [reportNums, setReportNums] = useState(null);
   const [testNote, setTestNote] = useState("");
+  const [cPhone, setCPhone] = useState("");
+  const [cText, setCText] = useState("");
+  const [cAcct, setCAcct] = useState("business");
+  const [split, setSplit] = useState(null);
   const [openRow, setOpenRow] = useState("");
   const editing = useRef(false);
 
@@ -613,16 +617,23 @@ export default function WhatsAppSender() {
     try { const r = await sendWaTest(body); watchTest(r.id); load(); } catch (e) { toast.error(errorMessage(e)); setTestNote(""); }
   };
 
+  const custom = async () => {
+    try { const r = await sendWaTest({ phone: cPhone, text: cText, account: cAcct }); watchTest(r.id); load(); } catch (e) { toast.error(errorMessage(e)); setTestNote(""); }
+  };
+
   if (error && !data) return <div className="rd-page"><Section title="WhatsApp sender"><p className="wa-error">{error}</p></Section></div>;
   if (!data || !settings) return <div className="rd-page"><Skeleton /></div>;
   const s = data.settings;
   const dirty = ["dailyLimit", "from", "to", "gapMin", "gapMax"].some((k) => String(settings[k]) !== String(s[k]));
   const savedNums = (s.reportNumbers || ["918130483894", "919310994032"]).map((n) => "+" + n).join(", ");
   const nums = reportNums === null ? savedNums : reportNums;
+  const sp = split || { splitMin: s.splitMin ?? 35, splitMax: s.splitMax ?? 60 };
+  const splitDirty = split !== null && (String(sp.splitMin) !== String(s.splitMin ?? 35) || String(sp.splitMax) !== String(s.splitMax ?? 60));
+  const both = s.useBusiness !== false && s.useNormal !== false;
 
   return (
     <div className="rd-page wa-page">
-      <header className="rd-pagehead"><h1>WhatsApp sender</h1><p>This page is the only place that starts or stops sending. Turn sending on, switch on the sheets you want, and messages go out from the tablet through WhatsApp Business, one at a time, inside the limits below.</p></header>
+      <header className="rd-pagehead"><h1>WhatsApp sender</h1><p>This page is the only place that starts or stops sending. Turn sending on, switch on the sheets you want, and messages go out from the tablet through WhatsApp Business and normal WhatsApp in turn, one at a time, inside the limits below.</p></header>
 
       <Section
         title={s.enabled ? "Sending is on" : "Sending is off"}
@@ -636,6 +647,21 @@ export default function WhatsAppSender() {
         {!data.tablet && <p className="wa-error">The tablet is offline, so nothing can be sent. Check that Stashr Hub is open, on charge and on Wi-Fi.</p>}
         <NextLine plan={data.next} label={data.next && data.next.sheet ? "Next message (from " + ((data.sheets.find((x) => x._id === data.next.sheet) || {}).name || "a sheet") + ")" : "Next message"} />
         {s.testMode && <p className="wa-warn">Test mode is on: the time window, the gap and the daily limit are ignored. Turn it off before real sending.</p>}
+      </Section>
+
+      <Section title="Which WhatsApp sends" subtitle="Messages go out from WhatsApp Business and normal WhatsApp in turn: 1 to 3 from one, then the other. Each day WhatsApp Business takes a random share inside the range below and normal WhatsApp takes the rest. Chats messaged from normal WhatsApp are archived on the tablet afterwards.">
+        <div className="wa-row">
+          <label className="wa-switch"><input type="checkbox" checked={s.useBusiness !== false} onChange={(e) => set({ useBusiness: e.target.checked })} /><span>WhatsApp Business</span></label>
+          <label className="wa-switch"><input type="checkbox" checked={s.useNormal !== false} onChange={(e) => set({ useNormal: e.target.checked })} /><span>Normal WhatsApp</span></label>
+        </div>
+        {both && (
+          <div className="wa-form">
+            <label>Business share, lowest (%)<input className="wa-input" type="number" min="0" max="100" value={sp.splitMin} onChange={(e) => setSplit({ ...sp, splitMin: e.target.value })} /></label>
+            <label>Business share, highest (%)<input className="wa-input" type="number" min="0" max="100" value={sp.splitMax} onChange={(e) => setSplit({ ...sp, splitMax: e.target.value })} /></label>
+            <button className="rd-btn is-primary" disabled={!splitDirty} onClick={async () => { await set({ splitMin: Number(sp.splitMin), splitMax: Number(sp.splitMax) }, "Split saved."); setSplit(null); }}>Save split</button>
+          </div>
+        )}
+        {both && <p className="wa-muted">Today: WhatsApp Business {s.sharePct ?? 50}%, normal WhatsApp {100 - (s.sharePct ?? 50)}% (drawn between {s.splitMin ?? 35}% and {s.splitMax ?? 60}%).</p>}
       </Section>
 
       <Section title="Limits" subtitle="The daily limit is spread over the sending window with a random gap each time.">
@@ -674,6 +700,18 @@ export default function WhatsAppSender() {
         {testNote && <p className="wa-note" role="status">{testNote}</p>}
       </Section>
 
+      <Section title="Send a custom message" subtitle="Your own text to one number, from the WhatsApp you pick. It does not count toward the daily limit.">
+        <div className="wa-row">
+          <input className="wa-input is-short" placeholder="Number, e.g. 98100 12345" value={cPhone} onChange={(e) => setCPhone(e.target.value)} aria-label="Mobile number" />
+          <select className="wa-input is-short" value={cAcct} onChange={(e) => setCAcct(e.target.value)} aria-label="Send from">
+            <option value="business">From WhatsApp Business</option>
+            <option value="normal">From normal WhatsApp</option>
+          </select>
+        </div>
+        <textarea className="wa-input" rows={3} maxLength={900} placeholder="Message" value={cText} onChange={(e) => setCText(e.target.value)} aria-label="Message text" />
+        <div className="wa-row"><button className="rd-btn is-primary" disabled={!cPhone.trim() || !cText.trim() || !data.tablet} onClick={custom}>Send this message</button></div>
+      </Section>
+
       {data.sheets.length === 0 && <Section title="No sheets yet"><p className="wa-muted">Make a sheet below, add its messages, a picture and the people to message.</p></Section>}
       {data.sheets.map((sh) => <SheetCard key={sh._id} sheet={sh} onChanged={load} />)}
 
@@ -684,13 +722,14 @@ export default function WhatsAppSender() {
 
       <Section title="Latest messages" subtitle="Every message the server handed to the tablet, and what the tablet answered.">
         {data.recent.length === 0 ? <p className="wa-muted">Nothing yet.</p> : (
-          <table className="wa-table"><thead><tr><th>When</th><th>To</th><th>Result</th><th /></tr></thead><tbody>
+          <table className="wa-table"><thead><tr><th>When</th><th>To</th><th>From</th><th>Result</th><th /></tr></thead><tbody>
             {data.recent.map((r) => (
               <React.Fragment key={r.id}>
-                <tr><td>{ago(r.at)}</td><td>{r.name || "+" + r.phone}{r.kind === "test" ? " (test)" : r.kind === "report" ? " (report)" : ""}</td>
+                <tr><td>{ago(r.at)}</td><td>{r.name || "+" + r.phone}{r.kind === "test" ? " (test)" : r.kind === "custom" ? " (custom)" : r.kind === "report" ? " (report)" : ""}</td>
+                  <td>{r.account === "normal" ? "WhatsApp" : "WhatsApp Business"}</td>
                   <td className={"wa-status is-" + r.status}>{r.status === "sent" ? "Sent" : r.status === "failed" ? "Failed" + (r.failedWhere ? " at " + (WHO[r.failedWhere] || r.failedWhere).toLowerCase() : "") + ": " + (r.result || "") : "On the tablet..."}</td>
                   <td><button className="rd-btn is-quiet" onClick={() => setOpenRow(openRow === r.id ? "" : r.id)}>{openRow === r.id ? "Hide steps" : "Steps"}</button></td></tr>
-                {openRow === r.id && <tr className="wa-steps-row"><td colSpan={4}><StepList steps={r.steps} failedWhere={r.failedWhere} status={r.status} /></td></tr>}
+                {openRow === r.id && <tr className="wa-steps-row"><td colSpan={5}><StepList steps={r.steps} failedWhere={r.failedWhere} status={r.status} /></td></tr>}
               </React.Fragment>
             ))}
           </tbody></table>

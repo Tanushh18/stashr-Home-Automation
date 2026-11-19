@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import {
-  makeHomePairCode, getHomeSettings, saveHomeSettings, saveHomeSchedules, saveHomePlaces, testHomePlace, getHomeDashboard, getHomeInsights, saveHomeHistory, deleteHomeHistory, saveHomeSpots, getLocationCode, rotateLocationCode, getHubCode, rotateHubCode, getHomeWhere, locateNow, saveHomeScenes, runHomeScene,
+  makeHomePairCode, getHomeSettings, saveHomeSettings, saveHomeSchedules, saveHomePlaces, testHomePlace, getHomePlaceTest, getHomeDashboard, getHomeInsights, saveHomeHistory, deleteHomeHistory, saveHomeSpots, getLocationCode, rotateLocationCode, getHubCode, rotateHubCode, getHomeWhere, locateNow, saveHomeScenes, runHomeScene,
   getHomeShare, saveHomeShare, getHomePlaceTrail, getHomeUsage, getHomeSpeed, getHomeMedia, getHomeMediaBlob, deleteHomeMedia, getHomeLiveFrame, testHomeBrief, setHomePhonePerson, removeHomeDevice, mergeHomeDevice, setHomeSyncPaused
 } from "../../api/client";
 import { Section, useConfirm } from "../Render/RenderUi";
@@ -439,8 +439,19 @@ export function PlacesCard({ home, phones, hasSmartHub }) {
     toast.success("Set to where this phone is right now. Check the circle, then save.");
   };
   const test = async (pl) => {
-    try { await testHomePlace(pl.id, pl.arriveText); toast.success("Sent to the tablet: WhatsApp should open and send."); }
-    catch (e) { toast.error(errorMessage(e, "Could not send.")); }
+    try {
+      const r = await testHomePlace(pl.id, pl.arriveText);
+      toast.success("Given to the tablet. Waiting for its answer…");
+      // The tablet's real answer (it can take a minute): sent, or why not.
+      for (let i = 0; i < 40; i++) {
+        await new Promise((ok) => setTimeout(ok, 3000));
+        const c = await getHomePlaceTest(r.sent.id).catch(() => null);
+        if (!c) continue;
+        if (c.status === "done") { toast.success(`Sent to ${pl.group} from ${c.tablet}.`); return; }
+        if (c.status === "failed") { toast.error(`The tablet could not send it: ${c.result || "no reason given"}`); return; }
+      }
+      toast.error("The tablet did not answer in two minutes. Is it on and online?");
+    } catch (e) { toast.error(errorMessage(e, "Could not send.")); }
   };
   const phoneName = (id) => phones.find((p) => p.id === id)?.name || "phone";
   return (

@@ -73,14 +73,17 @@ class WhatsAppAccessibility : AccessibilityService() {
         return null
     }
 
-    /** The first node with this id in any WhatsApp Business window. */
-    private fun findAcross(id: String): AccessibilityNodeInfo? {
+    /** The first node with this id in any window of the WhatsApp (Business or normal) this job runs in. */
+    private fun findAcross(pkg: String, id: String): AccessibilityNodeInfo? = findAllAcross(pkg, id).firstOrNull()
+
+    private fun findAllAcross(pkg: String, id: String): List<AccessibilityNodeInfo> {
+        val out = ArrayList<AccessibilityNodeInfo>()
         for (w in windows) {
             val r = w.root ?: continue
-            if (r.packageName?.toString() != WaLeadSender.PACKAGE) continue
-            r.findAccessibilityNodeInfosByViewId("${WaLeadSender.PACKAGE}:id/$id").orEmpty().firstOrNull()?.let { return it }
+            if (r.packageName?.toString() != pkg) continue
+            out.addAll(r.findAccessibilityNodeInfosByViewId("$pkg:id/$id").orEmpty())
         }
-        return null
+        return out
     }
 
     /**
@@ -94,12 +97,12 @@ class WhatsAppAccessibility : AccessibilityService() {
             perm.findAccessibilityNodeInfosByText("Allow").orEmpty().firstOrNull()?.let { if (clickUp(it)) j.stageAt = now }
             return
         }
-        val root = windowRoot(WaLeadSender.PACKAGE) ?: run { j.seen = ""; return }
+        val root = windowRoot(j.pkg) ?: run { j.seen = ""; return }
         j.seen = WaImage.shortIds(idsOn(root)).joinToString(",")
         if (j.clicks == 0 && j.stage == 0) {
             // "The phone number +91 ... isn't on WhatsApp." (WhatsApp may use a curly apostrophe, so match any character there).
             // Only when no chat is open: the typed message itself (the composer) can contain those words, e.g. a report.
-            if (findAcross("input_attach_button") == null && hasText(root, NOT_ON_WA)) {
+            if (findAcross(j.pkg, "input_attach_button") == null && hasText(root, NOT_ON_WA)) {
                 var closed = false
                 for (w in listOf("Cancel", "OK")) {
                     if (closed) break
@@ -115,22 +118,65 @@ class WhatsAppAccessibility : AccessibilityService() {
         when (j.stage) {
             0 -> if (j.withImage) {
                 // The chat is open: the sender shares the picture file into it (never "the newest photo" of the gallery).
-                if (findAcross("input_attach_button") == null) return
+                if (findAcross(j.pkg, "input_attach_button") == null) return
                 j.shareWanted = true; j.stage = 3; j.stageAt = now
             } else {
-                val send = findAcross("send") ?: return
+                val send = findAcross(j.pkg, "send") ?: return
                 if (clickUp(send)) { j.clicks++; j.lastClick = now; j.stage = 4; j.stageAt = now }
             }
             3 -> {
                 if (!j.shared) return
-                val b = findAcross("send_media_btn") ?: findAcross("send") ?: return
+                val b = findAcross(j.pkg, "send_media_btn") ?: findAcross(j.pkg, "send") ?: return
                 if (clickUp(b)) { j.clicks++; j.lastClick = now; j.stage = 4; j.stageAt = now }
             }
             4 -> {
-                val chat = findAcross("input_attach_button") != null
-                val busy = findAcross("send_media_btn") != null || findAcross("send") != null
-                if (chat && !busy && now - j.stageAt > 2_000) j.done = true
+                val chat = findAcross(j.pkg, "input_attach_button") != null
+                val busy = findAcross(j.pkg, "send_media_btn") != null || findAcross(j.pkg, "send") != null
+                if (chat && !busy && now - j.stageAt > 2_000) {
+                    if (j.archive) { j.stage = 5; j.stageAt = now; j.archiveStart = now; j.deadline = maxOf(j.deadline, now + 30_000) } else j.done = true
+                }
             }
+            5, 6 -> archiveStep(j, now)
+        }
+    }
+
+    /** True when the chat list is on screen (the rows' name views exist). */
+    private fun listRows(j: WaLeadSender.Job) = findAllAcross(j.pkg, "conversations_row_contact_name")
+
+    private fun giveUpArchive(j: WaLeadSender.Job, why: String) {
+        Log.w(TAG, "archive: $why")
+        j.archiveNote = "not archived: $why"
+        if (findAcross(j.pkg, "action_mode_close_button") != null || findAcross(j.pkg, "action_mode_bar") != null) performGlobalAction(GLOBAL_ACTION_BACK)
+        j.done = true
+    }
+
+    /**
+     * Archives the chat just messaged (normal WhatsApp only). Stage 5: get to the chat list (Back if only the chat is on screen), find the
+     * row of this number (or, for a saved contact, the newest unpinned row) and long-press it. Stage 6: press the toolbar's Archive.
+     * A message that is already out never fails because of this: a problem is only noted.
+     */
+    private fun archiveStep(j: WaLeadSender.Job, now: Long) {
+        if (now - j.archiveStart > 25_000) { giveUpArchive(j, "timed out at step ${j.stage}"); return }
+        if (j.stage == 5) {
+            val rows = listRows(j)
+            if (rows.isEmpty()) { performGlobalAction(GLOBAL_ACTION_BACK); j.stageAt = now; return }
+            val digits = j.phone.takeLast(10)
+            val row = rows.firstOrNull { (it.text?.toString() ?: "").filter { c -> c.isDigit() }.endsWith(digits) }
+                ?: rows.firstOrNull { r -> var p: AccessibilityNodeInfo? = r; var pinned = false; var hops = 0
+                    while (p != null && hops < 4 && !pinned) { pinned = (p.findAccessibilityNodeInfosByViewId("${j.pkg}:id/pin_indicator").orEmpty().isNotEmpty()); p = p.parent; hops++ }
+                    !pinned }
+            if (row == null) { giveUpArchive(j, "chat row not found"); return }
+            var cur: AccessibilityNodeInfo? = row; var hops = 0; var did = false
+            while (cur != null && hops < 6) { if (cur.isLongClickable && cur.performAction(AccessibilityNodeInfo.ACTION_LONG_CLICK)) { did = true; break }; cur = cur.parent; hops++ }
+            if (!did) { giveUpArchive(j, "could not select the chat"); return }
+            j.stage = 6; j.stageAt = now
+        } else {
+            val btn = findAllAcross(j.pkg, "menuitem_conversations_archive").firstOrNull()
+                ?: windows.asSequence().mapNotNull { it.root }.filter { it.packageName?.toString() == j.pkg }
+                    .flatMap { r -> r.findAccessibilityNodeInfosByText("Archive").orEmpty().asSequence() }
+                    .firstOrNull { (it.contentDescription?.toString() ?: it.text?.toString() ?: "").startsWith("Archive") && !it.text.toString().equals("Archived", true) && it.text?.toString() != "Archived" }
+            if (btn == null) { if (now - j.stageAt > 4_000) giveUpArchive(j, "no Archive button"); return }
+            if (clickUp(btn)) { j.archiveNote = "archived"; j.stage = 7; j.stageAt = now; j.done = true } else giveUpArchive(j, "Archive was not pressable")
         }
     }
 

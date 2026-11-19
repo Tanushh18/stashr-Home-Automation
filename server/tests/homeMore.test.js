@@ -388,6 +388,38 @@ describe("places and WhatsApp", () => {
     });
 });
 
+describe("a place's Send test", () => {
+    test("queues the group message, reports the tablet's real answer, and records it on the timeline", async () => {
+        const auth = await signUp();
+        const tab = await pair(auth, "hub");
+        const ph = await pair(auth, "phone", "Tanush A38");
+        await report(tab.token, { status: { agent: "stashr-hub" } });
+        const phoneId = (await devices(auth)).devices.find((d) => d.kind === "phone").id;
+        const put = await request(app).put("/home/places").set(auth).send({ places: [{ name: "Office", lat: 28.6139, lon: 77.209, radius: 150, phone: phoneId, group: "we three", arriveText: "Reached office" }] });
+        const id = put.body.places[0].id;
+        const r = await request(app).post(`/home/places/${id}/test`).set(auth).send({ text: "Reached office" });
+        expect(r.status).toBe(200);
+        const cmdId = r.body.sent.id;
+        expect((await request(app).get(`/home/places/test/${cmdId}`).set(auth)).body.status).toBe("pending");
+        const out = await report(tab.token, { status: { agent: "stashr-hub" } });
+        expect(out.body.commands.find((c) => c.id === cmdId).args).toEqual({ group: "we three", text: "Reached office" });
+        // The tablet could not send it: the website and the timeline say why.
+        await report(tab.token, { status: { agent: "stashr-hub" }, acks: [{ id: cmdId, ok: false, message: "Group not found" }] });
+        const st = await request(app).get(`/home/places/test/${cmdId}`).set(auth);
+        expect(st.body.status).toBe("failed");
+        expect(st.body.result).toBe("Group not found");
+        const owner = (await HomeDevice.findOne({ kind: "hub" })).owner;
+        const failed = await HomeEvent.findOne({ owner, kind: "place_failed" }).lean();
+        expect(/we three was not sent: Group not found/.test(failed.text)).toBe(true);
+        // And when it works:
+        const r2 = await request(app).post(`/home/places/${id}/test`).set(auth).send({});
+        await report(tab.token, { status: { agent: "stashr-hub" } });
+        await report(tab.token, { status: { agent: "stashr-hub" }, acks: [{ id: r2.body.sent.id, ok: true, message: "Sent to we three" }] });
+        expect((await request(app).get(`/home/places/test/${r2.body.sent.id}`).set(auth)).body.status).toBe("done");
+        expect(Boolean(await HomeEvent.findOne({ owner, kind: "place_sent" }))).toBe(true);
+    });
+});
+
 describe("a place with Telegram updates (work location)", () => {
     test("leaving and reaching the place is sent to Telegram with no WhatsApp group; 'office se nikle ya nahi' is answered from the live location", async () => {
         const auth = await signUp();

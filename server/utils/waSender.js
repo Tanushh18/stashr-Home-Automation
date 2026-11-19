@@ -55,6 +55,56 @@ function nextGapMinutes(s, random = Math.random) {
     return Math.min(gapMax, Math.max(gapMin, jitter));
 }
 
+const ACCOUNTS = ["business", "normal"];
+/** The WhatsApps allowed to send (at least one: Business when both are switched off by mistake). */
+function accountsOn(s) {
+    const on = [];
+    if (s.useBusiness !== false) on.push("business");
+    if (s.useNormal !== false) on.push("normal");
+    return on.length ? on : ["business"];
+}
+
+/** Today's WhatsApp Business share (0..1): a random point in [splitMin, splitMax] percent, drawn once a day. */
+function drawShare(s, random = Math.random) {
+    const lo = Math.min(100, Math.max(0, Number(s.splitMin) || 0)), hi = Math.min(100, Math.max(lo, Number(s.splitMax) || lo));
+    return Math.round(lo + random() * (hi - lo));
+}
+
+/**
+ * Which WhatsApp sends the next message. Messages go out in runs of 1 to 3 from one account (never more than 3 in a row), then the other takes over; the
+ * share (WhatsApp Business percent of today's messages) steers which account is next and breaks a run that has pushed
+ * one account too far ahead. Pure: `counts` is today's messages per account, `run` the current run, `random` is injectable.
+ * Returns { account, run: { account, left } } where left is how many more of this run are planned.
+ */
+function chooseAccount({ settings: s, counts, run, sharePct, random = Math.random }) {
+    const on = accountsOn(s);
+    if (on.length === 1) return { account: on[0], run: { account: on[0], left: 0, streak: 0 } };
+    const biz = counts.business || 0, nor = counts.normal || 0, n = biz + nor;
+    const share = Math.min(100, Math.max(0, Number(sharePct))) / 100;
+    const d = share * (n + 1) - biz;                               // > 0: Business is behind its share, < 0: ahead of it
+    const cur = run && ACCOUNTS.includes(run.account) ? run.account : "";
+    const streak = cur ? Number(run.streak) || 1 : 0;              // messages in a row from `cur` so far (never more than 3)
+    if (cur && run.left > 0 && streak < 3) {
+        const pushedFar = cur === "business" ? d < -1.5 : d > 1.5;
+        if (!pushedFar) return { account: cur, run: { account: cur, left: run.left - 1, streak: streak + 1 } };
+    }
+    let next;
+    if (cur && streak >= 3) next = cur === "business" ? "normal" : "business";          // three in a row: the other one's turn
+    else if (d > 0.5) next = "business";
+    else if (d < -0.5) next = "normal";
+    else next = cur === "business" ? "normal" : cur === "normal" ? "business" : (random() * 100 < share * 100 ? "business" : "normal");
+    const len = 1 + Math.floor(random() * 3);                      // 1 to 3 in a row
+    return { account: next, run: { account: next, left: len - 1, streak: next === cur ? streak + 1 : 1 } };
+}
+
+/** Today's messages per account (older rows without an account were all Business). */
+async function accountCounts(owner, day) {
+    const rows = await WaSend.aggregate([{ $match: { owner, day, kind: "scheduled", status: { $in: ["queued", "sent"] } } }, { $group: { _id: { $ifNull: ["$account", "business"] }, n: { $sum: 1 } } }]);
+    const out = { business: 0, normal: 0 };
+    for (const r of rows) out[r._id === "normal" ? "normal" : "business"] += r.n;
+    return out;
+}
+
 async function settingsOf(owner) {
     const found = await WaSettings.findOne({ owner }).lean();
     if (found) return found;
@@ -174,12 +224,12 @@ async function onDelivered(commandIds, now = Date.now()) {
 }
 
 /** Queues one message on the tablet and records it. Returns the send, or null when the tablet queue refused it. */
-async function dispatch({ owner, tablet, sheet, recipient, phone, name, text, kind, day, now, random = Math.random }) {
+async function dispatch({ owner, tablet, sheet, recipient, phone, name, text, kind, day, now, account = "business", random = Math.random }) {
     const pictures = imagesOf(sheet);
     const imageIndex = pictures.length ? Math.min(pictures.length - 1, Math.floor(random() * pictures.length)) : 0;
-    const send = await WaSend.create({ owner, sheet: sheet && sheet._id, recipient: recipient && recipient._id, phone, name: name || "", text, kind, day, device: tablet._id, queuedAt: new Date(now), imageIndex });
-    await addSteps(send._id, [steps.step("picked", "ok", `${name || phone}${pictures.length ? `, picture ${imageIndex + 1} of ${pictures.length}` : ", no picture"}`)], now);
-    const entry = await automation.queue(tablet, "send_wa", { phone, text, sendId: String(send._id), image: pictures.length > 0 });
+    const send = await WaSend.create({ owner, sheet: sheet && sheet._id, recipient: recipient && recipient._id, phone, name: name || "", text, kind, day, device: tablet._id, queuedAt: new Date(now), imageIndex, account });
+    await addSteps(send._id, [steps.step("picked", "ok", `${account === "normal" ? "WhatsApp" : "WhatsApp Business"}: ${name || phone}${pictures.length ? `, picture ${imageIndex + 1} of ${pictures.length}` : ", no picture"}`)], now);
+    const entry = await automation.queue(tablet, "send_wa", { phone, text, sendId: String(send._id), image: pictures.length > 0, account });
     if (!entry) {
         await addSteps(send._id, [steps.step("queued", "failed", "The tablet's queue is full.")], now, "server");
         await WaSend.updateOne({ _id: send._id }, { $set: { status: "failed", result: "The tablet queue is full", doneAt: new Date(now) } });
@@ -187,6 +237,7 @@ async function dispatch({ owner, tablet, sheet, recipient, phone, name, text, ki
         return null;
     }
     await WaSend.updateOne({ _id: send._id }, { $set: { commandId: entry.id } });
+    if (recipient) await WaRecipient.updateOne({ _id: recipient._id }, { $set: { account } });
     await addSteps(send._id, [steps.step("queued", "ok", `Tablet "${tablet.name || "Hub"}"`)], now);
     return send;
 }
@@ -223,10 +274,15 @@ async function tickOwner(owner, now = Date.now(), random = Math.random) {
         await WaRecipient.updateOne({ _id: picked.recipient._id }, { $set: { status: "pending" }, $inc: { attempts: -1 } });
         return note(`"${picked.sheet.name}" has no message or picture yet`);
     }
-    const send = await dispatch({ owner, tablet, sheet: picked.sheet, recipient: picked.recipient, phone: picked.recipient.phone, name: picked.recipient.name, text, kind: "scheduled", day: local.date, now, random });
+    // Which WhatsApp: today's Business share (drawn once a day), runs of 1 to 3 from one account, then the other.
+    let sharePct = s.sharePct;
+    if (s.shareDay !== local.date) { sharePct = drawShare(s, random); await WaSettings.updateOne({ owner }, { $set: { shareDay: local.date, sharePct } }); }
+    const route = chooseAccount({ settings: s, counts: await accountCounts(owner, local.date), run: { account: s.runAccount, left: s.runLeft, streak: s.runStreak }, sharePct, random });
+    const send = await dispatch({ owner, tablet, sheet: picked.sheet, recipient: picked.recipient, phone: picked.recipient.phone, name: picked.recipient.name, text, kind: "scheduled", day: local.date, now, account: route.account, random });
     if (!send) return note("The tablet queue is full");
+    await WaSettings.updateOne({ owner }, { $set: { runAccount: route.run.account, runLeft: route.run.left, runStreak: route.run.streak } });
     const gap = s.testMode ? 0.25 : nextGapMinutes(s, random);
-    await WaSettings.updateOne({ owner }, { $set: { nextDueAt: new Date(now + gap * 60000), status: `Sent to the tablet: ${picked.recipient.name || picked.recipient.phone}`, lastTickAt: new Date(now) } });
+    await WaSettings.updateOne({ owner }, { $set: { nextDueAt: new Date(now + gap * 60000), status: `Sent to the tablet (${route.account === "normal" ? "WhatsApp" : "Business"}): ${picked.recipient.name || picked.recipient.phone}`, lastTickAt: new Date(now) } });
     return { did: "queued", send, sheet: picked.sheet.name };
 }
 
@@ -295,24 +351,30 @@ async function onAck(device, ack, now = Date.now()) {
     return finishSend(send._id, Boolean(ack.ok), ack.message, now);
 }
 
-/** A test to one number or to the next person: the same path as a real send, ignoring the window, the gap and the limit. */
-async function sendTest(owner, { phone, sheetId, now = Date.now() } = {}) {
+/**
+ * A message now, ignoring the window, the gap and the limit. With a phone (and optionally a text and an account) it is a message to
+ * that number from the chosen WhatsApp ("custom" when you typed the text yourself, else a "test"); without a phone it is the next
+ * person in line. The account defaults to the first WhatsApp that is switched on.
+ */
+async function sendTest(owner, { phone, sheetId, text: typed, account, now = Date.now() } = {}) {
     const s = await settingsOf(owner);
     const tablet = await tabletOf(owner, now);
     if (!tablet) { const e = new Error("The tablet is offline"); e.status = 409; throw e; }
     if (await WaSend.exists({ owner, status: "queued" })) { const e = new Error("A message is already being sent"); e.status = 409; throw e; }
     const local = automation.localParts(now, s.timezone);
+    const acct = ACCOUNTS.includes(account) ? account : accountsOn(s)[0];
     if (phone) {
         const p = normalizePhone(phone);
         if (!p) { const e = new Error("That is not a valid mobile number"); e.status = 400; throw e; }
-        const sheet = sheetId ? await WaSheet.findOne({ _id: sheetId, owner }).lean() : null;
-        const text = sheet ? textFor(sheet, { name: "" }) : "Test message from Stashr";
-        return dispatch({ owner, tablet, sheet, recipient: null, phone: p, name: "", text, kind: "test", day: local.date, now });
+        const own = String(typed || "").trim().slice(0, 900);
+        const sheet = !own && sheetId ? await WaSheet.findOne({ _id: sheetId, owner }).lean() : null;
+        const text = own || (sheet ? textFor(sheet, { name: "" }) : "Test message from Stashr");
+        return dispatch({ owner, tablet, sheet, recipient: null, phone: p, name: "", text, kind: own ? "custom" : "test", day: local.date, now, account: acct });
     }
     const picked = await pickRecipient(owner, local.date);
     if (!picked) { const e = new Error("Nobody is left to message"); e.status = 409; throw e; }
     const text = textFor(picked.sheet, picked.recipient);
-    return dispatch({ owner, tablet, sheet: picked.sheet, recipient: picked.recipient, phone: picked.recipient.phone, name: picked.recipient.name, text, kind: "test", day: local.date, now });
+    return dispatch({ owner, tablet, sheet: picked.sheet, recipient: picked.recipient, phone: picked.recipient.phone, name: picked.recipient.name, text, kind: "test", day: local.date, now, account: acct });
 }
 
 const DEFAULT_REPORT_NUMBERS = ["918130483894", "919310994032"];
@@ -369,9 +431,9 @@ async function reportTick(owner, s, local, now, tablet) {
         if (done.filter((r) => r.phone === phone && r.status === "failed").length >= REPORT_TRIES) continue;
         if (done.some((r) => r.status === "queued")) return null;
         const text = await buildReport(owner, s, local, now);
-        return dispatch({ owner, tablet, sheet: null, recipient: null, phone, name: "Report", text, kind: "report", day: local.date, now });
+        return dispatch({ owner, tablet, sheet: null, recipient: null, phone, name: "Report", text, kind: "report", day: local.date, now, account: accountsOn(s)[0] });
     }
     return null;
 }
 
-module.exports = { schedulePlan, onDelivered, addSteps, buildReport, reportTick, safeToRetry, waLeads, imagesOf, normalizePhone, windowMinutes, inWindow, nextGapMinutes, settingsOf, tabletOf, finishSend, pickRecipient, textFor, tickOwner, tickAll, onAck, sendTest, expireQueued };
+module.exports = { accountsOn, drawShare, chooseAccount, accountCounts, schedulePlan, onDelivered, addSteps, buildReport, reportTick, safeToRetry, waLeads, imagesOf, normalizePhone, windowMinutes, inWindow, nextGapMinutes, settingsOf, tabletOf, finishSend, pickRecipient, textFor, tickOwner, tickAll, onAck, sendTest, expireQueued };

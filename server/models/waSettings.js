@@ -14,6 +14,15 @@ const waSettingsSchema = new mongoose.Schema({
     reportEnabled: { type: Boolean, default: true },              // a WhatsApp report each night when the day's sending is done
     reportNumbers: { type: [String], default: ["918130483894", "919310994032"] },
     testMode: { type: Boolean, default: false },                  // ignores the window, the daily limit and the gap (for testing)
+    useBusiness: { type: Boolean, default: true },                // which WhatsApps may send: WhatsApp Business and normal WhatsApp
+    useNormal: { type: Boolean, default: true },
+    splitMin: { type: Number, default: 35, min: 0, max: 100 },    // each day WhatsApp Business gets a random share in [splitMin, splitMax] percent; normal WhatsApp gets the rest
+    splitMax: { type: Number, default: 60, min: 0, max: 100 },
+    shareDay: { type: String, default: "" },                      // the day sharePct was drawn for
+    sharePct: { type: Number, default: 50 },                      // today's Business share, percent
+    runAccount: { type: String, default: "" },                    // the account of the current run (2-3 messages in a row), and how many are left
+    runLeft: { type: Number, default: 0 },
+    runStreak: { type: Number, default: 0 },                      // messages in a row from runAccount (capped at 3)
     nextDueAt: { type: Date, default: null },
     lastTickAt: { type: Date, default: null },
     status: { type: String, default: "" }                         // what the sender is doing now, shown on the website

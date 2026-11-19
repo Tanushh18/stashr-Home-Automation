@@ -7,6 +7,7 @@ const waRecipientSchema = new mongoose.Schema({
     name: { type: String, default: "", maxlength: 120 },
     phone: { type: String, required: true },                       // digits with the country code, e.g. 919810012345
     status: { type: String, enum: ["pending", "queued", "sent", "failed", "skipped"], default: "pending", index: true },
+    account: { type: String, default: "" },                        // which WhatsApp messaged this person
     attempts: { type: Number, default: 0 },
     error: { type: String, default: "" },
     queuedAt: Date,

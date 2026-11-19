@@ -20,15 +20,19 @@ import java.io.File
  * (with a picture) shares that exact picture file into the chat with the text as its caption, then lets
  * [WhatsAppAccessibility] press Send. The picture is a private file of this app, named for this message, so nothing else
  * saved to the gallery meanwhile can be sent by mistake (the old way picked "the newest photo" from the gallery).
- * WhatsApp Business only; normal WhatsApp is never used.
+ * Either WhatsApp Business or normal WhatsApp (the "account" of the command); a normal WhatsApp chat is archived once the message is out.
  * The result goes back to Stashr as the command's answer, and Stashr counts a message as sent only from that answer.
  */
 object WaLeadSender {
-    const val PACKAGE = "com.whatsapp.w4b"
+    const val PACKAGE = "com.whatsapp.w4b"          // WhatsApp Business
+    const val NORMAL = "com.whatsapp"               // normal WhatsApp
+    fun packageOf(account: String) = if (account == "normal") NORMAL else PACKAGE
     private const val JOB_MS = 80_000L
 
-    class Job(val phone: String, val text: String, val withImage: Boolean, val deadline: Long) {
-        @Volatile var stage = 0            // 0 wait for the chat (then share the picture), 3 the picture preview's Send, 4 wait for the chat to come back
+    class Job(val phone: String, val text: String, val withImage: Boolean, @Volatile var deadline: Long, val pkg: String = PACKAGE) {
+        val archive: Boolean get() = pkg == NORMAL           // a chat messaged from normal WhatsApp is archived afterwards (Business chats stay)
+        @Volatile var archiveNote = ""                       // "archived", or why it could not be
+        @Volatile var stage = 0            // 0 wait for the chat (then share the picture), 3 the picture preview's Send, 4 wait for the chat to come back, 5-7 archive the chat (normal WhatsApp)
         @Volatile var shareWanted = false  // the chat is open: the picture file can be shared into it now
         @Volatile var shared = false       // the share was started
         @Volatile var seen = ""            // the view ids last seen on WhatsApp's screen (shown in a failure, so the steps can be tuned from afar)
@@ -37,6 +41,7 @@ object WaLeadSender {
         @Volatile var error: String? = null
         @Volatile var clicks = 0
         @Volatile var lastClick = 0L
+        @Volatile var archiveStart = 0L
         @Volatile var startedAt = System.currentTimeMillis()
     }
 
@@ -45,7 +50,7 @@ object WaLeadSender {
     /** True while a lead message is being sent (WhatsApp Business is on screen), so nothing else may open WhatsApp. */
     fun isBusy(): Boolean { val j = job; return j != null && !j.done && j.error == null && System.currentTimeMillis() < j.deadline }
 
-    private fun installed(ctx: Context): Boolean = try { ctx.packageManager.getPackageInfo(PACKAGE, 0); true } catch (e: PackageManager.NameNotFoundException) { false }
+    private fun installed(ctx: Context, pkg: String): Boolean = try { ctx.packageManager.getPackageInfo(pkg, 0); true } catch (e: PackageManager.NameNotFoundException) { false }
 
     /** Returns "Sent to <number>" or throws with a message Stashr can show ("That number is not on WhatsApp", ...). */
     @Suppress("DEPRECATION")
@@ -54,10 +59,13 @@ object WaLeadSender {
         val text = args.optString("text").trim()
         val sendId = args.optString("sendId")
         val withImage = args.optBoolean("image", false)
+        val account = if (args.optString("account") == "normal") "normal" else "business"
+        val pkg = packageOf(account)
+        val label = if (account == "normal") "WhatsApp" else "WhatsApp Business"
         if (phone.length !in 10..14) throw IllegalArgumentException("That is not a valid number")
         if (text.isEmpty() && !withImage) throw IllegalArgumentException("Nothing to send")
-        if (WhatsAppAccessibility.instance == null) throw IllegalStateException("Turn on Stashr Hub in Accessibility settings")
-        if (!installed(ctx)) throw IllegalStateException("WhatsApp Business is not installed")
+        if (!AccessibilityHeal.ensure(ctx)) throw IllegalStateException("Turn on Stashr Hub in Accessibility settings")
+        if (!installed(ctx, pkg)) throw IllegalStateException("$label is not installed")
         if (isBusy()) throw IllegalStateException("Another message is being sent")
         if (WhatsAppSender.job?.done == false) throw IllegalStateException("Another message is being sent")
 
@@ -66,7 +74,7 @@ object WaLeadSender {
             withContext(Dispatchers.IO) { writeShareFile(ctx, bytes, sendId) }
         } else null
         val wasOff = ScreenGuard.wasOff(ctx)
-        val j = Job(phone, text, withImage, System.currentTimeMillis() + JOB_MS)
+        val j = Job(phone, text, withImage, System.currentTimeMillis() + JOB_MS, pkg)
         job = j
         val wl = (ctx.getSystemService(Context.POWER_SERVICE) as PowerManager).newWakeLock(
             PowerManager.FULL_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP or PowerManager.ON_AFTER_RELEASE, "stashr:wa-lead")
@@ -75,15 +83,15 @@ object WaLeadSender {
             WhatsAppAccessibility.instance?.hideKeyboard(true)
             // With a picture the chat is opened empty (the text goes in as the picture's caption); without one the text is pre-filled.
             val link = if (withImage) "https://wa.me/$phone" else "https://wa.me/$phone?text=" + Uri.encode(text)
-            ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link)).setPackage(PACKAGE)
+            ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link)).setPackage(pkg)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP))
             while (System.currentTimeMillis() < j.deadline) {
                 j.error?.let { throw IllegalStateException(it) }
-                if (j.done) return "Sent to +$phone"
+                if (j.done) return "Sent to +$phone from $label" + (if (j.archive) " (${j.archiveNote.ifEmpty { "not archived" }})" else "")
                 if (j.shareWanted && !j.shared && shareFile != null) {
                     // The chat is open, so the number is on WhatsApp: share this message's own picture into that chat.
                     j.shared = true
-                    ctx.startActivity(shareIntent(ctx, shareFile, text, phone))
+                    ctx.startActivity(shareIntent(ctx, shareFile, text, phone, pkg))
                     j.stageAt = System.currentTimeMillis()
                 }
                 WhatsAppAccessibility.instance?.poke()
@@ -112,9 +120,9 @@ object WaLeadSender {
     }
 
     /** "Send this file to that chat": the picture with the text as its caption, straight into the chat of this number. */
-    private fun shareIntent(ctx: Context, file: File, text: String, phone: String): Intent {
+    private fun shareIntent(ctx: Context, file: File, text: String, phone: String, pkg: String): Intent {
         val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", file)
-        return Intent(Intent.ACTION_SEND).setPackage(PACKAGE).setType(WaImage.mimeOfExt(file.extension))
+        return Intent(Intent.ACTION_SEND).setPackage(pkg).setType(WaImage.mimeOfExt(file.extension))
             .putExtra(Intent.EXTRA_STREAM, uri)
             .apply { if (text.isNotEmpty()) putExtra(Intent.EXTRA_TEXT, text) }
             .putExtra("jid", "$phone@s.whatsapp.net")
