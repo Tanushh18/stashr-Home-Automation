@@ -35,7 +35,13 @@ const pairHub = async (auth) => {
     return (await request(app).post("/home/agent/pair").send({ code })).body;
 };
 const bearer = (t) => ({ Authorization: `Bearer ${t}` });
-const hubReport = (token, acks = []) => request(app).post("/home/agent/report").set(bearer(token)).send({ status: { agent: "stashr-hub" }, acks });
+// The tests pretend it is NOON; a report stamps the tablet as seen "now", so it is moved to NOON as well, which keeps the tablet online
+// whatever the real time of day is (before noon the real "now" would be hours before NOON and the tablet would look offline).
+const hubReport = async (token, acks = []) => {
+    const res = await request(app).post("/home/agent/report").set(bearer(token)).send({ status: { agent: "stashr-hub" }, acks });
+    await HomeDevice.updateMany({}, { $set: { lastSeen: new Date(NOON + 24 * 3600 * 1000), online: true } });   // a day after NOON: still "online" for every moment the tests pretend it is
+    return res;
+};
 const owner = async () => (await User.findOne({}))._id;
 // Noon on a weekday, India time: inside the 10:00 to 19:00 window.
 // Today's date in India: the overview and "Send the report now" use the real day, so the tests must run on it too.
