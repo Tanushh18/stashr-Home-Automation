@@ -19,8 +19,8 @@ describe("log retention for the free database", () => {
         expect(await ttl()).toBe(60 * 24 * 3600);
         delete process.env.DB_RETENTION;
         const changed = await retention.apply();
-        expect(changed.find((c) => /homeevents/i.test(c.collection)).to).toBe(21 * 24 * 3600);
-        expect(await ttl()).toBe(21 * 24 * 3600);
+        expect(changed.find((c) => /homeevents/i.test(c.collection)).to).toBe(3 * 24 * 3600);
+        expect(await ttl()).toBe(3 * 24 * 3600);
         expect((await retention.apply()).length).toBe(0);                   // nothing more to do
     });
     test("the usage report lists collections by size", async () => {

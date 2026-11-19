@@ -2,14 +2,17 @@
  * How long logs are kept. The free MongoDB is 512 MB, so the long-running logs get a shorter life than the models first asked for.
  * The models keep their original TTL index; this shortens it in place on boot (collMod, no rebuild, no conflict) and is a no-op once
  * done. DB_RETENTION=full keeps the original times. Anything older than the new time is removed by MongoDB itself shortly after.
- *   home events 60 -> 21 days, Wi-Fi access-point sightings 45 -> 21, internet speed tests 90 -> 30,
- *   account activity log 180 -> 90, app-registry visitors 90 -> 30.
+ *   the fast-growing, heavy ones live 3 days at most: home events 60 -> 3, Telegram message copies 30 -> 3 (camera clips: 1 day, see
+ *   mediaBudget.js; live frames: 10 minutes); the slow ones are trimmed: Wi-Fi access-point sightings 45 -> 21, internet speed tests
+ *   90 -> 30, WhatsApp send records 90 -> 30, account activity log 180 -> 90, app-registry visitors 90 -> 30.
  */
 const mongoose = require("mongoose");
 
 const DAY = 24 * 3600;
 const LEAN = [
-  { model: "HomeEvent", key: { at: 1 }, seconds: 21 * DAY },
+  { model: "HomeEvent", key: { at: 1 }, seconds: 3 * DAY },
+  { model: "TelegramNotification", key: { createdAt: 1 }, seconds: 3 * DAY },
+  { model: "WaSend", key: { createdAt: 1 }, seconds: 30 * DAY },
   { model: "HomeApSeen", key: { lastSeen: 1 }, seconds: 21 * DAY },
   { model: "HomeApEdge", key: { lastSeen: 1 }, seconds: 21 * DAY },
   { model: "HomeSpeed", key: { at: 1 }, seconds: 30 * DAY },
@@ -20,7 +23,7 @@ const LEAN = [
 /** -> [{ collection, from, to }] for what it changed. */
 async function apply(db = mongoose.connection.db, models = mongoose.models) {
   if (String(process.env.DB_RETENTION || "lean").toLowerCase() === "full" || !db) return [];
-  for (const f of ["homeEvent", "homeApSeen", "homeSpeed", "AuditEvent", "registryVisit"]) { try { require("../models/" + f); } catch { /* optional */ } }   // some load lazily; make sure they exist
+  for (const f of ["homeEvent", "homeApSeen", "homeSpeed", "AuditEvent", "registryVisit", "TelegramNotification", "waSend"]) { try { require("../models/" + f); } catch { /* optional */ } }   // some load lazily; make sure they exist
   const changed = [];
   for (const t of LEAN) {
     const M = models[t.model];
