@@ -471,6 +471,18 @@ router.post("/expenses/remove-unmatched", authenticate, writeLimiter, async (req
 const { processStatement: runStatement } = require("../utils/statementRun");
 const saved = require("../utils/statementSearch");
 const balance = require("../utils/moneyBalance");
+const brain = require("../utils/moneyBrain");
+
+// Money Brain: statement-first profit/loss, a verdict (healthy/watch/alert) and the next actions. Read-only.
+router.get("/expenses/insights", authenticate, async (req, res) => {
+    try {
+        res.set("Cache-Control", "no-store");
+        const owner = req.rootUser._id, s = await settingsOf(owner);
+        const { st } = await storeFor(req, s);
+        const lines = await saved.loadLines(owner, await req.rootUser.getDataKey(), {});
+        return res.json(brain.analyze(await st.list(), lines, { today: ex.ist(Date.now()) }));
+    } catch (e) { return fail(res, e, "Could not work out the insights."); }
+});
 const officeCrypto = require("../utils/officeCrypto");
 const statementPdf = require("../utils/statementPdf");
 

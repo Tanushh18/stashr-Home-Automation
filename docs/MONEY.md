@@ -100,3 +100,9 @@ read during the first sync is not kept; the statement check also looks only at t
 ## Check again with saved statements
 
 Every statement you check is saved (encrypted, lines only). "Check again with my saved statements" (web and Android) runs the same matching on those saved lines: no file, no password. Choose a month first to check just that month. Use it after upgrades, or after the SMS side changed, to bring every month back in line with the statement. Lines of the same day are put back in the bank's order by following the running balance.
+
+## Money Brain (insights)
+`GET /expenses/insights` runs a small built-in analyst (`server/utils/moneyBrain.js`): no external model, nothing leaves Stashr, nothing is written.
+- **The statement is the sole truth.** A month covered by a saved statement is totalled from the statement's own lines; months without one use messages and are marked "entries only" (lower trust).
+- **Profit or loss** per month (income minus spending; Transfers and Investments are your own money moving, so not counted as spending).
+- **It decides on its own:** a verdict (healthy / watch / alert) with reasons and next actions, from loss so far, month-end pace, category spikes, balance runway, statement chain breaks, stale statements, doubtful and unsorted entries.
