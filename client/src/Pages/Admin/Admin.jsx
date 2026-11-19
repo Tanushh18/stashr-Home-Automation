@@ -20,7 +20,7 @@ export default function Admin() {
   useEffect(() => { const t = setTimeout(() => void load(q), 250); return () => clearTimeout(t); }, [q, load]);
 
   const remove = async (user) => {
-    const typed = await prompt({ title: `Delete ${user.email}?`, message: "This permanently deletes the account and every record of theirs: passwords, projects, connected accounts, Smart home data and sign-ins. It cannot be undone.", label: "Their email address", match: user.email, confirmLabel: "Delete account", tone: "danger", maxLength: 320 });
+    const typed = await prompt({ title: `Delete ${user.email}?`, message: "This permanently deletes the account and every record of theirs: passwords, projects, connected accounts, Smart home, Money, WhatsApp and camera data and sign-ins. It cannot be undone.", label: "Their email address", match: user.email, confirmLabel: "Delete account", tone: "danger", maxLength: 320 });
     if (typed === null) return;
     setBusy("del" + user.id);
     try {

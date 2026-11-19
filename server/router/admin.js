@@ -5,8 +5,6 @@ const User = require("../models/schema");
 const authenticate = require("../middlewares/authenticate");
 const { CATALOG, BY_KEY, resolveFeatures, isAdminEmail } = require("../utils/features");
 const { serverError } = require("./helpers");
-const AuditEvent = require("../models/AuditEvent");
-const Registry = require("../models/registry");
 
 /* Admin panel API: who has an account, and which features each person sees. Administrators only. */
 const adminOnly = (req, res, next) => (isAdminEmail(req.rootUser?.email) ? next() : res.status(403).json({ error: "Not allowed." }));
@@ -50,7 +48,7 @@ router.put("/admin/users/:id/features", authenticate, adminOnly, async (req, res
 });
 
 /* Deletes one person and every record of theirs: the account document (passwords, projects, connected accounts,
-   photo data, sessions, tokens) and everything stored apart from it. The admin types the email to confirm. */
+   sessions, tokens) and everything stored apart from it (utils/purgeOwner.js). The admin types the email to confirm. */
 router.delete("/admin/users/:id", authenticate, adminOnly, async (req, res) => {
     if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: "User not found." });
     try {
@@ -62,15 +60,13 @@ router.delete("/admin/users/:id", authenticate, adminOnly, async (req, res) => {
         if (!confirm || confirm !== String(user.email || "").toLowerCase()) return res.status(400).json({ error: "Type the person's email address to confirm." });
 
         const id = user._id;
-        const [account, audit, lists] = await Promise.all([
-            User.deleteOne({ _id: id }),
-            AuditEvent.deleteMany({ userId: id }),
-            Registry.deleteMany({ owner: id })
-        ]);
+        const account = await User.deleteOne({ _id: id });
+        const gone = await require("../utils/purgeOwner").purgeOwner(id);               // devices, events, Money, WhatsApp, Telegram copies, camera files...
+        const audit = { deletedCount: gone.byCollection.auditevents || 0 }, lists = { deletedCount: gone.byCollection.registries || 0 };
         console.info(`[admin] ${req.rootUser.email} deleted user=${id}`);
         return res.json({
             deleted: account.deletedCount === 1,
-            removed: { account: account.deletedCount, activityLog: audit.deletedCount, serverLists: lists.deletedCount }
+            removed: { account: account.deletedCount, activityLog: audit.deletedCount, serverLists: lists.deletedCount, otherRecords: gone.total, cameraFiles: gone.media }
         });
     } catch (error) { return serverError(res, "admin/users delete", error); }
 });
