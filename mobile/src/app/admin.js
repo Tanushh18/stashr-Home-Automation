@@ -22,7 +22,7 @@ export default function Admin() {
   };
   const remove = (user) => {
     // Android has no typed prompt in Alert, so the email is confirmed in two steps instead.
-    Alert.alert(`Delete ${user.email}?`, "This permanently deletes the account and every record of theirs: passwords, projects, connected accounts, photos data and sign-ins.", [
+    Alert.alert(`Delete ${user.email}?`, "This permanently deletes the account and every record of theirs: passwords, projects, connected accounts, Smart home data and sign-ins.", [
       { text: "Cancel", style: "cancel" },
       { text: "Delete", style: "destructive", onPress: async () => {
         if (!(await ask("Really delete?", `${user.email} and everything of theirs will be gone for good.`, "Delete for good", true))) return;

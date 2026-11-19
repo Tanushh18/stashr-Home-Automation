@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "react-toastify";
+import { Link } from "react-router-dom";
 import { getSmsOverview, getGgnSmsOverview, saveGgnSmsSettings, saveSmsSettings, saveSmsSheet, saveSmsDevice, getSmsLog, sendSmsTest, getWaOverview } from "../../api/client";
 import { Section, Skeleton } from "../Render/RenderUi";
 import { usePolling } from "../Render/renderHooks";
@@ -227,9 +228,17 @@ export default function SmsSender() {
   }, []);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { getWaOverview().then((w) => setWaSheets((w.sheets || []).filter((s) => (s.texts || []).length))).catch(() => {}); }, []);
-  usePolling(load, 20000);
+  const needsSetup = Boolean(error && !data && /Connect We Three/i.test(error));
+  usePolling(load, 20000, !(error && !data));     // not while there is nothing to show yet: it only repeats the same answer
 
-  if (error && !data) return <div className="rd-page"><Section title="SMS sender"><p className="wa-error">{error}</p></Section></div>;
+  if (needsSetup) return (
+    <div className="rd-page"><Section title="SMS sender" subtitle="Sends your We Three leads as text messages through the tablet.">
+      <p>Set up is not finished: the SMS sender reads its lists from your We Three account.</p>
+      <p><Link className="rd-btn" to="/whatsapp">Open WhatsApp sender to connect We Three</Link></p>
+      <p className="wa-muted">Come back here after the sheets show up there.</p>
+    </Section></div>
+  );
+  if (error && !data) return <div className="rd-page"><Section title="SMS sender"><p className="wa-error">{error}</p><button type="button" className="rd-btn" onClick={load}>Try again</button></Section></div>;
   if (!data) return <div className="rd-page"><Skeleton /></div>;
 
   const s = data.settings || {};
