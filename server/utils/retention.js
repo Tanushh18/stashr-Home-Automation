@@ -30,6 +30,7 @@ async function apply(db = mongoose.connection.db, models = mongoose.models) {
     if (!M) continue;
     const name = M.collection.name;
     try {
+      await M.init();                                                        // wait for the model's own indexes to be built: a TTL index that is not there yet cannot be shortened
       const idx = (await db.collection(name).indexes()).find((i) => i.expireAfterSeconds !== undefined && JSON.stringify(i.key) === JSON.stringify(t.key));
       if (!idx || idx.expireAfterSeconds <= t.seconds) continue;                 // no such index, or already as short
       await db.command({ collMod: name, index: { keyPattern: t.key, expireAfterSeconds: t.seconds } });
