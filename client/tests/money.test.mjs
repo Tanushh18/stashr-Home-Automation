@@ -62,3 +62,12 @@ test("budget text round-trips and bad parts are dropped", async () => {
   assert.deepEqual(parseBudgets("Food=8000, Travel = ₹3,000, bad, x=0"), { Food: 8000, Travel: 3000 });
   assert.equal(budgetsText([{ category: "Food", limit: 8000 }]), "Food=8000");
 });
+
+test("text typed in the env box is merged over the rows, keeping notes and dropping removed names", async () => {
+  const { mergeTypedEnv } = await import("../src/lib/projectItems.js");
+  const out = mergeTypedEnv([{ name: "PORT", value: "1", purpose: "web" }, { name: "OLD", value: "x", purpose: "" }], [{ name: "PORT", value: "3000" }, { name: "NEW", value: "y" }]);
+  assert.deepEqual(out.map((r) => r.name), ["PORT", "NEW"]);
+  assert.equal(out[0].value, "3000");
+  assert.equal(out[0].purpose, "web");
+  assert.equal(out[1].purpose, "");
+});

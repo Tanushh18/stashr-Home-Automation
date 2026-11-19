@@ -87,7 +87,9 @@ export default function Projects() {
     finally { setSyncing(false); }
   };
   useEffect(() => { void runSync(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  usePolling(() => runSync(), 120000, true);
+  // Nothing connected: there is nothing to sync, so do not ask the server every 2 minutes (it only repeats the same empty answer).
+  const nothingConnected = Boolean(sync) && !(sync.github?.accounts || 0) && !(sync.render?.accounts || 0);
+  usePolling(() => runSync(), 120000, !nothingConnected);
   const navigate = useNavigate();
   const searchRef = useShortcuts(() => navigate("/projects/new"));
 
@@ -148,11 +150,12 @@ export default function Projects() {
         <section className={"pv2-sync" + (syncFailed ? " is-error" : "")} aria-live="polite">
           <span className={"pv2-sync__dot" + (syncing ? " is-busy" : "")} aria-hidden="true" />
           <div className="pv2-sync__text">
-            <strong>{syncing ? "Syncing with GitHub and Render…" : syncFailed ? "Couldn’t reach GitHub or Render" : "Auto-sync is on"}</strong>
+            <strong>{syncing ? "Syncing with GitHub and Render…" : syncFailed ? "Couldn’t reach GitHub or Render" : nothingConnected ? "Auto-sync is waiting for an account" : "Auto-sync is on"}</strong>
             <small>
-              {sync?.checkedAt ? "Last synced " + timeAgo(sync.checkedAt) + " · " : ""}
-              {sync ? `GitHub ${sync.github?.repos ?? 0} repo${sync.github?.repos === 1 ? "" : "s"} · Render ${sync.render?.services ?? 0} service${sync.render?.services === 1 ? "" : "s"}` : "New repos and servers are added automatically."}
-              {sync?.github?.failed ? " · a GitHub token failed — reconnect it" : ""}
+              {nothingConnected ? "Connect GitHub or Render and new repos and servers become projects by themselves." : null}
+              {nothingConnected ? null : sync?.checkedAt ? "Last synced " + timeAgo(sync.checkedAt) + " · " : ""}
+              {nothingConnected ? null : sync ? `GitHub ${sync.github?.repos ?? 0} repo${sync.github?.repos === 1 ? "" : "s"} · Render ${sync.render?.services ?? 0} service${sync.render?.services === 1 ? "" : "s"}` : "New repos and servers are added automatically."}
+              {nothingConnected ? null : sync?.github?.failed ? " · a GitHub token failed — reconnect it" : ""}
             </small>
           </div>
           {githubAccounts && !githubAccounts.length ? <button type="button" className="btn btn--ghost btn--sm" onClick={() => setGithubOpen(true)}>Connect GitHub to import repos</button> : null}
@@ -300,7 +303,7 @@ export default function Projects() {
         ) : null}
       </div>
 
-      <GithubConnectModal open={githubOpen} onClose={() => setGithubOpen(false)} onChange={setGithubAccounts} />
+      <GithubConnectModal open={githubOpen} onClose={() => setGithubOpen(false)} onChange={(list) => { setGithubAccounts(list); if (list && list.length) void runSync(true); }} />
       <ProjectImportModal open={importing} onClose={() => setImporting(false)} onImport={importProjects} />
     </div>
   );
