@@ -767,6 +767,7 @@ async function tickAll(now = Date.now()) {
     const owners = await HomeDevice.distinct("owner");
     for (const owner of owners) {
         try { await tickOwner(owner, now); } catch (e) { console.log("[home] automation failed:", e.message); }
+        try { await require("./homeMedia").prune(owner, now); } catch (e) { console.log("[home] media prune failed:", e.message); }
     }
 }
 

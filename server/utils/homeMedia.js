@@ -1,12 +1,14 @@
 /**
- * Photos and short videos from the tablet camera, kept in the database (GridFS) for 14 days and at most 300 per
- * account, and sent to your Telegram chat when the camera sees movement.
+ * Photos and short videos from the tablet camera, kept in the database (GridFS) for 24 hours only, at most 30 files and
+ * 100 MB per account (the newest are kept), and sent to your Telegram chat when the camera sees movement. The cleanup runs
+ * after every save and every minute from the home sweep, so old media goes even when the camera has gone quiet.
  */
 const mongoose = require("mongoose");
 const { Readable } = require("stream");
 
-const KEEP_MS = 14 * 24 * 3600 * 1000;
-const KEEP_COUNT = 300;
+const KEEP_MS = 24 * 3600 * 1000;
+const KEEP_COUNT = 30;
+const KEEP_BYTES = 100 * 1024 * 1024;
 const LIMITS = { photo: 8 * 1024 * 1024, video: 30 * 1024 * 1024 };
 const TYPES = { photo: ["image/jpeg"], video: ["video/mp4"] };
 
@@ -30,13 +32,30 @@ async function save({ owner, device, kind, reason, buffer }) {
     return id;
 }
 
-async function prune(owner) {
+const running = new Map();     // one cleanup at a time per account, so two overlapping ones never delete the same files twice over
+
+/** Deletes media older than 24 hours, then the oldest beyond 30 files or 100 MB (newest first are kept). Returns how many files went. */
+function prune(owner, now = Date.now()) {
+    const key = String(owner);
+    const next = (running.get(key) || Promise.resolve()).then(() => pruneNow(owner, now));
+    running.set(key, next.catch(() => 0));
+    return next;
+}
+
+async function pruneNow(owner, now) {
     try {
         const files = mongoose.connection.db.collection("homeMedia.files");
-        const old = await files.find({ "metadata.owner": owner, $or: [{ uploadDate: { $lt: new Date(Date.now() - KEEP_MS) } }] }).project({ _id: 1 }).toArray();
-        const extra = await files.find({ "metadata.owner": owner }).sort({ uploadDate: -1 }).skip(KEEP_COUNT).project({ _id: 1 }).toArray();
-        for (const f of [...old, ...extra]) await bucket().delete(f._id).catch(() => {});
-    } catch (e) { console.log("[home] media prune failed:", e.message); }
+        const all = await files.find({ "metadata.owner": owner }).sort({ uploadDate: -1 }).project({ _id: 1, length: 1, uploadDate: 1 }).toArray();
+        const cut = now - KEEP_MS;
+        let count = 0, bytes = 0;
+        const drop = [];
+        for (const f of all) {
+            count++; bytes += Number(f.length) || 0;
+            if (new Date(f.uploadDate).getTime() < cut || count > KEEP_COUNT || bytes > KEEP_BYTES) drop.push(f._id);
+        }
+        for (const id of drop) await bucket().delete(id).catch(() => {});
+        return drop.length;
+    } catch (e) { console.log("[home] media prune failed:", e.message); return 0; }
 }
 
 async function list(owner, limit = 40) {
@@ -52,4 +71,4 @@ async function find(owner, id) {
 const stream = (file, opts) => bucket().openDownloadStream(file._id, opts);
 const remove = (file) => bucket().delete(file._id);
 
-module.exports = { save, list, find, stream, remove, prune, looksLike, LIMITS, TYPES };
+module.exports = { KEEP_MS, KEEP_COUNT, KEEP_BYTES, save, list, find, stream, remove, prune, looksLike, LIMITS, TYPES };
