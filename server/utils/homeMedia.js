@@ -1,13 +1,12 @@
 /**
- * Photos and short videos from the tablet camera, kept in the database (GridFS) for 14 days and at most 300 per
- * account, and sent to your Telegram chat when the camera sees movement.
+ * Photos and short videos from the tablet camera, kept in the database (GridFS) for a few days and under a size limit per account
+ * (utils/mediaBudget.js: MEDIA_KEEP_DAYS, MEDIA_KEEP_MB), and sent to your Telegram chat when the camera sees movement.
  */
 const mongoose = require("mongoose");
 const { Readable } = require("stream");
 
-const KEEP_MS = 14 * 24 * 3600 * 1000;
-const KEEP_COUNT = 300;
-const LIMITS = { photo: 8 * 1024 * 1024, video: 30 * 1024 * 1024 };
+const budget = require("./mediaBudget");
+const LIMITS = { photo: 8 * 1024 * 1024, video: 16 * 1024 * 1024 };
 const TYPES = { photo: ["image/jpeg"], video: ["video/mp4"] };
 
 const bucket = () => new mongoose.mongo.GridFSBucket(mongoose.connection.db, { bucketName: "homeMedia" });
@@ -33,9 +32,8 @@ async function save({ owner, device, kind, reason, buffer }) {
 async function prune(owner) {
     try {
         const files = mongoose.connection.db.collection("homeMedia.files");
-        const old = await files.find({ "metadata.owner": owner, $or: [{ uploadDate: { $lt: new Date(Date.now() - KEEP_MS) } }] }).project({ _id: 1 }).toArray();
-        const extra = await files.find({ "metadata.owner": owner }).sort({ uploadDate: -1 }).skip(KEEP_COUNT).project({ _id: 1 }).toArray();
-        for (const f of [...old, ...extra]) await bucket().delete(f._id).catch(() => {});
+        const all = await files.find({ "metadata.owner": owner }).project({ _id: 1, length: 1, uploadDate: 1 }).toArray();
+        for (const id of budget.toPrune(all)) await bucket().delete(id).catch(() => {});
     } catch (e) { console.log("[home] media prune failed:", e.message); }
 }
 
