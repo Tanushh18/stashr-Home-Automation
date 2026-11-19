@@ -19,9 +19,18 @@ describe("camera media budget", () => {
         expect(b.mayUploadToTelegram("video", 12 * MB)).toBe(false);
         expect(b.mayUploadToTelegram("photo", 7 * MB)).toBe(true);
     });
+    test("a clip is deleted after one day, a photo is kept three", () => {
+        const now = Date.parse("2026-11-19T00:00:00Z"), day = 24 * 3600 * 1000;
+        const drop = b.toPrune([
+            { _id: "clip-2h", length: MB, uploadDate: new Date(now - 2 * 3600 * 1000), metadata: { kind: "video" } },
+            { _id: "clip-30h", length: MB, uploadDate: new Date(now - 30 * 3600 * 1000), metadata: { kind: "video" } },
+            { _id: "photo-30h", length: MB, uploadDate: new Date(now - 30 * 3600 * 1000), metadata: { kind: "photo" } },
+            { _id: "photo-4d", length: MB, uploadDate: new Date(now - 4 * day), metadata: { kind: "photo" } }], now);
+        expect(drop).toEqual(["clip-30h", "photo-4d"]);
+    });
     test("pruning drops what is too old, then the oldest until it fits", () => {
         const now = Date.parse("2026-11-19T00:00:00Z"), day = 24 * 3600 * 1000;
-        const f = (id, ageDays, mb) => ({ _id: id, length: mb * MB, uploadDate: new Date(now - ageDays * day) });
+        const f = (id, ageDays, mb, kind = "photo") => ({ _id: id, length: mb * MB, uploadDate: new Date(now - ageDays * day), metadata: { kind } });
         const drop = b.toPrune([f("new", 0.1, 20), f("mid", 1, 20), f("mid2", 2, 15), f("old", 5, 1), f("edge", 1.5, 20)], now);
         expect(drop.includes("old")).toBe(true);                    // older than 3 days
         expect(drop.includes("new") || drop.includes("mid")).toBe(false);

@@ -26,6 +26,7 @@ const connect = async (url = databaseUrl()) =>
     {
         await mongoose.connect(url);
         console.log("Connection success.");
+        require("../utils/retention").apply().then((c) => { if (c.length) console.log("Shortened log retention:", c); }).catch(() => {});
         if (process.env.PHOTO_DATA_CLEANUP === "true") require("../utils/photoCleanup").run().then((r) => console.log("Photo data cleanup (PHOTO_DATA_CLEANUP=true):", r)).catch((e) => console.error("Photo data cleanup failed:", e.message));
     }
     catch (error)
@@ -43,6 +44,7 @@ async function connectBoth(oldUrl, newUrl)
     {
         await mongoose.connect(newUrl);
         console.log("New database connected (all writes go here).");
+        require("../utils/retention").apply().catch(() => {});
         if (process.env.PHOTO_DATA_CLEANUP === "true") require("../utils/photoCleanup").run().then((r) => console.log("Photo data cleanup (PHOTO_DATA_CLEANUP=true):", r)).catch((e) => console.error("Photo data cleanup failed:", e.message));
     }
     catch (error)

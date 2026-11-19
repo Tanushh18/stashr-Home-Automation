@@ -32,9 +32,18 @@ async function save({ owner, device, kind, reason, buffer }) {
 async function prune(owner) {
     try {
         const files = mongoose.connection.db.collection("homeMedia.files");
-        const all = await files.find({ "metadata.owner": owner }).project({ _id: 1, length: 1, uploadDate: 1 }).toArray();
+        const all = await files.find({ "metadata.owner": owner }).project({ _id: 1, length: 1, uploadDate: 1, "metadata.kind": 1 }).toArray();
         for (const id of budget.toPrune(all)) await bucket().delete(id).catch(() => {});
     } catch (e) { console.log("[home] media prune failed:", e.message); }
+}
+
+/** Every account's camera files, once: clips older than a day (and photos older than three) go, whether or not a new one arrived. */
+async function pruneAll() {
+    try {
+        const owners = await mongoose.connection.db.collection("homeMedia.files").distinct("metadata.owner");
+        for (const o of owners) await prune(o);
+        return owners.length;
+    } catch (e) { console.log("[home] media prune failed:", e.message); return 0; }
 }
 
 async function list(owner, limit = 40) {
@@ -50,4 +59,4 @@ async function find(owner, id) {
 const stream = (file, opts) => bucket().openDownloadStream(file._id, opts);
 const remove = (file) => bucket().delete(file._id);
 
-module.exports = { save, list, find, stream, remove, prune, looksLike, LIMITS, TYPES };
+module.exports = { save, list, find, stream, remove, prune, pruneAll, looksLike, LIMITS, TYPES };

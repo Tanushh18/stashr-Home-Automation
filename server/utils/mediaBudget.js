@@ -4,7 +4,8 @@
  *   - a daily allowance per account (MEDIA_DAILY_MB, default 40): once it is used, photos are still saved but not sent to Telegram,
  *     and clips are not accepted until tomorrow (the tablet is told, and keeps its own copy);
  *   - a clip bigger than TELEGRAM_CLIP_MAX_MB (default 8) is stored but not uploaded to Telegram;
- *   - what is kept is limited by size and age (MEDIA_KEEP_MB default 60, MEDIA_KEEP_DAYS default 3), oldest first.
+ *   - clips are deleted after MEDIA_CLIP_KEEP_DAYS (default 1), photos after MEDIA_KEEP_DAYS (default 3), and the total kept per account
+ *     is limited to MEDIA_KEEP_MB (default 60), oldest first.
  * Pure functions; the counters live in memory (a restart gives a fresh day, which only errs on the side of allowing).
  */
 const MB = 1024 * 1024;
@@ -13,7 +14,7 @@ const num = (v, d) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) :
 const dailyBytes = () => num(process.env.MEDIA_DAILY_MB, 40) * MB;
 const telegramClipMax = () => num(process.env.TELEGRAM_CLIP_MAX_MB, 8) * MB;
 const keepBytes = () => num(process.env.MEDIA_KEEP_MB, 60) * MB;
-const keepMs = () => num(process.env.MEDIA_KEEP_DAYS, 3) * 24 * 3600 * 1000;
+const keepMs = (kind) => num(kind === "video" ? process.env.MEDIA_CLIP_KEEP_DAYS : process.env.MEDIA_KEEP_DAYS, kind === "video" ? 1 : 3) * 24 * 3600 * 1000;   // clips are deleted after a day, photos (small) after three
 
 const used = new Map();                        // "owner|day" -> bytes
 const dayOf = (ms = Date.now()) => new Date(ms).toISOString().slice(0, 10);
@@ -35,7 +36,7 @@ const mayUploadToTelegram = (kind, bytes) => kind !== "video" || bytes <= telegr
 
 /**
  * Which stored files to delete: older than the keep time, then the oldest until the total is under the size limit.
- * files: [{ _id, length, uploadDate }] -> the _ids to remove.
+ * files: [{ _id, length, uploadDate, metadata: { kind } }] -> the _ids to remove.
  */
 function toPrune(files, now = Date.now()) {
   const sorted = [...files].sort((a, b) => new Date(b.uploadDate) - new Date(a.uploadDate));     // newest first
@@ -43,7 +44,7 @@ function toPrune(files, now = Date.now()) {
   let total = 0;
   for (const f of sorted) {
     const age = now - new Date(f.uploadDate).getTime();
-    if (age > keepMs() || total + f.length > keepBytes()) drop.push(f._id);
+    if (age > keepMs(f.metadata && f.metadata.kind) || total + f.length > keepBytes()) drop.push(f._id);
     else total += f.length;
   }
   return drop;
