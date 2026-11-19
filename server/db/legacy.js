@@ -14,6 +14,10 @@
 const mongoose = require("mongoose");
 
 const state = { legacy: null, capBytes: Math.round(Number(process.env.NEW_DB_CAP_MB || 460) * 1024 * 1024), drained: new Set(), sizeAt: 0, size: 0, warned: false };
+// Removed features' data that is never copied into the (size-limited) new database. Nothing is deleted from the old one.
+const STRIP_FIELDS = { users: ["photoMedia", "photoAlbums", "photoFolders", "photoBackupJobs", "photoSettings", "photoShares"] };
+const SKIP_DATA = new Set(["photoimportbatches", "photoimportitems", "photofoldershares"]);
+const strip = (coll, docs) => { const f = STRIP_FIELDS[coll]; if (f) for (const d of docs) for (const k of f) delete d[k]; return docs; };
 const PULL_MAX = 5000;                                   // most documents one query copies over
 const SKIP_COLLECTIONS = /^(system\.|_stashr_)/;
 
@@ -37,7 +41,8 @@ async function copyIn(collName, collection, filter, { limit = PULL_MAX, sort = n
     if (await isFull()) { if (!state.warned) { state.warned = true; console.warn("[db] the new database is at its size cap: old data is read but no longer copied."); } return { copied: 0, full: true }; }
     let cur = legacyColl(collName).find(filter);
     if (sort) cur = cur.sort(sort);
-    const docs = await cur.limit(limit).toArray();
+    if (SKIP_DATA.has(collName)) return { copied: 0, full: false };
+    const docs = strip(collName, await cur.limit(limit).toArray());
     const now = Date.now();
     const fresh = docs.filter((d) => !d.expireAt || new Date(d.expireAt).getTime() > now);   // an entry past its expiry is not worth moving
     if (!fresh.length) return { copied: 0, full: false };
@@ -143,4 +148,4 @@ mongoose.Model.prototype.save = async function (...args) {
 
 mongoose.Model.prototype.$save = mongoose.Model.prototype.save;   // Model.create saves through $save
 
-module.exports = { state, attach, detach, enabled, copyIn, usedBytes, isFull, legacyColl, SKIP_COLLECTIONS };
+module.exports = { strip, SKIP_DATA, state, attach, detach, enabled, copyIn, usedBytes, isFull, legacyColl, SKIP_COLLECTIONS };

@@ -8,11 +8,9 @@ const { ADMINS } = require("./registryDefaults");
  */
 const CATALOG = [
   { key: "projects", label: "Projects", description: "Project notes, variables and deploy status.", audience: "all" },
-  { key: "photos", label: "Photos", description: "Photo library, backup and Google Drive storage.", audience: "all" },
   { key: "servers", label: "Servers", description: "Render dashboard: services, deploys, logs.", audience: "all" },
   { key: "services", label: "Services", description: "Usage and limits of connected services.", audience: "all" },
   { key: "cron", label: "Cron and monitoring", description: "Health pings, incidents and monitoring.", audience: "all" },
-  { key: "photoImport", label: "Google Photos import pipeline", description: "Long-running import from Google Photos into Drive, with full pipeline view.", audience: "admin" },
   { key: "serverUrls", label: "Server URLs", description: "Backend addresses and environment sync.", audience: "admin", locked: true },
   { key: "security", label: "Security scans", description: "Repository security scans.", audience: "admin", locked: true },
   { key: "adminPanel", label: "Admin panel", description: "Users and feature access.", audience: "admin", locked: true },

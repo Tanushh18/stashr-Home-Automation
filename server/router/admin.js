@@ -6,8 +6,6 @@ const authenticate = require("../middlewares/authenticate");
 const { CATALOG, BY_KEY, resolveFeatures, isAdminEmail } = require("../utils/features");
 const { serverError } = require("./helpers");
 const AuditEvent = require("../models/AuditEvent");
-const PhotoFolderShare = require("../models/photoFolderShare");
-const { PhotoImportBatch, PhotoImportItem } = require("../models/photoImport");
 const Registry = require("../models/registry");
 
 /* Admin panel API: who has an account, and which features each person sees. Administrators only. */
@@ -64,20 +62,15 @@ router.delete("/admin/users/:id", authenticate, adminOnly, async (req, res) => {
         if (!confirm || confirm !== String(user.email || "").toLowerCase()) return res.status(400).json({ error: "Type the person's email address to confirm." });
 
         const id = user._id;
-        const email = String(user.email || "").toLowerCase();
-        const [account, audit, batches, items, sharesOwned, sharesReceived, lists] = await Promise.all([
+        const [account, audit, lists] = await Promise.all([
             User.deleteOne({ _id: id }),
             AuditEvent.deleteMany({ userId: id }),
-            PhotoImportBatch.deleteMany({ userId: id }),
-            PhotoImportItem.deleteMany({ userId: id }),
-            PhotoFolderShare.deleteMany({ ownerId: id }),
-            email ? PhotoFolderShare.deleteMany({ recipientEmail: email }) : { deletedCount: 0 },
             Registry.deleteMany({ owner: id })
         ]);
         console.info(`[admin] ${req.rootUser.email} deleted user=${id}`);
         return res.json({
             deleted: account.deletedCount === 1,
-            removed: { account: account.deletedCount, activityLog: audit.deletedCount, photoImports: batches.deletedCount + items.deletedCount, folderShares: sharesOwned.deletedCount + (sharesReceived.deletedCount || 0), serverLists: lists.deletedCount }
+            removed: { account: account.deletedCount, activityLog: audit.deletedCount, serverLists: lists.deletedCount }
         });
     } catch (error) { return serverError(res, "admin/users delete", error); }
 });

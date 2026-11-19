@@ -25,7 +25,7 @@ async function legacyCollections() {
     const list = await legacy.state.legacy.db.listCollections({}, { nameOnly: true }).toArray();
     const out = [];
     for (const c of list) {
-        if (legacy.SKIP_COLLECTIONS.test(c.name) || c.type === "view") continue;
+        if (legacy.SKIP_COLLECTIONS.test(c.name) || legacy.SKIP_DATA.has(c.name) || c.type === "view") continue;
         const coll = legacy.legacyColl(c.name);
         out.push({ name: c.name, count: await coll.estimatedDocumentCount() });
     }
@@ -43,6 +43,7 @@ async function moveCollection(name) {
         const batch = await src.find(lastId ? { _id: { $gt: lastId } } : {}).sort({ _id: 1 }).limit(BATCH).toArray();
         if (!batch.length) { await progressColl().updateOne({ _id: name }, { $set: { drained: true, copied, lastId, at: new Date() } }, { upsert: true }); legacy.state.drained.add(name); return { name, copied, drained: true, full: false }; }
         const now = Date.now();
+        legacy.strip(name, batch);
         const fresh = batch.filter((d) => !d.expireAt || new Date(d.expireAt).getTime() > now);
         if (fresh.length) {
             try { await dst.insertMany(fresh, { ordered: false }); }

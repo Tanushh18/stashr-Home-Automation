@@ -67,3 +67,12 @@ describe("old database read, new database written", () => {
         expect(st.collections.find((c) => c.name === "legacynotes").drained).toBe(true);
     });
 });
+
+describe("removed photo data is never carried over", () => {
+    test("the big photo arrays are stripped from account documents on the way in", () => {
+        const [doc] = legacy.strip("users", [{ email: "a@b.c", photoMedia: [1, 2, 3], photoConnections: [{ id: "x" }] }]);
+        expect(doc.photoMedia).toBe(undefined);
+        expect(doc.photoConnections.length).toBe(1);
+        expect(legacy.SKIP_DATA.has("photoimportbatches")).toBe(true);
+    });
+});
