@@ -44,8 +44,10 @@ function LiveView({ hub, onClose }) {
   useEffect(() => {
     const start = () => act(() => home.command(hub.id, "camera", { action: "live" }));
     start();
-    const ask_ = setInterval(start, 110 * 1000);
-    const tick = setInterval(() => setN((x) => x + 1), 1500);
+    // Every frame is written to the database and sent to the phone: the live view closes itself after 10 minutes (the free plan's bandwidth).
+    const t0 = Date.now();
+    const ask_ = setInterval(() => { if (Date.now() - t0 > 10 * 60 * 1000) { onClose(); return; } start(); }, 110 * 1000);
+    const tick = setInterval(() => { if (Date.now() - t0 > 10 * 60 * 1000) return; setN((x) => x + 1); }, 1500);
     return () => { clearInterval(ask_); clearInterval(tick); };
   }, [hub.id]);
   return (
@@ -54,7 +56,7 @@ function LiveView({ hub, onClose }) {
         <Image source={{ uri: `${activeServer()}/home/camera/live?t=${n}`, headers: authHeaders() }} style={{ width: "100%", height: "100%" }} contentFit="contain" cachePolicy="none" onLoad={() => setShown(true)} />
         {!shown ? <Dim style={{ position: "absolute", color: "#fff" }}>Connecting to the tablet camera…</Dim> : null}
       </View>
-      <Dim>● LIVE · about one picture every 1–2 seconds. Stops 2 minutes after you close it.</Dim>
+      <Dim>● LIVE · about one picture every 1–2 seconds. Closes itself after 10 minutes.</Dim>
       <Btn label="Close live view" onPress={onClose} />
     </View>
   );

@@ -11,6 +11,7 @@ import { ago, fmtBytes, fmtMinutes, daysLabel, stepLabel, STEP_CHOICES } from ".
 import { TvTimeChart, SpeedChart, CommuteChart, PlaceTrailChart } from "./HomeCharts";
 import { MapPicker, PlaceMap } from "./HomeMap";
 import { parseCoords, batteryOf, healthItems, healthReport } from "../../lib/smartHome";
+import { isUserActive, onUserReturn } from "../../lib/activity";
 
 /** The settings every card here edits, loaded once. */
 export function useHomeSettings() {
@@ -618,8 +619,12 @@ function LiveView({ hub, send, onClose }) {
     let alive = true, last = "", timer = null, ask = null;
     const start = () => send(hub.id, "camera", { action: "live" }, "Live view starting… the first picture takes a few seconds.");
     start();
-    ask = window.setInterval(start, 110 * 1000); // keep it going while the page is open
+    // Keep it going while the page is open AND someone is here: every frame is written to the database and sent back, which is the
+    // biggest drain on the free plan's bandwidth. Away for 5 minutes or tab hidden = the tablet is not asked again (it stops by itself).
+    ask = window.setInterval(() => { if (!document.hidden && isUserActive()) start(); }, 110 * 1000);
+    const stopReturn = onUserReturn(() => { if (!document.hidden) start(); });
     const tick = async () => {
+      if (document.hidden || !isUserActive()) { if (alive) timer = window.setTimeout(tick, 5000); return; }
       try {
         const b = await getHomeLiveFrame();
         if (alive && b) { const u = URL.createObjectURL(b); setUrl(u); setWaiting(false); if (last) URL.revokeObjectURL(last); last = u; }
@@ -627,7 +632,7 @@ function LiveView({ hub, send, onClose }) {
       if (alive) timer = window.setTimeout(tick, 1500);
     };
     tick();
-    return () => { alive = false; window.clearTimeout(timer); window.clearInterval(ask); if (last) URL.revokeObjectURL(last); };
+    return () => { alive = false; window.clearTimeout(timer); window.clearInterval(ask); stopReturn(); if (last) URL.revokeObjectURL(last); };
   }, [hub.id, send]);
   return (
     <div className="sh-live">
