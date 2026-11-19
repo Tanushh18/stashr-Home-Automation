@@ -4,7 +4,7 @@ All are listed with download buttons on the website's **/apps** page.
 
 | App | Who installs it | What it does | What it can see |
 |---|---|---|---|
-| **Stashr for Android** (`mobile/`) | You | Vault, 2FA, photo backup, servers | Everything of yours |
+| **Stashr for Android** (`mobile/`) | You | Vault, 2FA, servers, Money, Smart home | Everything of yours |
 | **Stashr Hub** (`hub-app/`, `com.tanush.stashr.hub`) | The always-on home tablet (and optionally a phone to report its health) | Wi-Fi scan with names, security camera, "Hey Stashr" voice, dashboard, slideshow, speed tests, WhatsApp sender, announcements | Home data only. Joins with a pairing code, never your password |
 | **Stashr TV** (`tv-app/`, `com.tanush.stashr.tv`) | The living-room Android TV | Launcher (apps + movies), Drive → USB movie sync, built-in player, remote control, on-screen messages | Home data only. Joins with the home-device code |
 | **Stashr Cast** (`cast-app/`, `com.tanush.stashr.cast`) | Each phone that wants to show its screen | Mirrors the screen and sound to Stashr TV over the Wi-Fi | Only what is on the screen while casting; nothing leaves the Wi-Fi |

@@ -8,7 +8,7 @@ import { downloadApk, haveApk, installApk } from "../lib/apkInstall";
 
 /** The Stashr apps and where to download them (the server serves the newest build of each). */
 const APPS = [
-  { key: "android", name: "Stashr", for: "Phone", text: "Passwords, photos, projects, Money and Smart home on your phone (this app)." },
+  { key: "android", name: "Stashr", for: "Phone", text: "Passwords, projects, Money and Smart home on your phone (this app)." },
   { key: "hub", name: "Stashr Hub", for: "Home tablet", text: "The always-on tablet: camera alerts, voice commands, Wi-Fi scan, local mode and the WhatsApp sender." },
   { key: "tv", name: "Stashr TV", for: "TV", text: "The TV launcher: movies from Drive, notices, live map and cast receiver." },
   { key: "where", name: "Stashr Location", for: "Family phones", text: "Shares only where the phone is, in the background, with your own Stashr. Runs always-on with a per-phone switch." },

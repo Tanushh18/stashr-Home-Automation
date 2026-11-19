@@ -66,12 +66,6 @@
           "barcodeScannerEnabled": true
         }
       ],
-      [
-        "expo-media-library",
-        {
-          "photosPermission": "Allow $(PRODUCT_NAME) to find new photos and videos so it can back them up to your Google Drive."
-        }
-      ],
       "expo-background-task",
       [
         "expo-build-properties",

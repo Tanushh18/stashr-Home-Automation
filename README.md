@@ -27,7 +27,7 @@ Stashr is a web and Android application for managing saved logins and project co
 - Optional TOTP-based second factor and one-time recovery codes for account sign-in.
 - Import/export and encrypted backup flows.
 - Optional breach checks using Have I Been Pwned's k-anonymity range API.
-- Optional integrations including Google Photo Cloud/Drive, GitHub, Telegram alerts, Brevo email, and Groq-powered diagnostics.
+- Optional integrations including Google Drive (movies for the TV), GitHub, Telegram alerts, Brevo email, and Groq-powered diagnostics.
 - API health/readiness endpoints and optional scheduler/keep-alive jobs.
 
 Optional integrations require explicit configuration and their own provider credentials. A feature may be unavailable when the corresponding credentials are not configured.
@@ -183,11 +183,10 @@ The native build uses native modules; Expo Go alone may not support the complete
 
 Enable only the integrations you plan to use. Typical secrets/configuration include:
 
-- Google OAuth client ID/secret and the exact registered callback URI for Photo Cloud.
+- Google OAuth client ID/secret and the exact registered callback URI for the TV's movies from Google Drive.
 - Brevo API key plus a verified sender email for password-reset email.
 - A random scheduler secret for a trusted monitor that calls the protected operations endpoint.
 - Optional Groq key for diagnostics when enabled and consented to.
-- Optional photo worker URLs and a shared worker secret for trusted worker instances.
 - A GitHub token or Telegram bot token may be entered by an authenticated user in the app. These are user-provided integration credentials, not values that belong in the repository.
 
 Store production credentials in the hosting platform's secret/environment settings, not in source control or in the web/mobile build environment.
@@ -207,14 +206,12 @@ The canonical API template is `server/config.env.example`. The core values are:
 | `EXTENSION_ORIGINS` | No | Comma-separated exact Chrome extension origins. |
 | `SELF_URL` | No | Public API URL used by keep-alive and callbacks. Render can provide `RENDER_EXTERNAL_URL`. |
 | `KEEP_ALIVE`, `KEEP_ALIVE_MINUTES` | No | Configure optional periodic self-ping. |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Optional | Google OAuth configuration for Photo Cloud. |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Optional | Google OAuth configuration for the TV's movies (Google Drive). |
 | `GOOGLE_PHOTO_REDIRECT_URI` | Optional | Exact Google OAuth callback URL. |
-| `PHOTO_CLOUD_CLIENT_URL` | Optional | Web client URL used by Photo Cloud redirect flows. |
+| `PHOTO_CLOUD_CLIENT_URL` | Optional | Web client URL used by the Google sign-in redirect. |
 | `RENDER_MONITOR_CRON_SECRET` | Optional | Shared secret for a trusted monitoring scheduler. |
 | `BREVO_API_KEY`, `BREVO_SENDER_EMAIL`, `BREVO_SENDER_NAME` | Optional | Transactional mail configuration. Configure a verified sender in Brevo. |
 | `GROQ_API_KEY`, `GROQ_MODEL` | Optional | Optional AI-assisted diagnostics. |
-| `PHOTO_WORKER_URLS`, `PHOTO_WORKER_SECRET` | Optional | Trusted photo worker fleet. |
-| `PHOTO_IMPORT_WORKER`, `PHOTO_IMPORT_PARALLEL` | Optional | Photo import worker behavior. |
 
 Check code and provider settings before adding more variables: integrations evolve. Never copy real production values into this table or into `.env.example`.
 

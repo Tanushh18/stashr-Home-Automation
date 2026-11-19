@@ -206,40 +206,6 @@ export const api = {
   vaultChanges: (since) => request(`/vault/changes${since ? `?since=${encodeURIComponent(since)}` : ""}`, { timeout: 30000 }),
   logout: () => request("/logout"),
 
-  // Photos (Google Drive storage)
-  photoDashboard: () => request("/photo-cloud/dashboard"),
-  photoGoogleStart: (label) => request(`/photo-cloud/google/start?client=mobile&label=${encodeURIComponent(label || "Google account")}`),
-  photoSync: (id) => request(`/photo-cloud/connections/${encodeURIComponent(id)}/sync`, { method: "POST", body: {}, timeout: 90000 }),
-  photoUpdateAccount: (id, data) => request(`/photo-cloud/connections/${encodeURIComponent(id)}`, { method: "PUT", body: data }),
-  photoDisconnect: (id) => request(`/photo-cloud/connections/${encodeURIComponent(id)}`, { method: "DELETE" }),
-  photoPolicy: (data) => request("/photo-cloud/routing-policy", { method: "PUT", body: data }),
-  photoExport: () => request("/photo-cloud/export", { timeout: 60000 }),
-  photoUploadStart: (data) => request("/photo-cloud/upload/start", { method: "POST", body: data, timeout: 60000 }),
-  photoUploadComplete: (jobId, fileId) => request(`/photo-cloud/upload/${encodeURIComponent(jobId)}/complete`, { method: "POST", body: { fileId }, timeout: 60000 }),
-  photoUploadFail: (jobId, data) => request(`/photo-cloud/upload/${encodeURIComponent(jobId)}/fail`, { method: "POST", body: data }),
-  photoUploadCancel: (jobId) => request(`/photo-cloud/upload/${encodeURIComponent(jobId)}/cancel`, { method: "POST", body: {} }),
-  photoMediaUpdate: (id, data) => request("/photo-cloud/media/item", { method: "PUT", body: { id, ...data } }),
-  photoMediaRemove: (id, scope) => request(`/photo-cloud/media/item?id=${encodeURIComponent(id)}&scope=${scope}`, { method: "DELETE" }),
-  photoShares: () => request("/photo-cloud/shares"),
-  photoShare: (data) => request("/photo-cloud/shares", { method: "POST", body: data }),
-  photoRevokeShare: (id) => request(`/photo-cloud/shares/${encodeURIComponent(id)}`, { method: "DELETE" }),
-  albumCreate: (name) => request("/photo-cloud/albums", { method: "POST", body: { name } }),
-  albumRename: (id, name) => request(`/photo-cloud/albums/${encodeURIComponent(id)}`, { method: "PUT", body: { name } }),
-  albumDelete: (id) => request(`/photo-cloud/albums/${encodeURIComponent(id)}`, { method: "DELETE" }),
-  albumAdd: (id, mediaIds) => request(`/photo-cloud/albums/${encodeURIComponent(id)}/items`, { method: "POST", body: { mediaIds } }),
-  albumRemove: (id, mediaIds) => request(`/photo-cloud/albums/${encodeURIComponent(id)}/items`, { method: "DELETE", body: { mediaIds } }),
-
-  photoImportExisting: () => request("/photo-cloud/import-existing", { method: "POST", body: {}, timeout: 180000 }),
-  photoWorkers: () => request("/photo-cloud/workers", { timeout: 30000 }),
-  folderCreate: (name, parentId) => request("/photo-cloud/folders", { method: "POST", body: { name, parentId } }),
-  folderRename: (id, name) => request(`/photo-cloud/folders/${encodeURIComponent(id)}`, { method: "PUT", body: { name } }),
-  folderDelete: (id) => request(`/photo-cloud/folders/${encodeURIComponent(id)}`, { method: "DELETE" }),
-
-  folderShare: (folderId, email, allowDownload) => request("/photo-cloud/folder-shares", { method: "POST", body: { folderId, email, allowDownload } }),
-  folderShares: () => request("/photo-cloud/folder-shares"),
-  folderUnshare: (id) => request(`/photo-cloud/folder-shares/${encodeURIComponent(id)}`, { method: "DELETE" }),
-  sharedWithMe: () => request("/photo-cloud/shared-with-me"),
-  sharedMedia: (id) => request(`/photo-cloud/shared/${encodeURIComponent(id)}/media`, { timeout: 40000 }),
 
   // Render servers, deploys and environment
   renderAccounts: () => request("/render/accounts"),
@@ -320,12 +286,6 @@ export const api = {
   twoFactorRecoveryCodes: (data) => request("/2fa/recovery-codes", { method: "POST", body: data }),
 };
 
-/** URL + headers for an authenticated image/video request (thumbnails and originals come through the API). */
-export const mediaSource = (id, size = "thumb", extra = "") => ({
-  uri: `${activeServer()}/photo-cloud/media/content?id=${encodeURIComponent(id)}&size=${size}${extra}`,
-  headers: token ? { Authorization: `Bearer ${token}`, "X-Client": "mobile" } : {},
-});
-
 /** For background work that runs before the app has unlocked: read the saved session token. */
 export async function loadSavedToken() {
   if (token) return true;
@@ -336,8 +296,3 @@ export async function loadSavedToken() {
   return false;
 }
 
-/** Preview of a photo in a folder someone shared with you. */
-export const sharedSource = (shareId, id, size = "large") => ({
-  uri: `${activeServer()}/photo-cloud/shared/${encodeURIComponent(shareId)}/content?id=${encodeURIComponent(id)}&size=${size}`,
-  headers: token ? { Authorization: `Bearer ${token}`, "X-Client": "mobile" } : {},
-});

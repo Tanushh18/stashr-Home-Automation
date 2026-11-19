@@ -6,7 +6,6 @@ round, ⛔ = not on the app (with the reason).
 | Website page | Android app |
 |---|---|
 | Passwords, Generator | ✅ Passwords tab, Generator tab |
-| Photos, Photo Cloud, Shared, Albums, share links | ✅ Photos tab, Albums, Shared with me, Photo backup, Photo folders, People |
 | Projects (list, detail, edit, deploy) | ✅ Projects, Project editor, Deploy new |
 | Settings, 2FA, password, delete account, sessions | ✅ Settings and Account screens |
 | Security Center (score, checkpoints, breach check) | ✅ Health tab |
@@ -43,6 +42,5 @@ round, ⛔ = not on the app (with the reason).
 |---|---|
 | Smart home: editing the **house layout** (drag rooms), the imported **3-D model** (.glb), the street-map tiles under the trail | Needs a 3-D engine and a map-tile library the app does not have (a native change and a new build with new dependencies). The phone shows the map as a diagram and the trail as a route sketch. |
 | **Cron** setup (ping and alert rules), Render **domain panel**, **robot army**, server-list **propagation**, Render **audit log**, **service map** | Operations dashboards built for a wide screen. The app already shows service status, incidents, pings and deploys on Servers and Monitoring. |
-| **Photo import pipeline** (Google Photos into Drive, administrators) | A long-running administrator pipeline view. |
 | **Security scans** (GitHub scan status) | Only links to GitHub; open it in a browser. |
 | **Dashboard** and **Privacy** | The app's tabs are the dashboard; the privacy text is on the website. |
