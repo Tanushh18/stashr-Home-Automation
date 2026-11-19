@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import Field from "../../Components/Field/Field";
@@ -205,9 +205,12 @@ export default function ProjectDeploy() {
   }, [repo, wait, checkCode]);
 
   /* Step 3: deploy once the code is there: the server, the client, or both. Each part is its own service. */
-  const renderJob = (overrides) => deployProject({ ...form, repoName, template: "existing", useExistingRepo: true, existingRepoUrl: repo.url, branch: form.branch, visibility: "public", ...overrides });
+  // Variables typed in the text box but not applied yet still go out with the deploy (never silently dropped).
+  const envFlush = useRef(null);
+  const currentEnvVars = () => { const typed = envFlush.current ? envFlush.current() : null; return typed ? typed.map((r) => ({ name: r.name, value: r.value })) : form.envVars; };
+  const renderJob = (overrides) => deployProject({ ...form, envVars: currentEnvVars(), repoName, template: "existing", useExistingRepo: true, existingRepoUrl: repo.url, branch: form.branch, visibility: "public", ...overrides });
   const hostJob = async (overrides) => {
-    const data = await deployToHost({ name: form.name, description: form.description, repoUrl: repo.url, branch: form.branch || codeState.branch || "", githubAccountId: form.githubAccountId, hostAccountId: form.hostAccountId, envVars: form.envVars, buildCommand: form.hostBuild, outputDir: form.hostOutput, ...overrides });
+    const data = await deployToHost({ name: form.name, description: form.description, repoUrl: repo.url, branch: form.branch || codeState.branch || "", githubAccountId: form.githubAccountId, hostAccountId: form.hostAccountId, envVars: currentEnvVars(), buildCommand: form.hostBuild, outputDir: form.hostOutput, ...overrides });
     return { ok: true, host: data.host, steps: [{ step: "host", status: "done", detail: "Deployed " + data.repo.owner + "/" + data.repo.repo + " (" + data.repo.branch + ") to " + data.host }], repo: data.repo, service: data.service, projectId: data.projectId, linkId: data.linkId || "", firstDeploy: "started", hostNote: data.note };
   };
   const jobs = [];
@@ -501,7 +504,7 @@ export default function ProjectDeploy() {
               <EnvImport renderAccounts={render || []} projects={projects} repoUrl={form.existingRepoUrl || repo?.url || ""} taken={form.envVars.map((v) => v.name)} onImport={(rows) => set({ envVars: [...form.envVars.filter((v) => v.name || v.value), ...rows] })} />
               <textarea className="input" rows={3} placeholder={"Or paste a .env file:\nAPI_KEY=abc123\nDATABASE_URL=postgres://…"} aria-label="Paste a .env file" value={pasteText} onChange={(e) => setPasteText(e.target.value)} spellCheck="false" />
               {pasteText.trim() ? <div className="gh-panel__row"><button type="button" className="btn btn--ghost btn--sm" onClick={applyPaste}>Add pasted variables</button></div> : null}
-              <EnvText rows={form.envVars} onChange={(rows) => set({ envVars: rows })} idPrefix="dp-env" />
+              <EnvText rows={form.envVars} onChange={(rows) => set({ envVars: rows })} idPrefix="dp-env" flushRef={envFlush} />
             </div>
           </section>
 

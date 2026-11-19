@@ -8,6 +8,7 @@ import VaultHealth from "../../Components/VaultHealth/VaultHealth";
 import ItemCard from "../../Components/Item/ItemCard";
 import ItemEditor from "../../Components/Item/ItemEditor";
 import ImportModal from "../../Components/Item/ImportModal";
+import { duplicateExtras } from "../../lib/items";
 import VaultSidebar from "../../Components/Vault/VaultSidebar";
 import { IcTrash } from "../../Components/Vault/VaultIcons";
 import VaultBackdrop from "../../Components/Vault/VaultBackdrop";
@@ -96,6 +97,16 @@ export default function Passwords() {
     });
     if (name === null) return;
     return runBulk("Moved", (id) => updateItem(id, { folder: name.trim() }));
+  };
+  // The same item twice (a file imported twice, or saved on two devices): offer to move the extra copies to Trash (recoverable).
+  const extras = useMemo(() => duplicateExtras(items), [items]);
+  const removeDuplicates = async () => {
+    if (!(await confirm({ title: `Move ${extras.length} duplicate${extras.length === 1 ? "" : "s"} to Trash?`, message: "One copy of each stays. The extras can be restored from Trash for 30 days.", confirmLabel: "Move to Trash", tone: "danger" }))) return;
+    setBusy(true);
+    const results = await Promise.allSettled(extras.map((id) => deleteItem(id)));
+    setBusy(false);
+    const ok = results.filter((r) => r.status === "fulfilled").length;
+    if (ok === extras.length) toast.success(`Moved ${ok} duplicate${ok === 1 ? "" : "s"} to Trash.`); else toast.error(`${ok} of ${extras.length} moved, the rest failed.`);
   };
   const bulkDelete = async () => {
     const n = selected.size;
@@ -260,6 +271,10 @@ export default function Passwords() {
               />
             ) : null}
 
+            {extras.length && folder === SECTIONS.all && !search ? (
+              <p className="field__note" role="status">{extras.length} duplicate item{extras.length === 1 ? "" : "s"} in your vault. <button type="button" className="btn btn--quiet btn--sm" disabled={busy} onClick={() => void removeDuplicates()}>Move the extra copies to Trash</button></p>
+            ) : null}
+
             <div className="vx-bot">
               <MascotBanner kind="safe" {...vaultMood(health, items.length)} stats={[]} />
             </div>
@@ -387,7 +402,7 @@ export default function Passwords() {
           toast.success("Moved to Trash. You can restore it for 30 days.");
         }}
       />
-      <ImportModal open={importing} onClose={() => setImporting(false)} onImport={importItems} />
+      <ImportModal open={importing} onClose={() => setImporting(false)} onImport={importItems} existing={[...items, ...(trash || [])]} />
     </div>
   );
 }

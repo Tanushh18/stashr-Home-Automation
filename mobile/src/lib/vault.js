@@ -404,7 +404,8 @@ export function VaultProvider({ children }) {
   const deltaOk = useRef(true);
   useEffect(() => {
     if (status !== "ready" || offline) return undefined;
-    let stopped = false, running = false, queued = false, active = AppState.currentState === "active", fullAt = Date.now();
+    let stopped = false, running = false, queued = false, active = AppState.currentState === "active", fullAt = Date.now(), streamUp = false, lastDeltaAt = 0;
+    const FULL_RELOAD_MS = 6 * 60 * 60 * 1000, STREAM_SAFETY_MS = 10 * 60 * 1000;   // the whole vault again only now and then: deltas and the live stream keep it current (saves the server's bandwidth)
     const controller = new AbortController();
 
     const sync = async () => {
@@ -412,7 +413,7 @@ export function VaultProvider({ children }) {
       if (running) { queued = true; return; }
       running = true;
       try {
-        if (!deltaOk.current || !syncedAt.current || Date.now() - fullAt > 10 * 60 * 1000) {
+        if (!deltaOk.current || !syncedAt.current || Date.now() - fullAt > FULL_RELOAD_MS) {
           const startedAt = new Date().toISOString();
           await loadProfile();
           fullAt = Date.now();
@@ -437,6 +438,7 @@ export function VaultProvider({ children }) {
         syncedAt.current = null;
       } finally {
         running = false;
+        lastDeltaAt = Date.now();
         if (queued) { queued = false; void sync(); }
       }
     };
@@ -449,6 +451,7 @@ export function VaultProvider({ children }) {
           const res = await openVaultEvents(controller.signal);
           if (!res.ok || !res.body) throw new Error(`stream ${res.status}`);
           attempt = 0;
+          streamUp = true;
           // The stream just (re)connected, so the internet is back: let Money catch up (at most every 2 minutes).
           void moneySyncIfStale(2).catch(() => {});
           const parse = createSseParser((ev) => {
@@ -466,8 +469,10 @@ export function VaultProvider({ children }) {
             parse(decoder.decode(value, { stream: true }));
           }
         } catch (e) {
+          streamUp = false;
           if (stopped) return;
         }
+        streamUp = false;
         if (stopped) return;
         await new Promise((r) => setTimeout(r, reconnectDelay(attempt)));
         attempt += 1;
@@ -475,7 +480,7 @@ export function VaultProvider({ children }) {
     };
 
     const sub = AppState.addEventListener("change", (s) => { active = s === "active"; if (active) void sync(); });
-    const timer = setInterval(() => void sync(), 60 * 1000);
+    const timer = setInterval(() => { if (streamUp && Date.now() - lastDeltaAt < STREAM_SAFETY_MS) return; void sync(); }, 60 * 1000);
     void sync();
     void stream();
     return () => { stopped = true; controller.abort(); clearInterval(timer); sub.remove(); };

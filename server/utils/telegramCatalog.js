@@ -1,4 +1,4 @@
-const NOTIFICATION_CATEGORIES = ["system", "servers", "projects", "github", "apps", "vault", "security", "home", "photos", "money", "hosting", "account"];
+const NOTIFICATION_CATEGORIES = ["system", "servers", "projects", "github", "apps", "vault", "security", "home", "money", "hosting", "account"];
 const GROUPS = [
   { name: "System", commands: [["status","System status digest"],["overview","Whole Stashr overview"],["health","API and database health"],["uptime","API process uptime"],["scheduler","Background scheduler status"],["jobs","Recent background jobs"]] },
   { name: "Servers", commands: [["servers","Render services and health"],["services","Connected service inventory"],["incidents","Open monitoring incidents"],["metrics","Latest monitoring snapshot"],["deploys","Recent project deployments"],["logs","Recent logs: /logs projectId targetRef"],["secretscan","Scan Render env names for exposure"]] },
@@ -6,7 +6,6 @@ const GROUPS = [
   { name: "Connections", commands: [["github","Connected GitHub accounts"],["hosts","Connected hosting accounts"],["registry","App server registry"],["serverurls","App server URL registry"],["statuspage","Public status page settings"],["shine","Shine website project status"]] },
   { name: "Vault and security", commands: [["vault","Vault inventory (no secrets)"],["pass","PIN-protected password lookup"],["security","Account security overview"],["sessions","Signed-in sessions"],["audit","Recent security audit events"],["extension","Browser extension capability status"]] },
   { name: "Home", commands: [["who","Who is home, who is out and how far"],["coming","Who is on the way home, with the time"],["locate","Ask the family phones for a fresh location"],["today","Today's home summary"],["phones","Family phones and battery"],["devices","Home devices and battery"],["events","Recent home events"],["speed","Internet speed test history"],["automations","Home automation overview"],["scenes","Configured home scenes"],["schedules","Configured TV schedules"],["places","Configured family places"]] },
-  { name: "Photos", commands: [["photos","Photo Cloud inventory"],["photoconnections","Photo Cloud connections"],["photoimports","Recent photo import batches"]] },
   { name: "Money", commands: [["expenses","Expense storage and transaction counts"],["spending","Spending data availability"],["expensemonth","Current month expense summary"]] },
   { name: "Apps", commands: [["apps","Stashr app update endpoints"],["ota","Stashr OTA endpoint and manifest"],["notifications","Notification categories and settings"],["updates","Automatic Telegram message settings"]] },
   { name: "Reports", commands: [["report","Home report for the last 24 hours"],["week","Home report for the last 7 days"]] },

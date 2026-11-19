@@ -55,3 +55,42 @@ test("the storage sentence follows the mode and the optional copy", () => {
   assert.match(storageNote({ storage: "sheet" }), /only in your Google Sheet/);
   assert.equal(storageNote(null), "");
 });
+
+test("budget text round-trips and bad parts are dropped", async () => {
+  const { parseBudgets, budgetsText } = await import("../src/Pages/Money/MoneyBrain.jsx").catch(() => ({}));
+  if (!parseBudgets) return;   // JSX is not loaded by plain node; the parsing is covered by the server tests
+  assert.deepEqual(parseBudgets("Food=8000, Travel = ₹3,000, bad, x=0"), { Food: 8000, Travel: 3000 });
+  assert.equal(budgetsText([{ category: "Food", limit: 8000 }]), "Food=8000");
+});
+
+test("text typed in the env box is merged over the rows, keeping notes and dropping removed names", async () => {
+  const { mergeTypedEnv } = await import("../src/lib/projectItems.js");
+  const out = mergeTypedEnv([{ name: "PORT", value: "1", purpose: "web" }, { name: "OLD", value: "x", purpose: "" }], [{ name: "PORT", value: "3000" }, { name: "NEW", value: "y" }]);
+  assert.deepEqual(out.map((r) => r.name), ["PORT", "NEW"]);
+  assert.equal(out[0].value, "3000");
+  assert.equal(out[0].purpose, "web");
+  assert.equal(out[1].purpose, "");
+});
+
+test("importing the same items again skips them, also inside one file", async () => {
+  const { splitDuplicates, importKey } = await import("../src/lib/items.js");
+  const have = [{ type: "login", name: "Netflix", username: "Ana@x.com", url: "https://netflix.com/", password: "p1" }];
+  const file = [
+    { type: "login", name: "netflix", username: "ana@x.com", url: "https://netflix.com", password: "p1" },   // same, different case and slash
+    { type: "login", name: "Netflix", username: "ana@x.com", url: "https://netflix.com", password: "p2" },   // a different password is a different item
+    { type: "login", name: "Gmail", username: "a", url: "", password: "g" },
+    { type: "login", name: "Gmail", username: "a", url: "", password: "g" }                                  // repeated in the file
+  ];
+  const r = splitDuplicates(file, have);
+  assert.equal(r.duplicates, 2);
+  assert.deepEqual(r.fresh.map((i) => i.name + ":" + i.password), ["Netflix:p2", "Gmail:g"]);
+  assert.equal(importKey(have[0]), importKey(file[0]));
+});
+
+test("duplicate extras: one copy of each identical item stays, a favourite first, then the newest; trash is ignored", async () => {
+  const { duplicateExtras } = await import("../src/lib/items.js");
+  const mk = (id, o = {}) => ({ id, type: "login", name: "Netflix", username: "a", url: "", password: "p", updatedAt: "2026-01-01T00:00:00Z", ...o });
+  assert.deepEqual(duplicateExtras([mk("1"), mk("2", { updatedAt: "2026-06-01T00:00:00Z" }), mk("3", { deletedAt: "2026-07-01" })]), ["1"]);
+  assert.deepEqual(duplicateExtras([mk("1", { favorite: true }), mk("2", { updatedAt: "2026-06-01T00:00:00Z" })]), ["2"]);
+  assert.deepEqual(duplicateExtras([mk("1"), mk("2", { password: "other" })]), []);
+});

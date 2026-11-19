@@ -8,11 +8,11 @@ test("signed-out users get no entries", () => {
   assert.deepEqual(buildEntries({ items, signedIn: false }), []);
 });
 
-test("admin-only pages need isAdmin, photos needs the feature", () => {
+test("admin-only pages need isAdmin", () => {
   const plain = buildEntries({ profile: { features: {} } }).map((e) => e.label);
-  assert.ok(!plain.includes("Servers") && !plain.includes("Photo Cloud"));
-  const admin = buildEntries({ profile: { isAdmin: true, features: { photos: true } } }).map((e) => e.label);
-  assert.ok(admin.includes("Servers") && admin.includes("Photo Cloud"));
+  assert.ok(!plain.includes("Servers"));
+  const admin = buildEntries({ profile: { isAdmin: true, features: {} } }).map((e) => e.label);
+  assert.ok(admin.includes("Servers"));
 });
 
 test("rank prefers label prefixes and requires every word", () => {

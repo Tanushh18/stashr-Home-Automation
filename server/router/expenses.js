@@ -471,6 +471,122 @@ router.post("/expenses/remove-unmatched", authenticate, writeLimiter, async (req
 const { processStatement: runStatement } = require("../utils/statementRun");
 const saved = require("../utils/statementSearch");
 const balance = require("../utils/moneyBalance");
+const brain = require("../utils/moneyBrain");
+
+const plan = require("../utils/moneyPlan");
+const telegram = require("../utils/telegramBot");
+
+const cleanBudgets = (b) => Object.fromEntries(Object.entries(b && typeof b === "object" ? b : {}).map(([k, v]) => [String(k).replace(/[\u0000-\u001f$.]/g, " ").trim().slice(0, 40), Math.round(Number(v) * 100) / 100]).filter(([k, v]) => k && Number.isFinite(v) && v > 0 && v < 1e9).slice(0, 40));
+const cleanGoals = (g) => (Array.isArray(g) ? g : []).slice(0, 20).map((x) => ({ name: String((x && x.name) || "Goal").replace(/[\u0000-\u001f]/g, " ").trim().slice(0, 60), target: Number(x && x.target), saved: Math.max(0, Number(x && x.saved) || 0) })).filter((x) => x.name && Number.isFinite(x.target) && x.target > 0 && x.target < 1e10);
+
+/** Everything the Money Brain knows, from the stored entries and the saved statement lines (the statement is the truth). */
+async function brainView(req, s) {
+    const owner = req.rootUser._id, { st } = await storeFor(req, s);
+    const today = ex.ist(Date.now()), rows = await st.list();
+    const lines = await saved.loadLines(owner, await req.rootUser.getDataKey(), {});
+    const insights = brain.analyze(rows, lines, { today });
+    const rec = plan.recurring(rows, { today });
+    const odd = plan.anomalies(rows, { today });
+    const high = odd.filter((a) => a.severity === "high");
+    if (high.length) {                                       // a likely double charge is never "healthy"
+        if (insights.verdict === "healthy") insights.verdict = "watch";
+        insights.reasons = insights.reasons.filter((r) => !/^Nothing unusual/.test(r)).concat(high.slice(0, 2).map((a) => a.text));
+        insights.actions.unshift({ id: "double", text: "Check the possible double charge in your bank app and ask the merchant for a refund if it is one." });
+    }
+    const month = today.slice(0, 7), done = insights.months.filter((m) => m.month < month);
+    const monthlyNet = done.length ? done.reduce((n, m) => n + m.net, 0) / done.length : 0;
+    return {
+        rows, lines, today, insights, recurring: rec,
+        anomalies: odd,
+        budgets: plan.budgetStatus(rows, s.budgets || {}, month),
+        forecast: plan.salaryForecast(balance.salaryCycle(rows, today), rec, { today }),
+        goals: plan.goalProgress(s.goals || [], monthlyNet),
+        metaAds: plan.metaAds(rows),
+        suggestions: plan.suggestCategories(rows).slice(0, 30)
+    };
+}
+
+// Money Brain: statement-first profit/loss, a verdict (healthy/watch/alert), the next actions, and the planning extras. Read-only.
+router.get("/expenses/insights", authenticate, async (req, res) => {
+    try {
+        res.set("Cache-Control", "no-store");
+        const v = await brainView(req, await settingsOf(req.rootUser._id));
+        const { rows, lines, today, insights, ...extras } = v;
+        return res.json({ ...insights, ...extras });
+    } catch (e) { return fail(res, e, "Could not work out the insights."); }
+});
+
+// A short written summary of the month. ?ai=1 lets a connected AI (Groq, Claude, OpenAI, Gemini) rephrase it; only category totals are sent, never names or references.
+router.get("/expenses/summary", authenticate, async (req, res) => {
+    try {
+        res.set("Cache-Control", "no-store");
+        const v = await brainView(req, await settingsOf(req.rootUser._id));
+        const d = plan.digest({ ...v.insights, anomalies: v.anomalies, budgets: v.budgets, forecast: v.forecast });
+        if (req.query.ai === "1" && require("../utils/aiAssistant").available().length) {
+            try { const r = await require("../utils/aiAssistant").ask(`Rewrite as 3 friendly sentences of money advice, keep every number: ${d.compact}`); return res.json({ text: r.answer, plain: d.text, ai: r.label }); }
+            catch (e) { /* the written digest still answers */ }
+        }
+        return res.json({ text: d.text, plain: d.text, ai: "" });
+    } catch (e) { return fail(res, e, "Could not write the summary."); }
+});
+
+router.put("/expenses/budgets", authenticate, writeLimiter, async (req, res) => {
+    try { const budgets = cleanBudgets(req.body && req.body.budgets); await settingsOf(req.rootUser._id); await Settings.updateOne({ owner: req.rootUser._id }, { $set: { budgets } }); return res.json({ budgets }); }
+    catch (e) { return fail(res, e, "Could not save the budgets."); }
+});
+router.put("/expenses/goals", authenticate, writeLimiter, async (req, res) => {
+    try { const goals = cleanGoals(req.body && req.body.goals); await settingsOf(req.rootUser._id); await Settings.updateOne({ owner: req.rootUser._id }, { $set: { goals } }); return res.json({ goals }); }
+    catch (e) { return fail(res, e, "Could not save the goals."); }
+});
+
+// "how much did I spend on food last month": answered from your own numbers, in words; nothing leaves Stashr.
+router.get("/expenses/ask", authenticate, async (req, res) => {
+    try {
+        const q = String(req.query.q || "").slice(0, 200);
+        if (!q.trim()) return res.status(400).json({ error: "Ask a question." });
+        const s = await settingsOf(req.rootUser._id), { st } = await storeFor(req, s);
+        const out = plan.ask(q, await st.list(), { today: ex.ist(Date.now()), categories: [...ex.DEFAULT_CATEGORIES, ...(s.categories || [])] });
+        return res.json({ answer: out.answer || "I can answer questions about spending by category or month, income, profit or loss, and your biggest payments.", rows: out.rows || [] });
+    } catch (e) { return fail(res, e, "Could not answer that."); }
+});
+
+// Sort the payments the brain is confident about (learned from how you sorted similar ones). Body: { indexes: [...] } or nothing for all of them.
+router.post("/expenses/suggestions/apply", authenticate, writeLimiter, async (req, res) => {
+    try {
+        const owner = req.rootUser._id, s = await settingsOf(owner), { st, copy } = await storeFor(req, s);
+        const rows = await st.list();
+        const want = Array.isArray(req.body && req.body.indexes) ? new Set(req.body.indexes.map(String)) : null;
+        const items = [];
+        for (const g of plan.suggestCategories(rows)) {
+            const key = ex.ruleKey(g.merchant);
+            for (const t of rows) {
+                if (t.category && t.category !== "Uncategorized") continue;
+                if (key && ex.norm(t.merchant).includes(ex.norm(key)) && (!want || want.has(String(g.index)))) items.push({ index: t.index, fields: { category: g.category }, tx: t });
+            }
+        }
+        if (items.length) { await st.updateMany(items); if (copy) copy.update(items); }
+        return res.json({ updated: items.length });
+    } catch (e) { return fail(res, e, "Could not apply the suggestions."); }
+});
+
+/** Budget alerts: each goes out once per month and level (Telegram, if connected). Called after new messages and by the owner. */
+async function runBudgetAlerts(user, s, st) {
+    const month = ex.ist(Date.now()).slice(0, 7);
+    const due = plan.dueAlerts(plan.budgetStatus(await st.list(), s.budgets || {}, month), month, s.alertsSent || {});
+    if (!due.length) return { sent: 0 };
+    let sent = 0;
+    const mark = {};
+    for (const a of due) {
+        if (a.text && (await telegram.notifyEvent(user, { category: "money", title: "Budget", text: a.text, dedupeKey: `budget:${user._id}:${a.key}` }).catch(() => false))) sent++;
+        mark[`alertsSent.${a.key}`] = true;
+    }
+    await Settings.updateOne({ owner: user._id }, { $set: mark });
+    return { sent };
+}
+router.post("/expenses/alerts/run", authenticate, writeLimiter, async (req, res) => {
+    try { const s = await settingsOf(req.rootUser._id), { st } = await storeFor(req, s); return res.json(await runBudgetAlerts(req.rootUser, s, st)); }
+    catch (e) { return fail(res, e, "Could not check the budgets."); }
+});
 const officeCrypto = require("../utils/officeCrypto");
 const statementPdf = require("../utils/statementPdf");
 

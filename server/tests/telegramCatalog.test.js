@@ -6,7 +6,7 @@ test("Telegram command registry is unique and within the Bot API command limit",
   const names = catalog.BOT_COMMANDS.map(x => x.command);
   expect(names.length <= 100).toBe(true);
   expect(new Set(names).size === names.length).toBe(true);
-  for (const name of ["status","pass","photoimports","expenses","security"]) expect(names.includes(name)).toBe(true);
+  for (const name of ["status","pass","expenses","security"]) expect(names.includes(name)).toBe(true);
 });
 test("notification default means every category is enabled", () => {
   expect(catalog.normalizeNotificationCategories("all")).toEqual(catalog.NOTIFICATION_CATEGORIES);

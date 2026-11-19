@@ -3,6 +3,7 @@ import { toast } from "react-toastify";
 import { getDeployHistory, getDeployLogs, getGithubAccounts, getGithubBranches, getHostAccounts, getRenderAccounts, moveDeployAccount, setDeployBranch } from "../../api/client";
 import { timeAgo, safeUrl, errorMessage } from "../../Pages/Render/renderUtils";
 import { useDialogs } from "../../Components/UI/Dialogs";
+import { isUserActive } from "../../lib/activity";
 
 export const hostOf = (url) => String(url || "").replace(/^https?:\/\//, "").replace(/\/$/, "");
 export const DEPLOY_LABEL = {
@@ -160,7 +161,7 @@ export function DeployLogs({ projectId, target }) {
       } catch (e) { setLines([]); setLogError(errorMessage(e, "Could not read the logs.")); }
     } catch (e) { setError(errorMessage(e, "Could not read the deploys.")); }
   }, [projectId, target.ref]);
-  useEffect(() => { void load(); const timer = setInterval(() => void load(), 10000); return () => clearInterval(timer); }, [load]);
+  useEffect(() => { void load(); const timer = setInterval(() => { if (!document.hidden && isUserActive()) void load(); }, 10000); return () => clearInterval(timer); }, [load]);
 
   const latest = deploys?.[0];
   const raw = String(latest?.status || "").toLowerCase();

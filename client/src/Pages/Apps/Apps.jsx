@@ -50,7 +50,7 @@ const CAST = [
 // Stashr Location: location only, for family phones (built by where-apk.yml, served like Stashr Hub).
 const WHERE_APK = `${publicApiBase}/api/mobile-updates/where/download`;
 const WHERE = [
-  "Shares only the phone’s location, battery level and whether it is on Wi-Fi, and nothing else. It cannot see your vault, passwords or photos",
+  "Shares only the phone’s location, battery level and whether it is on Wi-Fi, and nothing else. It cannot see your vault or passwords",
   "Joins with one fixed code from the Smart home page plus the person’s name, and stays linked until you disconnect it, on the website or in the app",
   "No permanent notification and very little battery: it looks rarely when someone is far away or leaving, and often only when they are heading home",
   "Stashr works out who is on the way and how long they will take. The tablet and the TV show “Parveen is arriving in 15 mins”, then “Open the door: Parveen arrived home”",
@@ -59,8 +59,6 @@ const WHERE = [
 
 const FEATURES = [
   "Passwords, 2FA codes and secure notes, unlocked with your fingerprint or face",
-  "Photo backup: new photos and videos upload automatically to your connected Google accounts",
-  "Photo folders, albums, people and a full viewer, the same as the website, plus the photos and videos already on your phone",
   "Servers, deployments, monitoring and moving a server between Render accounts",
   "Same account and same server as the website, so everything stays in sync",
 ];
@@ -82,7 +80,7 @@ export default function Apps() {
         <span className="card__ribbon" />
         <p className="eyebrow">Android · {version ? `version ${version}` : "latest version"}</p>
         <h1>Stashr for Android</h1>
-        <p className="lede">Your vault, photos and servers in your pocket. Sign in with the account you use on the website.</p>
+        <p className="lede">Your vault, servers and smart home in your pocket. Sign in with the account you use on the website.</p>
         <a className="btn btn--primary apps__download" href={APK.file} download="stashr.apk">Download APK</a>
         <p className="apps__note">Administrator? <Link to="/app-updates">Choose which devices get a new app version</Link> (Stashr, Location, Hub, TV).</p>
         <p className="apps__note">Button not working? <a href={APK.github}>Download from GitHub</a>.</p>
@@ -92,7 +90,6 @@ export default function Apps() {
         <ol>
           <li>Open this page on your Android phone and tap <strong>Download APK</strong>.</li>
           <li>Open the downloaded file. If Android asks, allow installs from your browser.</li>
-          <li>Open Stashr, sign in, and turn on photo backup in the Photos tab.</li>
         </ol>
         <p className="apps__note">Updates install over the old app and keep your data. If a previous build refuses to update, uninstall it first.</p>
         <h2>Stashr Hub for Android</h2>

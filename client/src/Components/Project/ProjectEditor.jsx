@@ -1,9 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Modal } from "react-responsive-modal";
 import "react-responsive-modal/styles.css";
 import { toast } from "react-toastify";
 import Field from "../Field/Field";
-import { emptyProject, emptyDatabase, emptyEnvVar, emptyExtraField, parseEnvBlock } from "../../lib/projectItems";
+import { emptyProject, emptyDatabase, emptyEnvVar, emptyExtraField, parseEnvBlock, mergeTypedEnv } from "../../lib/projectItems";
 import EnvText from "./EnvText";
 import { Globe, Trash, Check, Plus } from "../Icons/Icons";
 
@@ -69,12 +69,22 @@ export default function ProjectEditor({ open, project, onClose, onSave, onDelete
 
   const updateRow = (list, i, patch) => list.map((row, idx) => (idx === i ? { ...row, ...patch } : row));
 
+  const envFlush = useRef(null);
   const save = async (e) => {
     e.preventDefault();
     if (!form.name.trim()) return toast.error("Give it a name.");
+    // Variables typed or pasted but not yet applied/added still count: Save must never silently drop them.
+    let toSave = form;
+    const typed = envFlush.current ? envFlush.current() : null;
+    if (typed) toSave = { ...toSave, envVars: mergeTypedEnv(toSave.envVars, typed) };
+    if (pasteText.trim()) {
+      const parsed = parseEnvBlock(pasteText);
+      if (!parsed.length) return toast.error("The pasted text has no KEY=VALUE lines. Fix it or clear it, then save.");
+      toSave = { ...toSave, envVars: [...toSave.envVars, ...parsed.map((p) => ({ ...emptyEnvVar(), ...p }))] };
+    }
     try {
       setSaving(true);
-      await onSave(form);
+      await onSave(toSave);
       onClose();
     } catch (err) {
       toast.error(err?.response?.data?.error || err.message || "Couldn't save that.");
@@ -258,6 +268,7 @@ export default function ProjectEditor({ open, project, onClose, onSave, onDelete
           {/* All variables as one text block. Purpose notes are kept for names that stay. */}
           <EnvText
             idPrefix="proj-env"
+            flushRef={envFlush}
             rows={form.envVars}
             onChange={(rows) => setForm((f) => ({ ...f, envVars: rows.map((r) => ({ ...emptyEnvVar(), ...(f.envVars.find((x) => x.name === r.name) || {}), name: r.name, value: r.value })) }))}
           />

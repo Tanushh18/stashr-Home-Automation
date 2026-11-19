@@ -17,7 +17,6 @@ This is a planning list, not a record of live competitor research.
 | Incident bell with desktop notifications | yes | not yet | uses `/render/ops/incidents` |
 | Opt-in weekly breach check | yes | not yet | - |
 | Control Center tab bar (Control Center / Usage / Map / Cron) | yes | n/a | - |
-| Photo Cloud: lazy thumbnails, paging, favourites | yes | already native | `PATCH /photo-cloud/media/:id` |
 | Photo Cloud: multi-select (favourite, share link, remove) | yes | - | - |
 | Secure notes, cards and identities as item types | yes | yes | stored inside the item |
 | Devices list with per-device sign-out, security activity log | yes | - | `GET /account/sessions`, `DELETE /account/sessions/:id`, `GET /account/audit` |
@@ -65,7 +64,6 @@ This is a planning list, not a record of live competitor research.
 
 ### 4. Photos
 - Albums, timeline by month, multi-select and bulk share, duplicate finder, slideshow.
-- Server-side pagination and filtering of `/photo-cloud/dashboard` (the web page now pages on the client only).
 
 ### 5. Platform and scale
 - **Move vault entries out of the single User document** into their own collection (removes the 16 MB document

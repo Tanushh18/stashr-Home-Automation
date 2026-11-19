@@ -5,6 +5,7 @@ import { errorMessage } from "../Render/renderUtils";
 import { getHomeRooms, getRoomLive, setRoomModel, saveHomeRooms, setRoomPhone, deleteRoomSamples, deleteHomeRoom, setRoomAuto, maintainRoomModel } from "../../api/client";
 import { confusionRows, thinRooms, liveRows, headline, autoLine } from "../../lib/roomLab";
 import "./techie.css";
+import { isUserActive } from "../../lib/activity";
 
 /** One phone in the live panel: the room, every room's share as a bar, and every number the model calculated. */
 function LivePhone({ p }) {
@@ -47,7 +48,7 @@ export function RoomLabCard() {
   const confirm = useConfirm();
   const loadLive = useCallback(async () => { try { setLive(await getRoomLive()); } catch (e) { toast.error(errorMessage(e, "Could not load the model.")); } }, []);
   const loadRooms = useCallback(async () => { try { setD(await getHomeRooms()); } catch (e) { toast.error(errorMessage(e, "Could not load the rooms.")); } }, []);
-  useEffect(() => { loadLive(); loadRooms(); const a = setInterval(loadLive, 5000), b = setInterval(loadRooms, 30000); return () => { clearInterval(a); clearInterval(b); }; }, [loadLive, loadRooms]);
+  useEffect(() => { loadLive(); loadRooms(); const a = setInterval(() => { if (!document.hidden && isUserActive()) loadLive(); }, 5000), b = setInterval(() => { if (!document.hidden && isUserActive()) loadRooms(); }, 30000); return () => { clearInterval(a); clearInterval(b); }; }, [loadLive, loadRooms]);
   if (!live || !d) return null;
 
   const toggle = async () => {

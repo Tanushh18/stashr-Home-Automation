@@ -26,15 +26,6 @@ const entrySchema = new mongoose.Schema({
     updatedAt: { type: Date, default: Date.now }
 });
 
-const photoShareSchema = new mongoose.Schema({
-    tokenHash: { type: String, index: true },
-    enc: { type: String },
-    data: { type: String },
-    createdAt: { type: Date, default: Date.now },
-    expiresAt: { type: Date },
-    revokedAt: { type: Date }
-}, { _id: true });
-
 const schema = new mongoose.Schema({
     name: { type: String, trim: true },
     email: { type: String, trim: true, index: true },
@@ -99,18 +90,12 @@ const schema = new mongoose.Schema({
     renderOps: [entrySchema],
     renderMetricHistory: [entrySchema],
 
-    // Personal AI Photo Cloud metadata. Originals remain in connected provider accounts;
-    // these records only hold encrypted app-owned metadata and job state.
+    // Google accounts connected from Smart home for the TV's movies (Google Drive). The name is historical: the Photos
+    // feature that first stored these is gone, but the sealed connections are still what the movie sync reads.
     photoConnections: [entrySchema],
-    photoMedia: [entrySchema],
-    photoAlbums: [entrySchema],
-    photoFolders: [entrySchema],
 
     // Per-person feature switches set in the admin panel: { featureKey: true | false }. See utils/features.js.
     featureOverrides: { type: mongoose.Schema.Types.Mixed, default: {} },
-    photoBackupJobs: [entrySchema],
-    photoSettings: [entrySchema],
-    photoShares: [photoShareSchema],
     renderIncidents: [entrySchema],
 
     // Live-services dashboard: sealed settings (consent, limits, per-service switches) and a bounded usage history.
@@ -232,14 +217,16 @@ schema.methods.toPublic = function (dataKey)
 // Bounded monitoring histories: by far the largest parts of the account document (written every few minutes by the
 // monitor). Requests that do not read them load the account without them.
 schema.statics.HISTORY_FIELDS = ["renderMetricHistory", "renderIncidents", "renderAudit", "usageHistory"];
-// Everything else that is big and only some pages read (photo library, host/Render/GitHub connections, Telegram, usage
+// Everything else that is big and only some pages read (Google connections, host/Render/GitHub connections, Telegram, usage
 // settings). Sign-in and the post-login profile load never need these, so they are not pulled from MongoDB there.
 schema.statics.BULK_FIELDS = [
-    "photoConnections", "photoMedia", "photoAlbums", "photoFolders", "photoBackupJobs", "photoSettings", "photoShares",
+    "photoConnections",
     "renderAccounts", "githubAccounts", "hostAccounts", "renderOps", "usageSettings", "telegram"
 ];
-// The photo library arrays grow without bound; only the photo routes read them.
-schema.statics.PHOTO_FIELDS = ["photoConnections", "photoMedia", "photoAlbums", "photoFolders", "photoBackupJobs", "photoSettings", "photoShares"];
+// Fields of the photo library that used to live on the account. They are no longer part of the schema, and are removed from the
+// database (utils/photoCleanup.js) and never copied from an old database (db/legacy.js).
+schema.statics.PHOTO_FIELDS = ["photoConnections"];
+schema.statics.REMOVED_PHOTO_FIELDS = ["photoMedia", "photoAlbums", "photoFolders", "photoBackupJobs", "photoSettings", "photoShares"];
 schema.statics.publicEntry = publicEntry;
 schema.statics.sealEntry = sealEntry;
 

@@ -1,6 +1,6 @@
 /* One navigation model for the sidebar, the mobile "More" sheet and the bottom bar.
    Feature flags follow the server's profile.features; a missing flag means "on",
-   except Photos and admin entries, which need an explicit grant. */
+   except admin entries, which need an explicit grant. */
 
 const on = (features, key) => features?.[key] !== false;
 
@@ -22,7 +22,6 @@ export function navGroups(profile) {
       id: "workspace",
       label: "Workspace",
       items: [
-        ...(f.photos !== false ? [{ to: "/photos", label: "Photos", icon: "image" }] : []),
         ...(on(f, "projects") ? [{ to: "/projects", label: "Projects", icon: "folder" }] : []),
         ...(on(f, "smartHome") ? [{ to: "/smart-home", label: "Smart home", icon: "tv" }] : []),
         ...(on(f, "smartHome") ? [{ to: "/whatsapp", label: "WhatsApp sender", icon: "send" }] : []),

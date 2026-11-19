@@ -7,6 +7,7 @@ import { getHomeMap, saveHomeMap, saveHouseLayout, getHouseModel, saveHouseModel
 import { buildGlb, glbPartNames, matchParts } from "../../lib/houseGlb";
 import { roomFacts } from "../../lib/houseScene";
 import { shapes, awayLine, SCALE_2D, moveBlock, resizeBlock, clampBlock, overlapping, layoutOf, exportText, parseLayoutFile } from "../../lib/homeMap";
+import { isUserActive } from "../../lib/activity";
 
 /** A picture from a phone scan app, shrunk so it fits the 2 MB the server accepts. */
 function shrink(file, max = 1400) {
@@ -47,7 +48,7 @@ export function HouseMapCard() {
   const svgRef = useRef(null);
   const drag = useRef(null);
   const load = useCallback(async () => { try { setMap(await getHomeMap()); } catch (e) { toast.error(errorMessage(e, "Could not load the map.")); } }, []);
-  useEffect(() => { load(); const t = setInterval(load, 30000); return () => clearInterval(t); }, [load]);
+  useEffect(() => { load(); const t = setInterval(() => { if (!document.hidden && isUserActive()) load(); }, 30000); return () => clearInterval(t); }, [load]);
   const hasModel = !!(map && map.model);
   useEffect(() => { if (mode !== "model" || !hasModel) return undefined; let live = true; getHouseModel().then((b) => { if (live) setGlb(b); }).catch((e) => toast.error(errorMessage(e, "Could not load the 3D model."))); return () => { live = false; }; }, [mode, hasModel, map && map.model && map.model.at]);
   // No imported model: the 3D model is made from your layout (one box per room, its own height), so devices can be seen in 3D anyway.

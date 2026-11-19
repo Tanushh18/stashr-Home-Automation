@@ -23,10 +23,8 @@ import { VaultProvider, useVault } from "../lib/vault";
 import { ToastProvider } from "../components/Toast";
 import SkyFx from "../components/SkyFx";
 import { refreshServers } from "../lib/api";
-import "../lib/photoBackground";
 import "../lib/moneyBackground";
 import { syncIfStale } from "../lib/moneySync";
-import { startAutoBackup } from "../lib/photoAuto";
 import { LINK_PATHS, installShortcuts, syncHomeWidgetTask, refreshHomeWidget, clearHomeWidget } from "../lib/homeWidget";
 
 // Load the latest server list from the registry in the background.
@@ -80,11 +78,6 @@ function RootStack({ fontsReady }) {
     }
   }, [status]);
 
-  // Once the vault is unlocked, keep camera-roll backup going while the app is open.
-  useEffect(() => {
-    if (status === "ready") startAutoBackup();
-  }, [status]);
-
   // Money: when the app comes to the front (and once it is unlocked), send any new bank SMS to the sheet — at most every 10 minutes.
   useEffect(() => {
     if (status !== "ready") return undefined;
@@ -136,7 +129,6 @@ function RootStack({ fontsReady }) {
           <Stack.Screen name="editor" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
           <Stack.Screen name="scan" options={{ presentation: "fullScreenModal", animation: "fade" }} />
           <Stack.Screen name="account" options={{ animation: "slide_from_right" }} />
-          <Stack.Screen name="photo-viewer" options={{ presentation: "fullScreenModal", animation: "fade" }} />
           {/* Opened by the long-press shortcuts and the home-screen widget: never without the unlock. */}
           <Stack.Screen name="home" />
           <Stack.Screen name="stashr-home" options={{ animation: "fade", contentStyle: { backgroundColor: "#050912" } }} />

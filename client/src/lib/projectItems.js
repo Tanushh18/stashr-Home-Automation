@@ -223,3 +223,11 @@ export const STATUS_LABEL = {
   paused: "Paused",
   archived: "Archived",
 };
+
+/**
+ * Variables typed into the "all as text" box but not applied yet, merged over the rows already in the form: the notes (purpose) of a
+ * name that stays are kept, names that are gone are dropped. Used by Save so pressing it never silently loses typed text.
+ */
+export function mergeTypedEnv(existing, typed) {
+  return (typed || []).map((r) => ({ ...emptyEnvVar(), ...((existing || []).find((x) => x.name === r.name) || {}), name: r.name, value: r.value }));
+}

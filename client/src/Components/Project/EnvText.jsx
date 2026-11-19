@@ -8,11 +8,19 @@ import { Copy } from "../Icons/Icons";
  * All variables as one text block, editable as a whole. Opens closed (it is a long list); "Apply text" replaces
  * the variables with what is in the box, so you can paste a whole .env and add, edit or delete in one go.
  */
-export default function EnvText({ rows, onChange, idPrefix = "env" }) {
+export default function EnvText({ rows, onChange, idPrefix = "env", flushRef = null }) {
   const [text, setText] = useState(() => envToText(rows));
   const [dirty, setDirty] = useState(false);
   // Keep the box in step with the rows when they change elsewhere (and the user has not typed).
   useEffect(() => { if (!dirty) setText(envToText(rows)); }, [rows, dirty]);
+
+  // The form's Save asks for what is typed but not applied yet, so pressing Save never silently drops it. null = nothing pending.
+  if (flushRef) flushRef.current = () => {
+    if (!dirty) return null;
+    const byName = new Map();
+    for (const row of parseEnvBlock(text)) byName.set(row.name, { name: row.name, value: row.value });
+    return Array.from(byName.values());
+  };
 
   const copy = async () => {
     try { await navigator.clipboard.writeText(envToText(rows)); toast.success("All variables copied."); }

@@ -29,6 +29,7 @@ const HomeLiveFrame = require("../models/homeLiveFrame");
 const home = require("../utils/home");
 const automation = require("../utils/homeAutomation");
 const media = require("../utils/homeMedia");
+const budget = require("../utils/mediaBudget");
 const weather = require("../utils/homeWeather");
 const news = require("../utils/homeNews");
 const movies = require("../utils/homeMovies");
@@ -336,6 +337,9 @@ router.post("/home/agent/media", agentLimiter, agentAuth, (req, res, next) => {
         const kind = req.query.kind === "video" ? "video" : "photo";
         const reason = ["motion", "snapshot", "clip"].includes(req.query.reason) ? req.query.reason : "snapshot";
         if (!media.looksLike(kind, req.body)) return res.status(400).json({ error: kind === "video" ? "Send an MP4 video." : "Send a JPEG photo." });
+        // Bandwidth and database space: a daily allowance per account. A photo over it is still kept (small) but not sent on; a clip is not accepted.
+        const allowed = budget.take(String(d.owner), req.body.length);
+        if (!allowed.ok && kind === "video") return res.status(202).json({ skipped: "daily-limit", note: "Today's camera allowance is used; the clip was not stored." });
         const id = await media.save({ owner: d.owner, device: d._id, kind, reason, buffer: req.body });
         const settings = await automation.settingsOf(d.owner);
         const isMotion = reason === "motion";
@@ -349,7 +353,8 @@ router.post("/home/agent/media", agentLimiter, agentAuth, (req, res, next) => {
             const bot = require("../utils/telegramBot");
             const skip = Object.fromEntries([...User.HISTORY_FIELDS, ...User.PHOTO_FIELDS, "passwords"].map((f) => [f, 0]));
             const user = await User.findById(d.owner, skip);
-            if (user) void bot.notifyUserMedia(user, { kind, buffer: req.body, caption: text });
+            if (user && allowed.ok && budget.mayUploadToTelegram(kind, req.body.length)) void bot.notifyUserMedia(user, { kind, buffer: req.body, caption: text });
+            else if (user && kind === "video" && allowed.ok) void bot.notifyUser(user, text + " (the clip is too big to send here; open Stashr to watch it)", { category: "home" });
         }
         return res.status(201).json({ id: String(id) });
     } catch (e) { return fail(res, e, "Could not save the picture."); }

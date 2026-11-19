@@ -20,6 +20,7 @@ import { accountMood } from "../../lib/pageMoods";
 import { useDialogs } from "../../Components/UI/Dialogs";
 import MpinSettings from "./MpinSettings";
 import { PageHeader, Badge } from "../../Components/UI/ui";
+import { isUserActive } from "../../lib/activity";
 const download = (name, text, type) => {
   const url = URL.createObjectURL(new Blob([text], { type }));
   const a = document.createElement("a");
@@ -182,7 +183,7 @@ function TelegramBot() {
   // While waiting for "Start" in Telegram, check every few seconds.
   useEffect(() => {
     if (!state?.linkUrl || state.connected) return undefined;
-    const t = window.setInterval(() => { void load(); }, 4000);
+    const t = window.setInterval(() => { if (!document.hidden && isUserActive()) void load(); }, 4000);
     return () => window.clearInterval(t);
   }, [state?.linkUrl, state?.connected, load]);
   const run = async (key, fn, ok) => {
@@ -631,7 +632,7 @@ function DeleteAccount() {
 }
 
 export default function Settings() {
-  const { profile, prefs, setPrefs, lock, importItems, setProfileName } = useVault();
+  const { profile, prefs, setPrefs, lock, importItems, setProfileName, items, trash } = useVault();
   const [name, setName] = useState(profile?.name || "");
   const [importing, setImporting] = useState(false);
 
@@ -779,7 +780,7 @@ export default function Settings() {
           </div>
         </div>
       </div>
-      <ImportModal open={importing} onClose={() => setImporting(false)} onImport={importItems} />
+      <ImportModal open={importing} onClose={() => setImporting(false)} onImport={importItems} existing={[...(items || []), ...(trash || [])]} />
     </div>
   );
 }

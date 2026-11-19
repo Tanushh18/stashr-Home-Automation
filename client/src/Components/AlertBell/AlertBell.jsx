@@ -3,9 +3,10 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { getRenderOpsIncidents } from "../../api/client";
 import { openIncidents, newIncidents } from "../../lib/alerts";
+import { isUserActive, onUserReturn } from "../../lib/activity";
 import "./AlertBell.css";
 
-const POLL_MS = 60 * 1000;
+const POLL_MS = 2 * 60 * 1000;   // and not at all while nobody is here (lib/activity), to save the server's bandwidth
 
 /* Bell in the navbar: shows open server incidents and raises a desktop notification for new ones (if allowed). */
 export default function AlertBell({ enabled, placement = "down" }) {
@@ -15,9 +16,9 @@ export default function AlertBell({ enabled, placement = "down" }) {
   const wrap = useRef(null);
 
   const poll = useCallback(async () => {
-    if (document.hidden) return;
+    if (document.hidden || !isUserActive()) return;
     try {
-      const { incidents } = await getRenderOpsIncidents(200);
+      const { incidents } = await getRenderOpsIncidents(100);
       const now = openIncidents(incidents);
       if (seen.current && newIncidents(now, seen.current).length) fx.emit("boom", { big: true, x: window.innerWidth - 70, y: 40 });
       if (seen.current && typeof Notification !== "undefined" && Notification.permission === "granted") {
@@ -34,7 +35,8 @@ export default function AlertBell({ enabled, placement = "down" }) {
     const t = setInterval(poll, POLL_MS);
     const onVisible = () => { if (!document.hidden) void poll(); };
     document.addEventListener("visibilitychange", onVisible);
-    return () => { clearInterval(t); document.removeEventListener("visibilitychange", onVisible); };
+    const stopReturn = onUserReturn(onVisible);
+    return () => { clearInterval(t); stopReturn(); document.removeEventListener("visibilitychange", onVisible); };
   }, [enabled, poll]);
 
   useEffect(() => {

@@ -118,7 +118,24 @@ async function saveStatement(owner, dataKey, { filename = "", month = "", lines 
         }
     }));
     for (let i = 0; i < ops.length; i += 500) await Line.bulkWrite(ops.slice(i, i + 500), { ordered: false });
+    st.replaced = await replaceOlder(owner, st);
     return st;
+}
+
+/**
+ * The new statement replaces the old ones it covers: every EARLIER saved statement whose dates lie inside the new one's dates (or that
+ * was saved for the same month) is deleted with its lines, so the database does not fill up with copies of the same period. An older
+ * statement that reaches further back than the new one stays (its other months are still wanted). -> how many statements were removed.
+ */
+async function replaceOlder(owner, fresh) {
+    const older = await Statement.find({ owner, _id: { $ne: fresh._id } }).lean();
+    const gone = older.filter((o) => (o.from >= fresh.from && o.to <= fresh.to) || (fresh.month && o.month === fresh.month));
+    for (const o of gone) {
+        await Line.deleteMany({ owner, statement: o._id, date: { $gte: fresh.from, $lte: fresh.to } });
+        const left = await Line.countDocuments({ owner, statement: o._id });
+        if (!left) await Statement.deleteOne({ _id: o._id });
+    }
+    return gone.length;
 }
 
 /** The saved statements with the number of lines each still holds; one whose lines all moved to a newer upload is dropped. */
@@ -187,4 +204,4 @@ async function loadLines(owner, dataKey, { month = "" } = {}) {
     return [...days.keys()].sort().flatMap((d) => orderDay(days.get(d)));
 }
 
-module.exports = { loadLines, orderDay, parseQuery, scoreLine, search, lev, saveStatement, listStatements, removeStatement, searchSaved };
+module.exports = { replaceOlder, loadLines, orderDay, parseQuery, scoreLine, search, lev, saveStatement, listStatements, removeStatement, searchSaved };

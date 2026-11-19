@@ -2,7 +2,7 @@ import React, { useRef, useState } from "react";
 import { Modal } from "react-responsive-modal";
 import { toast } from "react-toastify";
 import Field from "../Field/Field";
-import { parseCSV, rowsToItems, normalizeItem } from "../../lib/items";
+import { parseCSV, rowsToItems, normalizeItem, splitDuplicates } from "../../lib/items";
 import { importBackup } from "../../lib/crypto";
 import { Upload, Check } from "../Icons/Icons";
 
@@ -10,7 +10,7 @@ import { Upload, Check } from "../Icons/Icons";
  * Import from an Stashr encrypted backup, CSV (Chrome, Bitwarden, 1Password,
  * LastPass…) or an Excel sheet. Everything is parsed and encrypted in the browser.
  */
-export default function ImportModal({ open, onClose, onImport }) {
+export default function ImportModal({ open, onClose, onImport, existing = [] }) {
   const fileRef = useRef(null);
   const [file, setFile] = useState(null);
   const [backupText, setBackupText] = useState(null);
@@ -70,11 +70,14 @@ export default function ImportModal({ open, onClose, onImport }) {
     }
   };
 
+  // Items already in the vault (or repeated in the file) are skipped: importing the same file twice must not double everything.
+  const { fresh, duplicates } = preview ? splitDuplicates(preview, existing) : { fresh: [], duplicates: 0 };
+
   const run = async () => {
     try {
       setBusy(true);
-      const n = await onImport(preview, (done, total) => setProgress({ done, total }));
-      toast.success(`${n} item${n === 1 ? "" : "s"} imported and encrypted.`);
+      const n = fresh.length ? await onImport(fresh, (done, total) => setProgress({ done, total })) : 0;
+      toast.success(`${n} item${n === 1 ? "" : "s"} imported and encrypted.` + (duplicates ? ` ${duplicates} already in your vault ${duplicates === 1 ? "was" : "were"} skipped.` : ""));
       close();
     } catch (err) {
       toast.error(err?.response?.data?.error || err.message || "Import failed.");
@@ -115,13 +118,14 @@ export default function ImportModal({ open, onClose, onImport }) {
               <strong>{preview.length}</strong> item{preview.length === 1 ? "" : "s"} found
               {preview.length ? `: ${preview.slice(0, 4).map((i) => i.name || "Untitled").join(", ")}${preview.length > 4 ? "…" : ""}` : "."}
             </p>
+            {duplicates ? <p className="field__note">{duplicates} {duplicates === 1 ? "is" : "are"} already in your vault and will be skipped, so nothing is doubled.</p> : null}
             {progress ? (
               <div className="progress"><span style={{ width: `${(progress.done / progress.total) * 100}%` }} /></div>
             ) : null}
-            <button type="button" className="btn btn--primary btn--block" onClick={run} disabled={!preview.length || busy}>
+            <button type="button" className="btn btn--primary btn--block" onClick={run} disabled={!fresh.length || busy}>
               <span className="btn__sheen" />
               {busy ? <span className="spinner" /> : <Check size={15} />}
-              {busy ? "Encrypting…" : `Import ${preview.length} item${preview.length === 1 ? "" : "s"}`}
+              {busy ? "Encrypting…" : fresh.length ? `Import ${fresh.length} item${fresh.length === 1 ? "" : "s"}` : "Nothing new to import"}
             </button>
           </div>
         ) : null}

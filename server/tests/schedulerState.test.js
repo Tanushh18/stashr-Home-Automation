@@ -36,3 +36,16 @@ test("public run output is bounded to safe step names, statuses and counters", (
   assert.deepEqual(result.steps[0].counts, { errors: 2 });
   assert.equal(JSON.stringify(result).includes("secret"), false);
 });
+
+test("heavy background steps are spaced out to save bandwidth: health steps every tick, syncs once then only after the time has passed", () => {
+  const { makeDueGate } = require("../utils/scheduler");
+  const due = makeDueGate(30 * 60 * 1000);
+  const t = 1_000_000_000;
+  assert.equal(due("pings", t), true);
+  assert.equal(due("pings", t + 1), true);
+  assert.equal(due("projectSync", t), true);
+  assert.equal(due("projectSync", t + 5 * 60 * 1000), false);
+  assert.equal(due("projectSync", t + 29 * 60 * 1000), false);
+  assert.equal(due("projectSync", t + 30 * 60 * 1000), true);
+  assert.equal(due("usage", t + 5 * 60 * 1000), true);
+});
