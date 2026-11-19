@@ -44,7 +44,7 @@ describe("old database read, new database written", () => {
     });
     test("a delete is also sent to the old database so the document does not come back", async () => {
         await Note.deleteOne({ text: "old two" });
-        await new Promise((r) => setTimeout(r, 100));
+        for (let i = 0; i < 100 && (await oldNotes().countDocuments({ text: "old two" })) > 0; i++) await new Promise((r) => setTimeout(r, 50));   // the old-database delete is not waited for by the caller
         expect(await Note.countDocuments({ text: "old two" })).toBe(0);
         expect(await oldNotes().countDocuments({ text: "old two" })).toBe(0);
     });

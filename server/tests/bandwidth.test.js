@@ -18,7 +18,7 @@ describe("bandwidth meter", () => {
         bw.reset();
         for (const id of ["507f1f77bcf86cd799439011", "507f1f77bcf86cd799439012", "7"]) await request(app).get("/things/" + id).set("Accept-Encoding", "gzip");
         await request(app).get("/small");
-        await new Promise((r) => setTimeout(r, 50));
+        for (let i = 0; i < 100 && bw.report().top.reduce((n, x) => n + x.requests, 0) < 4; i++) await new Promise((r) => setTimeout(r, 20));   // the count is made when the response closes
         const r = bw.report();
         expect(r.top[0].route).toMatch(/^GET \/things\/:/);
         expect(r.top[0].requests).toBe(3);
