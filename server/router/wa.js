@@ -73,6 +73,12 @@ router.get("/wa/overview", authenticate, async (req, res) => {
         const owner = req.rootUser._id;
         const settings = await sender.settingsOf(owner);
         const local = automation.localParts(Date.now(), settings.timezone);
+        // Draw today's Business share as soon as the page is opened (once a day, inside the range), so it shows before the next send.
+        const lo = Math.min(Number(settings.splitMin) || 0, Number(settings.splitMax) || 0), hi = Math.max(Number(settings.splitMin) || 0, Number(settings.splitMax) || 0);
+        if (settings.shareDay !== local.date || !(settings.sharePct >= lo && settings.sharePct <= hi)) {
+            settings.shareDay = local.date; settings.sharePct = sender.drawShare(settings);
+            await WaSettings.updateOne({ owner }, { $set: { shareDay: settings.shareDay, sharePct: settings.sharePct } });
+        }
         const sheets = await WaSheet.find({ owner }).select("-image").sort({ name: 1 }).lean();
         const imageCounts = {};
         for (const row of await WaSheet.aggregate([{ $match: { owner } }, { $project: { n: { $cond: [{ $gt: [{ $size: { $ifNull: ["$images", []] } }, 0] }, { $size: "$images" }, { $cond: [{ $ne: ["$image", ""] }, 1, 0] }] } } }])) imageCounts[String(row._id)] = row.n;
