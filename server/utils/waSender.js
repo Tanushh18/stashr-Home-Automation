@@ -283,7 +283,7 @@ async function tickOwner(owner, now = Date.now(), random = Math.random) {
     }
     // Which WhatsApp: today's Business share (drawn once a day), runs of 1 to 3 from one account, then the other.
     let sharePct = s.sharePct;
-    if (s.shareDay !== local.date) { sharePct = drawShare(s, random); await WaSettings.updateOne({ owner }, { $set: { shareDay: local.date, sharePct } }); }
+    if (s.shareDay !== local.date || !(sharePct >= Math.min(Number(s.splitMin) || 0, Number(s.splitMax) || 0) && sharePct <= Math.max(Number(s.splitMin) || 0, Number(s.splitMax) || 0))) { sharePct = drawShare(s, random); await WaSettings.updateOne({ owner }, { $set: { shareDay: local.date, sharePct } }); }
     const route = chooseAccount({ settings: s, counts: await accountCounts(owner, local.date), run: { account: s.runAccount, left: s.runLeft, streak: s.runStreak }, sharePct, random });
     const send = await dispatch({ owner, tablet, sheet: picked.sheet, recipient: picked.recipient, phone: picked.recipient.phone, name: picked.recipient.name, text, kind: "scheduled", day: local.date, now, account: route.account, random });
     if (!send) return note("The tablet queue is full");
