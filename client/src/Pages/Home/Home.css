@@ -575,6 +575,14 @@
 .hm-marker:focus-visible .hm-marker__label { outline: 2px solid var(--focus, #4cc6c4); outline-offset: 2px; }
 @keyframes hm-pin { 50% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--m) 6%, transparent), 0 0 26px var(--m); } }
 @media (max-width: 900px) { .hm-markers { display: none; } }
+@media (min-width: 721px) and (max-aspect-ratio: 23/20) {
+  .hm-hero:has(.scene-host.is-ready) .hm-hero__scrim {
+    background: linear-gradient(180deg, rgba(3, 9, 16, 0.88) 0%, rgba(3, 9, 16, 0.6) 42%, transparent 68%), linear-gradient(0deg, var(--bg) 0%, transparent 16%);
+  }
+  :root[data-theme="light"] .hm-hero:has(.scene-host.is-ready) .hm-hero__scrim {
+    background: linear-gradient(180deg, rgba(246, 251, 248, 0.92) 0%, rgba(246, 251, 248, 0.62) 42%, transparent 68%), linear-gradient(0deg, var(--bg) 0%, transparent 16%);
+  }
+}
 
 /* Spec chips (true features, not live status). */
 .hm-hero__specs { display: flex; flex-wrap: wrap; gap: .45rem; margin: 1rem 0 0; padding: 0; list-style: none; }

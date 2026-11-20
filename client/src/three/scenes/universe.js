@@ -172,6 +172,8 @@ export default function build({ THREE, scene, camera, tier, opts }) {
       camState.dist = (hero ? 330 : 320) * (w / h < 1 ? 1.35 : 1);
       // Wide hero: shift the city right of centre so the headline column stays clear.
       if (hero && w / h > 1.15) camera.setViewOffset(w, h, -w * 0.2, 0, w, h);
+      // Portrait tablet hero: drop the city into the lower half, below the copy.
+      else if (hero && w >= 720) camera.setViewOffset(w, h, 0, -h * 0.2, w, h);
       else camera.clearViewOffset();
     },
     update(t, dt, pointer, o) {

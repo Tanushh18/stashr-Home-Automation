@@ -24,7 +24,7 @@
   position: absolute; inset: 0;
   background:
     radial-gradient(120% 80% at 60% 10%, transparent 0%, color-mix(in srgb, var(--bg) 40%, transparent) 65%),
-    linear-gradient(180deg, color-mix(in srgb, var(--bg) 10%, transparent) 0%, color-mix(in srgb, var(--bg) 62%, transparent) 75%);
+    linear-gradient(180deg, color-mix(in srgb, var(--bg) 22%, transparent) 0%, color-mix(in srgb, var(--bg) 66%, transparent) 75%);
 }
 :root[data-theme="light"] .page-env__scrim {
   background: linear-gradient(180deg, color-mix(in srgb, var(--bg) 18%, transparent), color-mix(in srgb, var(--bg) 66%, transparent) 75%);
@@ -36,3 +36,7 @@
 /* Per-environment backdrop strength: busy scenes sit further back. */
 :root[data-env="media"] .page-env { --env-opacity: 0.6; }
 :root[data-env="command"] .page-env, :root[data-env="admin"] .page-env { --env-opacity: 0.8; }
+
+/* Legibility over a live scene: a soft halo in the page colour behind text (not on filled controls). */
+:root[data-workspace="immersive"][data-env] .app-main { text-shadow: 0 0 14px color-mix(in srgb, var(--bg) 85%, transparent), 0 1px 2px color-mix(in srgb, var(--bg) 60%, transparent); }
+:root[data-workspace="immersive"][data-env] .app-main :is(.btn, button, input, select, textarea, .ui-badge, .pill) { text-shadow: none; }
