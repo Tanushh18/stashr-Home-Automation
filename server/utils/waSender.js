@@ -82,6 +82,13 @@ function chooseAccount({ settings: s, counts, run, sharePct, random = Math.rando
     const biz = counts.business || 0, nor = counts.normal || 0, n = biz + nor;
     const share = Math.min(100, Math.max(0, Number(sharePct))) / 100;
     const d = share * (n + 1) - biz;                               // > 0: Business is behind its share, < 0: ahead of it
+    // The day's share is fixed up front: of today's daily limit, Business gets round(limit x share) messages and normal WhatsApp the rest.
+    const limit = Math.max(0, Number(s.dailyLimit) || 0);
+    if (limit > 0) {
+        const bizQuota = Math.round(limit * share), norQuota = limit - bizQuota;
+        if (biz >= bizQuota && nor < norQuota) return { account: "normal", run: { account: "normal", left: 0, streak: run && run.account === "normal" ? (Number(run.streak) || 0) + 1 : 1 } };
+        if (nor >= norQuota && biz < bizQuota) return { account: "business", run: { account: "business", left: 0, streak: run && run.account === "business" ? (Number(run.streak) || 0) + 1 : 1 } };
+    }
     const cur = run && ACCOUNTS.includes(run.account) ? run.account : "";
     const streak = cur ? Number(run.streak) || 1 : 0;              // messages in a row from `cur` so far (never more than 3)
     if (cur && run.left > 0 && streak < 3) {
