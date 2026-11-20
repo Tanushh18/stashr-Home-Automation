@@ -118,7 +118,7 @@ Ground rules for every item:
   - 20 signed-in routes at desktop and mobile. These used a mocked `/authenticate` with sample data, kept in the scratchpad
     and never committed.
   - Sign in and Forgot in dark and light.
-- [ ] 11.5 Commit, push to `tanush/bold-dirac-qnxa2j` and open a draft PR.
+- [x] 11.5 Committed and pushed to `tanush/bold-dirac-qnxa2j`; draft PR Tanushh18/stashr-Home-Automation#111.
 
 ## Not done / out of scope for this pass (deliberately honest)
 - **Camera transitions between routes.** Each route builds its own scene; there is no continuous fly-through between
