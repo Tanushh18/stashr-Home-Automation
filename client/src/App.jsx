@@ -49,6 +49,7 @@ import Splash from "./Components/Splash/Splash";
 import BottomNav from "./Components/BottomNav/BottomNav";
 import Sidebar from "./Components/AppShell/Sidebar";
 import { useVault } from "./state/vault";
+import PageEnvironment from "./three/PageEnvironment";
 
 const WAKING = { title: "Waking the server…", body: "Your sign-in is saved. Free servers sleep when idle and can take up to a minute to start." };
 
@@ -117,6 +118,7 @@ export default function App() {
         <ScrollToTop />
         <NetBar />
         <CommandPalette />
+        <PageEnvironment />
         <JungleScene />
         <SkyFx />
         <Navbar />

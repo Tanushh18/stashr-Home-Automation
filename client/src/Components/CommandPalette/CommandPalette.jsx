@@ -2,6 +2,7 @@ import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useVault } from "../../state/vault";
 import { buildEntries, rank } from "../../lib/palette";
+import { useWorkspaceMode } from "../../three/immersive";
 import "./CommandPalette.css";
 
 const OPEN_EVENT = "stashr:palette";
@@ -22,7 +23,18 @@ export default function CommandPalette() {
   const openRef = useRef(false);
   openRef.current = open;
 
-  const entries = useMemo(() => buildEntries({ items, projects: projects || [], profile, signedIn: status === "ready" }), [items, projects, profile, status]);
+  const { immersive, can3d, toggle: toggleWorkspace } = useWorkspaceMode();
+  const entries = useMemo(() => {
+    const base = buildEntries({ items, projects: projects || [], profile, signedIn: status === "ready" });
+    if (!can3d || !base.length) return base;
+    // Workspace switch: runs in place instead of navigating.
+    const mode = {
+      kind: "Action", to: "#workspace", hint: "Workspace view", run: toggleWorkspace,
+      label: immersive ? "Switch to standard 2D workspace" : "Switch to immersive 3D workspace",
+      haystack: "workspace view mode immersive 3d standard 2d switch toggle",
+    };
+    return [...base.slice(0, 4), mode, ...base.slice(4)];
+  }, [items, projects, profile, status, can3d, immersive, toggleWorkspace]);
   const results = useMemo(() => rank(entries, query), [entries, query]);
 
   useEffect(() => {
@@ -53,7 +65,7 @@ export default function CommandPalette() {
   useEffect(() => { setActive(0); }, [query]);
 
   if (!open) return null;
-  const go = (entry) => { if (!entry) return; restoreRef.current = null; setOpen(false); navigate(entry.to); };
+  const go = (entry) => { if (!entry) return; setOpen(false); if (entry.run) { entry.run(); return; } restoreRef.current = null; navigate(entry.to); };
   const onInputKey = (e) => {
     if (e.key === "ArrowDown") { e.preventDefault(); setActive((a) => Math.min(a + 1, results.length - 1)); }
     else if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }

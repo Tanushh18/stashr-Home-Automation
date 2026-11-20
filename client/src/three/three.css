@@ -1,0 +1,38 @@
+.immersive { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.scene-host { position: absolute; inset: 0; opacity: 0; transition: opacity 1.2s ease; }
+.scene-host.is-ready { opacity: 1; }
+.scene-host__canvas { display: block; width: 100% !important; height: 100% !important; }
+/* When the 3D scene is ready it covers the static fallback. */
+.immersive:has(.scene-host.is-ready) > :not(.scene-host) { opacity: 0; transition: opacity 1.2s ease; }
+.mode-toggle {
+  display: inline-flex; align-items: center; gap: .5rem; min-height: 36px; padding: .35rem .8rem;
+  border-radius: 999px; border: 1px solid var(--glass-edge, rgba(143,224,220,.35));
+  background: var(--glass, rgba(10,24,32,.55)); color: inherit; backdrop-filter: blur(10px);
+  font: 600 .78rem/1 var(--font-mono); letter-spacing: .04em; cursor: pointer;
+}
+.mode-toggle:hover { border-color: var(--river-soft, #8fe0dc); }
+.mode-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mode-toggle__dot { width: 8px; height: 8px; border-radius: 50%; background: #6b7f86; }
+.mode-toggle.is-on .mode-toggle__dot { background: var(--emerald-soft, #3ccf9a); box-shadow: 0 0 10px var(--emerald-soft, #3ccf9a); }
+@media (prefers-reduced-motion: reduce) { .scene-host, .immersive > * { transition: none !important; } }
+
+/* Global environment layer (signed-in pages, immersive mode). Sits with the
+   jungle behind content; a theme-aware scrim keeps text contrast high. */
+.page-env { position: fixed; inset: 0; z-index: -1; pointer-events: none; }
+.page-env .scene-host.is-ready { opacity: var(--env-opacity, 0.9); }
+.page-env__scrim {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(120% 80% at 60% 10%, transparent 0%, color-mix(in srgb, var(--bg) 40%, transparent) 65%),
+    linear-gradient(180deg, color-mix(in srgb, var(--bg) 10%, transparent) 0%, color-mix(in srgb, var(--bg) 62%, transparent) 75%);
+}
+:root[data-theme="light"] .page-env__scrim {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg) 18%, transparent), color-mix(in srgb, var(--bg) 66%, transparent) 75%);
+}
+/* In immersive mode the jungle backdrop steps aside on pages that have an environment. */
+:root[data-workspace="immersive"][data-env] .jungle { opacity: 0; visibility: hidden; }
+:root[data-theme="light"] .mode-toggle { background: rgba(255, 255, 255, .72); border-color: rgba(11, 95, 85, .3); color: #0b3a30; }
+:root[data-theme="light"] .mode-toggle.is-on .mode-toggle__dot { background: #0d8f6a; box-shadow: 0 0 8px rgba(13, 143, 106, .6); }
+/* Per-environment backdrop strength: busy scenes sit further back. */
+:root[data-env="media"] .page-env { --env-opacity: 0.6; }
+:root[data-env="command"] .page-env, :root[data-env="admin"] .page-env { --env-opacity: 0.8; }
