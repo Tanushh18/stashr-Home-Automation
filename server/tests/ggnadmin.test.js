@@ -50,7 +50,10 @@ describe("ggnHome admin inside Stashr", () => {
         const login = await request(app).post("/ggnadmin/login").set(auth).send({ mobileNumber: "9810012345", otp: "1234" });
         expect(login.body.ok).toBe(true);
         const row = await GgnAdminLink.findOne({}).lean();
-        expect(row.sealed.includes("h.")).toBe(false); // sealed, not the plain token
+        // Sealed, not the plain token: iv.tag.ciphertext in base64, with no trace of the JWT payload.
+        // (Checking for the token's "h." prefix was flaky: the random 16-char IV ends in "h" 1 time in 64.)
+        expect(/^[A-Za-z0-9+/]{16}\.[A-Za-z0-9+/]{22}==\.[A-Za-z0-9+/]+=*$/.test(row.sealed)).toBe(true);
+        expect(row.sealed.includes(Buffer.from('{"exp"').toString("base64url"))).toBe(false); // 6 bytes: encodes to a fixed "eyJleHAi" prefix
         expect((await request(app).get("/ggnadmin/status").set(auth)).body).toMatchObject({ connected: true, name: "Boss" });
         const r = await request(app).get("/ggnadmin/api/api/admin/overview?x=1").set(auth);
         expect(r.body).toEqual({ users: 7 });
