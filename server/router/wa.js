@@ -119,7 +119,10 @@ router.put("/wa/settings", authenticate, writeLimiter, async (req, res) => {
         const next = { ...cur, ...set };
         if (next.splitMax < next.splitMin) return res.status(400).json({ error: "The highest Business share must not be lower than the lowest." });
         if (next.useBusiness === false && next.useNormal === false) return res.status(400).json({ error: "Keep at least one WhatsApp switched on." });
-        if (set.splitMin !== undefined || set.splitMax !== undefined) set.shareDay = "";                       // draw today's share again
+        if (set.splitMin !== undefined || set.splitMax !== undefined) {                                         // draw today's share again, now, so the page shows a share inside the new range
+            set.shareDay = automation.localParts(Date.now(), next.timezone).date;
+            set.sharePct = sender.drawShare(next);
+        }
         if (next.gapMax < next.gapMin) return res.status(400).json({ error: "The longest gap must not be shorter than the shortest." });
         if (sender.windowMinutes(next) <= 0) return res.status(400).json({ error: "The end time must be later than the start time." });
         if (set.enabled === true && !cur.enabled) set.nextDueAt = null;           // turning on: the first message may go now
