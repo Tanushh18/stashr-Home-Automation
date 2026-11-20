@@ -90,3 +90,43 @@ test("home keeps every destination, the Android link logic and accessible distri
   assert.match(home, /<ServiceStatus \/>/);
   assert.match(home, /fallback=\{<WorldScene/);
 });
+
+test("page changes fly the camera in and hand the old scene off instead of cutting", async () => {
+  const env = await readFile(src("three/PageEnvironment.jsx"), "utf8");
+  assert.match(env, /is-leaving/);
+  assert.match(env, /page-env__transit/);
+  assert.match(env, /intro=\{false\}/, "the outgoing scene does not replay its arrival");
+  const host = await readFile(src("three/SceneHost.jsx"), "utf8");
+  assert.match(host, /const flying = introAtMount && !reduce;/, "no flight under reduced motion");
+  assert.match(host, /camera\.position\.copy\(saved\)/, "the flight offset never leaks into scene camera logic");
+});
+
+test("the cursor halo decorates but never replaces the system cursor", async () => {
+  const jsx = await readFile(src("Components/CursorHalo/CursorHalo.jsx"), "utf8");
+  const css = await readFile(src("Components/CursorHalo/CursorHalo.css"), "utf8");
+  for (const code of [jsx, css]) assert.doesNotMatch(code, /cursor:\s*none/);
+  assert.match(jsx, /\(hover: hover\) and \(pointer: fine\)/);
+  assert.match(css, /pointer-events: none/);
+  assert.match(css, /prefers-reduced-motion: reduce/);
+});
+
+test("page interiors are scoped to their environment and never hide content", async () => {
+  const css = await readFile(src("styles/interiors.css"), "utf8");
+  const rules = css.replace(/\/\*[\s\S]*?\*\//g, "").split("}").map((r) => r.trim()).filter((r) => r.includes("{"));
+  for (const r of rules) {
+    const sel = r.split("{")[0].trim();
+    if (sel.startsWith("@") || /^(from|to|\d+%)/.test(sel)) continue;
+    const shared = /^\.(status|bell|install)/.test(sel) || sel.includes(".status[");
+    assert.ok(shared || /:root\[data-env="[a-z]+"\]/.test(sel), `unscoped interior rule: ${sel}`);
+  }
+  assert.doesNotMatch(css, /display:\s*none|visibility:\s*hidden/);
+});
+
+test("the Android app uses the web palette", async () => {
+  const mobile = await readFile(new URL("../../mobile/src/lib/theme.js", import.meta.url), "utf8");
+  const web = await readFile(src("styles/theme.css"), "utf8");
+  for (const hex of ["#08121A", "#0E1B1F", "#22C58F", "#F5F7F2", "#0D6E5C"]) assert.ok(mobile.includes(hex), `mobile theme has ${hex}`);
+  assert.match(web, /--bg: #08121a;/);
+  assert.match(web, /--bg: #f5f7f2;/);
+  assert.doesNotMatch(mobile, /accent: "#22C55E"/, "the old off-palette green is gone");
+});

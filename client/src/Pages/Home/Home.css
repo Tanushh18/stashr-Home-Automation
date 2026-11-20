@@ -537,7 +537,7 @@
 }
 
 /* District markers — real links positioned by the 3D scene each frame. */
-.hm-markers { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
+.hm-markers { position: absolute; inset: 0; z-index: 3; pointer-events: none; animation: hm-fade 0.6s ease 1.4s both; } /* after the arrival flight */
 .hm-marker {
   --m: var(--emerald-soft, #3ccf9a);
   position: absolute; left: 0; top: 0; width: 0; height: 0;
@@ -751,6 +751,7 @@
   .hm-phone__screen { height: 320px; }
 }
 @media (prefers-reduced-motion: reduce) {
+  .hm-markers { animation: none; }
   .hm-marker__pin, .e-ring, .e-crystal, .e-sweep, .e-blip, .e-node, .hm-journey::after, .hm-phone__body { animation: none !important; }
   .hm-emblem, .hm-dest:hover .hm-emblem { transition: none; }
 }

@@ -50,6 +50,7 @@ import BottomNav from "./Components/BottomNav/BottomNav";
 import Sidebar from "./Components/AppShell/Sidebar";
 import { useVault } from "./state/vault";
 import PageEnvironment from "./three/PageEnvironment";
+import CursorHalo from "./Components/CursorHalo/CursorHalo";
 
 const WAKING = { title: "Waking the server…", body: "Your sign-in is saved. Free servers sleep when idle and can take up to a minute to start." };
 
@@ -167,6 +168,7 @@ export default function App() {
         </Routes>
         </div>
         <InstallPrompt />
+        <CursorHalo />
         <BottomNav />
       </BrowserRouter>
     </div>

@@ -22,7 +22,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "node --test tests/*.test.mjs",
-    "lint": "eslint src tests"
+    "lint": "eslint src tests",
+    "models": "node scripts/build-models.mjs"
   },
   "type": "module",
   "devDependencies": {

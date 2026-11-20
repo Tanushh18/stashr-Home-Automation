@@ -9,9 +9,11 @@ import { deviceTier, prefersReducedMotion } from "./capabilities";
   tabs, runs one still frame under reduced motion, and frees GPU memory on unmount.
   Only pass non-sensitive data in `opts` (counts, names) — never secrets.
 */
-export default function SceneHost({ load, opts, className = "", label, onReady, maxFps = 60 }) {
+export default function SceneHost({ load, opts, className = "", label, onReady, maxFps = 60, intro = true }) {
   const wrap = useRef(null);
   const [ready, setReady] = useState(false);
+  // Read once: a scene that is handing off must keep running, not rebuild because its props changed.
+  const [introAtMount] = useState(intro);
   const optsRef = useRef(opts);
   optsRef.current = opts;
 
@@ -19,10 +21,15 @@ export default function SceneHost({ load, opts, className = "", label, onReady, 
     let cancelled = false;
     let cleanup = () => {};
     (async () => {
-      const [THREE, mod] = await Promise.all([import("three"), load()]);
+      const tier = deviceTier();
+      const [THREE, mod, roomEnv] = await Promise.all([
+        import("three"),
+        load(),
+        // Image-based lighting so metal and glass reflect something real (skipped on low-tier devices).
+        tier === "high" ? import("three/examples/jsm/environments/RoomEnvironment.js").catch(() => null) : null,
+      ]);
       const el = wrap.current;
       if (cancelled || !el) return;
-      const tier = deviceTier();
       const reduce = prefersReducedMotion();
       let renderer;
       try {
@@ -35,6 +42,15 @@ export default function SceneHost({ load, opts, className = "", label, onReady, 
       renderer.domElement.className = "scene-host__canvas";
       el.appendChild(renderer.domElement);
       const scene = new THREE.Scene();
+      let pmrem = null, envMap = null;
+      if (roomEnv?.RoomEnvironment) {
+        pmrem = new THREE.PMREMGenerator(renderer);
+        const room = new roomEnv.RoomEnvironment();
+        envMap = pmrem.fromScene(room, 0.04).texture;
+        room.traverse((o) => { o.geometry?.dispose?.(); o.material?.dispose?.(); });
+        scene.environment = envMap;
+        scene.environmentIntensity = 0.45;
+      }
       const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 2000);
       const api = mod.default({ THREE, scene, camera, renderer, tier, opts: optsRef.current || {} }) || {};
 
@@ -58,13 +74,37 @@ export default function SceneHost({ load, opts, className = "", label, onReady, 
       resize();
 
       let visible = true, running = false, raf = 0, last = performance.now();
+      // Arrival flight: for the first INTRO_MS the camera is drawn back along its view
+      // direction, raised and widened, easing into the pose the scene chose. The offset is
+      // applied for the draw only and removed afterwards, so scene camera logic is untouched.
+      const INTRO_MS = 1500;
+      const introStart = performance.now();
+      const flying = introAtMount && !reduce;
+      const fwd = new THREE.Vector3(), saved = new THREE.Vector3();
       const frame = (now) => {
         const dt = Math.min(0.05, (now - last) / 1000);
         last = now;
         pointer.x += (pointer.tx - pointer.x) * 0.04;
         pointer.y += (pointer.ty - pointer.y) * 0.04;
         api.update?.(now / 1000, dt, pointer, optsRef.current || {});
-        renderer.render(scene, camera);
+        const k = flying ? Math.min(1, (now - introStart) / INTRO_MS) : 1;
+        if (k < 1) {
+          const away = Math.pow(1 - k, 3); // ease-out cubic
+          const fov = camera.fov;
+          saved.copy(camera.position);
+          camera.getWorldDirection(fwd);
+          const reach = Math.max(40, camera.position.length() * 0.6);
+          camera.position.addScaledVector(fwd, -reach * away);
+          camera.position.y += reach * 0.35 * away;
+          camera.fov = fov + 16 * away;
+          camera.updateProjectionMatrix();
+          renderer.render(scene, camera);
+          camera.position.copy(saved);
+          camera.fov = fov;
+          camera.updateProjectionMatrix();
+        } else {
+          renderer.render(scene, camera);
+        }
       };
       // Backdrops run at a capped rate; low-tier devices get at most 24 fps.
       const minGap = 1000 / Math.min(maxFps, tier === "low" ? 24 : maxFps) - 2;
@@ -97,13 +137,15 @@ export default function SceneHost({ load, opts, className = "", label, onReady, 
           const m = o.material;
           (Array.isArray(m) ? m : m ? [m] : []).forEach((mat) => { mat.map?.dispose?.(); mat.dispose(); });
         });
+        envMap?.dispose();
+        pmrem?.dispose();
         renderer.dispose();
         renderer.forceContextLoss?.();
         renderer.domElement.remove();
       };
     })().catch(() => { /* scene failed: the static fallback stays visible */ });
     return () => { cancelled = true; cleanup(); };
-  }, [load, onReady, maxFps]);
+  }, [load, onReady, maxFps, introAtMount]);
 
   return (
     <div ref={wrap} className={`scene-host ${ready ? "is-ready" : ""} ${className}`} role={label ? "img" : undefined} aria-label={label} aria-hidden={label ? undefined : true} />

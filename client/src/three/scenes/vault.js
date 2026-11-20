@@ -1,4 +1,5 @@
 import { ACCENTS, palette, glowRing, particles, driftParticles, lights, damp } from "../kit.js";
+import { loadModel, disposeTree } from "../models.js";
 
 /*
   The Security Vault — an underground facility. An octagonal corridor of lit
@@ -84,7 +85,7 @@ export default function build({ THREE, scene, camera, tier, opts }) {
   const doorRings = [glowRing(THREE, { radius: 20, color: accent, tube: 0.25 }), glowRing(THREE, { radius: 14, color: 0x8fe0dc, tube: 0.15, opacity: 0.7, arc: Math.PI * 1.5 }), glowRing(THREE, { radius: 9, color: accent, tube: 0.2, arc: Math.PI * 1.2 })];
   doorRings.forEach((r) => { r.position.z = 3.6; door.add(r); });
   // Locking wheel: rim + spokes.
-  const wheel = new THREE.Group();
+  let wheel = new THREE.Group();
   wheel.add(new THREE.Mesh(new THREE.TorusGeometry(6, 0.7, 8, 32), metal));
   for (let i = 0; i < 4; i++) {
     const spoke = new THREE.Mesh(new THREE.BoxGeometry(12, 0.8, 0.8), metal);
@@ -96,6 +97,28 @@ export default function build({ THREE, scene, camera, tier, opts }) {
   // Frame around the door.
   const jamb = new THREE.Mesh(new THREE.TorusGeometry(32.5, 3, 12, 64), darkMetal);
   scene.add(hinge, jamb);
+
+  // Swap the code-built door for the .glb model when it arrives; the glow rings stay live.
+  let closed = false;
+  loadModel("vaultDoor").then((model) => {
+    if (closed) { disposeTree(model); return; }
+    const part = (n) => model.getObjectByName(n);
+    if (light) {
+      ["slab", "bolts", "wheel"].forEach((n) => part(n)?.traverse((o) => o.isMesh && o.material.color.set(0xb9c9c9)));
+      ["face", "jamb"].forEach((n) => part(n)?.traverse((o) => o.isMesh && o.material.color.set(0x8ea3a5)));
+    }
+    // Free only geometry: the metal materials are shared with the corridor frames.
+    const dropGeometry = (m) => m.traverse((o) => o.geometry?.dispose());
+    [slab, face, bolts, wheel].forEach((m) => { door.remove(m); dropGeometry(m); });
+    scene.remove(jamb); dropGeometry(jamb);
+    const spin = wheel.rotation.z;
+    ["slab", "face", "bolts"].forEach((n) => part(n) && door.add(part(n)));
+    wheel = part("wheel") || wheel;
+    wheel.rotation.z = spin;
+    door.add(wheel);
+    if (part("jamb")) scene.add(part("jamb"));
+    door.userData.source = "glb";
+  }).catch(() => { /* keep the code-built door */ });
 
   // Emerald core behind the door.
   const coreMat = new THREE.MeshStandardMaterial({ color: accent, emissive: accent, emissiveIntensity: 1.6, roughness: 0.2 });
@@ -124,6 +147,7 @@ export default function build({ THREE, scene, camera, tier, opts }) {
   let aspect = 1.6;
 
   return {
+    dispose() { closed = true; },
     resize(w, h) { aspect = w / h; },
     update(t, dt, pointer, o) {
       if (t0 === null) t0 = t;

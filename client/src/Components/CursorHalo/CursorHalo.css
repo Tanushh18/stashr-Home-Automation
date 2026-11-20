@@ -1,0 +1,15 @@
+/* Trailing halo around the (unchanged) system cursor — immersive workspace, fine pointers only. */
+.cursor-halo {
+  position: fixed; left: 0; top: 0; z-index: 2500; pointer-events: none;
+  width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%;
+  border: 1.5px solid rgba(var(--env-rgb, 43, 179, 177), 0.55);
+  background: radial-gradient(closest-side, rgba(var(--env-rgb, 43, 179, 177), 0.1), transparent);
+  box-shadow: 0 0 18px rgba(var(--env-rgb, 43, 179, 177), 0.25);
+  opacity: 0; transition: opacity .25s ease, width .2s ease, height .2s ease, margin .2s ease, border-radius .2s ease, border-color .2s ease;
+  will-change: transform;
+}
+.cursor-halo[data-on="1"] { opacity: 1; }
+.cursor-halo[data-mode="link"] { width: 52px; height: 52px; margin: -26px 0 0 -26px; border-color: rgba(var(--env-rgb, 43, 179, 177), 0.85); }
+.cursor-halo[data-mode="text"] { width: 4px; height: 30px; margin: -15px 0 0 -2px; border-radius: 2px; opacity: .55; }
+.cursor-halo[data-down="1"] { width: 24px; height: 24px; margin: -12px 0 0 -12px; }
+@media (hover: none), (pointer: coarse), (prefers-reduced-motion: reduce) { .cursor-halo { display: none; } }

@@ -1,4 +1,5 @@
 import { ACCENTS, glowRing, particles, lights, palette, damp, dotTexture } from "../kit.js";
+import { loadModel, disposeTree } from "../models.js";
 
 /*
   Vault command deck: a metallic shield core inside three orbital rings, with
@@ -51,6 +52,20 @@ export default function build({ THREE, scene, camera, tier, opts }) {
   core.add(shell, inner, hole, slot);
   scene.add(core);
 
+  // Swap the code-built shield for the .glb model once it loads (same shape, authored file).
+  let closed = false;
+  loadModel("shield").then((model) => {
+    if (closed) { disposeTree(model); return; }
+    model.traverse((o) => {
+      if (!o.isMesh) return;
+      if (o.parent?.name === "shell" && opts.theme === "light") o.material.color.set(0xd8e6e4);
+      if (o.parent?.name === "inlay") o.material.emissiveIntensity = 0.9;
+    });
+    [shell, inner, hole, slot].forEach((m) => { core.remove(m); disposeTree(m); });
+    core.add(model);
+    core.userData.source = "glb";
+  }).catch(() => { /* keep the code-built shield */ });
+
   const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: dotTexture(THREE), color: accent, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }));
   halo.scale.setScalar(38);
   scene.add(halo);
@@ -96,6 +111,7 @@ export default function build({ THREE, scene, camera, tier, opts }) {
   const v = new THREE.Vector3();
 
   return {
+    dispose() { closed = true; },
     resize(w, h) { camera.position.z = w / h < 1 ? 84 : 62; },
     update(t, dt, pointer, o) {
       core.rotation.y = Math.sin(t * 0.4) * 0.35 + pointer.x * 0.25;

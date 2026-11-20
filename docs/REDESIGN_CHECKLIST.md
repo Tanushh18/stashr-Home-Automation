@@ -29,11 +29,12 @@ Ground rules for every item:
 - [x] 2.6 Sidebar as an OS dock rail: glass in immersive mode, glowing active strip, **3D toggle** in the footer.
 - [x] 2.7 BottomNav (mobile) as a glass command dock with accent strip.
 - [x] 2.8 CommandPalette as a holographic console, plus a new **"Switch to immersive 3D / standard 2D workspace"** command.
-- [~] 2.9 What's New restyled, which also **fixes a pre-existing bug** (the modal had no padding and its button hung outside
-  the frame). AlertBell, ServiceStatus and InstallPrompt pick up the tokens and focus rings but have no bespoke restyle.
+- [x] 2.9 What's New restyled, which also **fixes a pre-existing bug** (the modal had no padding and its button hung outside
+  the frame). AlertBell is a glass notification console with accent-edged rows; ServiceStatus is a mono instrument lamp;
+  InstallPrompt is a glass docking card.
 - [x] 2.10 Splash / loading as a vault-core loader (orbiting ring, accent glow).
-- [~] 2.11 Empty states (hologram plinth), dialogs (glass and accent strip), skeletons (holo sweep) and toasts (glass) are
-  done. The ErrorBoundary screen is not restyled.
+- [x] 2.11 Empty states (hologram plinth), dialogs (glass and accent strip), skeletons (holo sweep) and toasts (glass).
+  The crash screen (ErrorBoundary) moved from off-brand inline purple to the design system; its logic is unchanged.
 - [x] 2.12 The light theme has its own daylight environment: sky, pale mountains and white glass, with every scene palette-aware.
 - [x] 2.13 Design language for web, Android, extension and TV → `docs/DESIGN_LANGUAGE.md`.
 
@@ -74,9 +75,15 @@ Ground rules for every item:
   cloud deck. Projects open from the existing list; the towers are not clickable because the backdrop sits behind the content.
 - [x] 5.6 Projects, ProjectDetail, ProjectForm and Deploy use dev-city.
 - [x] 5.7 Dashboard uses the Universe command backdrop.
-- [~] 5.8 Page interiors (the vault list, folders, item cards, generator controls, project tree) keep their existing layouts.
-  They take the new materials (glass cards, accent strips, mono labels) but were not re-laid out as "storage modules" or
-  "compartments".
+- [x] 5.8 Page interiors (`styles/interiors.css`, scoped per environment, presentation only):
+  - **Vault:** each login is a machined *storage module* (corner rivets, a lid seam, an LED strength rail). Hidden secrets
+    are a hatched, sealed slot and revealed ones a lit slot. Favourites are *gold-sealed* modules. Folders are
+    *compartment drawers* with a lit lip. Stats form an instrument strip and search is a console field.
+  - **Generator:** a holographic display with scanlines and a scanning beam.
+  - **Projects:** *development stations* with a station skyline and a lit roof strip.
+  - **Security Center:** monitoring rows with pulsing status LEDs. Settings shows sessions as an access log.
+  - **Infrastructure:** rack panels with three LEDs, mono table heads and lit row hovers.
+  - **Admin:** a console table.
 
 ## Phase 6 — Security and account
 - [x] 6.1 SecurityCenterScene: curved holographic display wall, floor radar with sweep, pulsing sensor pylons. It shows no
@@ -104,12 +111,15 @@ Ground rules for every item:
 
 ## Phase 10 — Ecosystem consistency
 - [x] 10.1 Extension popup: accent strip, mono technical text, focus ring (CSS only).
-- [~] 10.2 Mobile (Expo): the gap is documented (slate and `#22C55E` versus the web's emerald). App code is unchanged
-  because there's no device here to verify it on.
+- [x] 10.2 Mobile (Expo): `src/lib/theme.js` now uses the web palette in both themes: midnight navy with emerald
+  `#22C58F` in dark, daylight neutrals with forest `#0D6E5C` in light. Every text and accent pair passes WCAG AA
+  (4.75–14.6:1). Status colours in Stashr Home stay semantic.
+  - Verified: `expo export --platform android` succeeds.
+  - Verified: the app's web build renders the real sign-up screen in both schemes.
 - [x] 10.3 TV, cast, hub and where already use the web palette (verified in `colors.xml`); the launcher is recorded in the doc.
 
 ## Phase 11 — Testing and shipping
-- [x] 11.1 `npm test`: 237 pass, 0 fail (7 new).
+- [x] 11.1 `npm test`: 243 pass, 0 fail (13 new).
 - [x] 11.2 `npm run lint`: 0 errors. The 2 warnings were already there.
 - [x] 11.3 `npm run build` passes. three ships in its own lazy chunk (about 173 KB gzipped) and each scene is 1–3 KB
   gzipped. The entry bundle grew by about 3 KB gzipped.
@@ -120,12 +130,40 @@ Ground rules for every item:
   - Sign in and Forgot in dark and light.
 - [x] 11.5 Committed and pushed to `tanush/bold-dirac-qnxa2j`; draft PR Tanushh18/stashr-Home-Automation#111.
 
-## Not done / out of scope for this pass (deliberately honest)
-- **Camera transitions between routes.** Each route builds its own scene; there is no continuous fly-through between
-  districts across navigation.
-- **Custom desktop cursor.** Not added, to keep standard pointer behaviour.
-- **GLTF/GLB models.** Everything is procedural geometry, which keeps downloads tiny. The Smart Home .glb import path is unchanged.
-- **Per-page interior re-layouts** (see 5.8). Pages keep their proven layouts and gain the new materials.
-- **Signed-in flows end to end** (password CRUD, reveal and copy, project CRUD, server operations, admin actions) were not
-  exercised against a real API with MongoDB. Page logic was not modified, so the risk is visual only.
-- **Android, TV and extension on real devices** were not tested.
+## Phase 12 — Follow-ups requested after the first PR
+- [x] 12.1 **Camera flights between pages.**
+  - Every scene arrives with a 1.5 s flight: drawn back, raised and widened, then easing into its pose. The offset is
+    applied for the draw only, so scene camera logic is untouched.
+  - The outgoing environment hands off with a 0.9 s fade while an accent transit streak sweeps past.
+  - Off under reduced motion.
+  - Verified in Chromium at 150 / 450 / 900 / 2200 ms after clicking Passwords → Projects.
+- [x] 12.2 **Custom desktop cursor.**
+  - A trailing halo grows over links and buttons, narrows to a caret over text fields and dips on press.
+  - The system cursor is never hidden (a test enforces this).
+  - Fine pointers in immersive mode only; the loop sleeps when the pointer is idle.
+- [x] 12.3 **GLB models.**
+  - `scripts/build-models.mjs` writes `public/models/stashr-shield.glb` (85 KB, 27 KB gzipped) and `vault-door.glb`
+    (101 KB, 44 KB gzipped).
+  - Both are generated, so they're original work: welded geometry with `KHR_mesh_quantization`.
+  - The command-deck shield and the vault door load from them through a lazy GLTFLoader chunk (13.6 KB gzipped),
+    falling back to the code-built geometry if loading fails.
+  - Tests check the files are valid glTF 2.0 and byte-for-byte reproducible.
+  - The service worker caches `.glb` for offline use.
+- [x] 12.4 **Image-based lighting.** Scenes reflect a PMREM RoomEnvironment (high-tier devices; about 1 KB gzipped), so
+  metal and glass read as real materials. It is freed on unmount.
+- [x] 12.5 **Mongoose advisory.**
+  - The `server/package-lock.json` change touches mongoose's packages only: mongoose 9.10.2 → 9.12.2, the mongodb driver
+    7.6 → 7.8, plus kareem, mquery and sift patches. The `^9.10.2` range is unchanged.
+  - `npm audit --omit=dev --audit-level=high` reports 0 vulnerabilities.
+  - The full server suite passes locally: 1101 / 1101.
+- [x] 12.6 **Extension.** The real MV3 extension was loaded into Chromium: the service worker starts, the popup renders in
+  dark and light, keyboard focus is visible and there are no page errors. Fixed its header accent strip being clipped.
+- [x] 12.7 **TV, hub, cast and where (Kotlin).** No code changes. Their Gradle unit tests and debug builds pass in this
+  PR's CI.
+- [x] 12.8 Tests: 243 client tests pass, 11 of them for the 3D layer, models, flights, cursor, interiors and mobile palette.
+
+## Still outside what can be verified here
+- **Physical devices.** Android, TV and extension behaviour was checked through CI builds, the Expo web build and
+  extension-in-Chromium, not on real hardware.
+- **Signed-in flows end to end.** Password CRUD, reveal and copy, project CRUD, server operations and admin actions were
+  not run against a live API with MongoDB. Page logic is unchanged, so the risk is visual only.

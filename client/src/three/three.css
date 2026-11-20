@@ -40,3 +40,19 @@
 /* Legibility over a live scene: a soft halo in the page colour behind text (not on filled controls). */
 :root[data-workspace="immersive"][data-env] .app-main { text-shadow: 0 0 14px color-mix(in srgb, var(--bg) 85%, transparent), 0 1px 2px color-mix(in srgb, var(--bg) 60%, transparent); }
 :root[data-workspace="immersive"][data-env] .app-main :is(.btn, button, input, select, textarea, .ui-badge, .pill) { text-shadow: none; }
+
+/* ── Camera flights between pages ── */
+.page-env__layer { position: absolute; inset: 0; }
+.page-env__layer.is-leaving { animation: env-leave 0.9s ease forwards; }
+@keyframes env-leave { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(1.08); } }
+/* Accent transit streak: a few light lines sweeping past the window during the hand-off. */
+.page-env__transit {
+  position: absolute; inset: 0; pointer-events: none; overflow: hidden;
+  background:
+    linear-gradient(90deg, transparent 0 30%, rgba(var(--env-rgb, 43, 179, 177), 0.0) 30%, rgba(var(--env-rgb, 43, 179, 177), 0.35) 48%, transparent 66%) 0 22% / 100% 2px no-repeat,
+    linear-gradient(90deg, transparent 0 20%, rgba(255, 255, 255, 0.35) 42%, transparent 60%) 0 47% / 100% 1px no-repeat,
+    linear-gradient(90deg, transparent 0 35%, rgba(var(--env-rgb, 43, 179, 177), 0.3) 55%, transparent 75%) 0 71% / 100% 2px no-repeat;
+  animation: env-transit 0.9s cubic-bezier(.3, .6, .2, 1) forwards;
+}
+@keyframes env-transit { 0% { opacity: 0; transform: translateX(-30%) scaleX(.6); } 30% { opacity: 1; } 100% { opacity: 0; transform: translateX(30%) scaleX(1.4); } }
+@media (prefers-reduced-motion: reduce) { .page-env__layer.is-leaving { animation-duration: 0.01s; } .page-env__transit { display: none; } }

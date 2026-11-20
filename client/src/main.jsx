@@ -4,6 +4,7 @@ import "./styles/theme.css";
 import "./index.css";
 import "./styles/system.css";
 import "./styles/universe.css";
+import "./styles/interiors.css";
 import App from "./App";
 import { VaultProvider } from "./state/vault";
 import { DialogProvider } from "./Components/UI/Dialogs";

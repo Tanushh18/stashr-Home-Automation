@@ -61,6 +61,9 @@ mode keeps solid surfaces.
 - Transform and opacity only; the camera eases with exponential damping (`damp()` in `three/kit.js`).
 - Scenes pause off-screen and in hidden tabs. Backdrops are capped at 30 fps, and at 24 fps on low-tier devices.
 - `prefers-reduced-motion` renders a single still frame and stops every CSS loop.
+- **Route flights:** each scene arrives with a 1.5 s eased fly-in, and the previous environment hands off with a 0.9 s fade
+  behind an accent transit streak.
+- **Cursor halo:** fine pointers in immersive mode only, and it never replaces the system cursor.
 
 ## 3D architecture (`client/src/three/`)
 | File | Role |
@@ -80,15 +83,16 @@ mode keeps solid surfaces.
 | `scenes/infra.js` | Server-rack city with data lanes |
 | `scenes/gallery.js` | Floating gallery of abstract frames (never user images) |
 | `scenes/habitat.js` | Glass house and garden behind Smart Home |
+| `models.js` + `public/models/*.glb` | Original quantized glTF models (shield, vault door) from `scripts/build-models.mjs`; lazy GLTFLoader with a code-built fallback |
 
-All geometry is procedural and textures are generated canvases, so there are no external assets or network requests.
+Geometry is procedural or comes from Stashr's own generated `.glb` files. Textures are generated canvases and lighting is a PMREM RoomEnvironment, so nothing is fetched from third parties.
 three.js and each scene ship as separate lazy chunks: three is about 173 KB gzipped and loads only in immersive mode, and
 each scene is 1–3 KB.
 
 ## Other surfaces
 | Surface | Rule |
 |---|---|
-| Android (Expo, `mobile/src/lib/theme.js`) | Plus Jakarta Sans as on the web. **Known gap:** the app uses slate neutrals with green `#22C55E`, not the web's midnight navy with emerald `#12a37a` / `#22c58f`. Align it the next time the mobile theme is touched; it was not changed here because it can't be checked on a device in this environment. Native interactions and no WebGL scenes: mid-range phones get speed, not spectacle. |
+| Android (Expo, `mobile/src/lib/theme.js`) | Same palette as the web: midnight `#08121A` / surface `#0E1B1F` / emerald `#22C58F` in dark; `#F5F7F2` / white / forest `#0D6E5C` in light; Plus Jakarta Sans. Every pair passes WCAG AA. Native interactions and no WebGL scenes: mid-range phones get speed, not spectacle. |
 | Chrome extension (`extension/popup.css`) | Same tokens. It adds the accent strip, mono technical text and focus ring. It stays compact and fast, with no 3D. |
 | TV / cast / hub / where (Kotlin) | Already on the web palette in `res/values*/colors.xml` (`bg #08121A` / `#F5F7F2`, `primary #0E7F6D` / `#0D6E5C`). Layouts follow each app's purpose (10-foot UI, casting, tablet hub, location). No 3D. |
 | Launcher (overlay patcher) | Wallpaper and accent colour from this palette only. |
