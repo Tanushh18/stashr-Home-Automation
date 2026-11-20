@@ -54,7 +54,7 @@ const isStaticAsset = (url) =>
   url.pathname.startsWith("/assets/") ||
   url.pathname.startsWith("/static/") ||
   url.pathname.startsWith("/icons/") ||
-  /\.(?:css|js|png|jpg|jpeg|svg|webp|ico|woff2?)$/.test(url.pathname);
+  /\.(?:css|js|png|jpg|jpeg|svg|webp|ico|woff2?|glb)$/.test(url.pathname);
 
 self.addEventListener("fetch", (event) => {
   const { request } = event;

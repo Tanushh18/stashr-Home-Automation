@@ -9,6 +9,7 @@ import VersionBadge from "../WhatsNew/WhatsNew";
 import { ShieldLine } from "../Icons/Icons";
 import NavIcon from "./NavIcon";
 import { openPalette } from "../CommandPalette/CommandPalette";
+import { ModeToggle } from "../../three/Immersive";
 
 const COLLAPSE_KEY = "stashr_sidebar_collapsed";
 const readCollapsed = () => { try { return localStorage.getItem(COLLAPSE_KEY) === "1"; } catch { return false; } };
@@ -113,6 +114,7 @@ export default function Sidebar() {
           </NavLink>
           <div className="sb__row">
             <AlertBell enabled={status === "ready"} placement="up" />
+            <ModeToggle compact className="sb__iconbtn" />
             <button type="button" className="sb__iconbtn" onClick={toggle} aria-label={light ? "Switch to dark theme" : "Switch to light theme"} title={light ? "Dark theme" : "Light theme"}>
               <NavIcon name={light ? "moon" : "sun"} size={17} />
             </button>

@@ -1,4 +1,5 @@
 import React from "react";
+import "./ErrorBoundary.css";
 
 /**
  * Without this, an uncaught render error anywhere in the tree unmounts the
@@ -24,24 +25,24 @@ export default class ErrorBoundary extends React.Component {
   render() {
     if (!this.state.error) return this.props.children;
     return (
-      <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: "2rem", background: "#07061A", color: "#e8e8f2" }}>
-        <div style={{ maxWidth: 440, textAlign: "center" }}>
-          <h1 style={{ fontSize: "1.5rem", marginBottom: "0.6rem" }}>Something broke while loading the page</h1>
-          <p style={{ opacity: 0.75, marginBottom: "1.2rem", fontSize: "0.9rem", lineHeight: 1.6 }}>
+      <div className="eb" role="alert">
+        <div className="eb__card">
+          <span className="eb__seal" aria-hidden="true">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3 5 6v5c0 4.4 3 8.3 7 10 4-1.7 7-5.6 7-10V6l-7-3Z" /><path d="M12 8v4" /><path d="M12 16h.01" /></svg>
+          </span>
+          <p className="eb__kicker">Display fault</p>
+          <h1 className="eb__title">Something broke while loading the page</h1>
+          <p className="eb__body">
             Your data is safe — this is a display bug, not a data problem. Reloading usually fixes it.
             If it keeps happening, open the browser console (F12) and send the error shown there.
           </p>
-          <details style={{ textAlign: "left", marginBottom: "1.2rem", fontSize: "0.78rem", opacity: 0.65 }}>
-            <summary style={{ cursor: "pointer" }}>Technical details</summary>
-            <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", marginTop: "0.5rem" }}>
+          <details className="eb__details">
+            <summary>Technical details</summary>
+            <pre>
               {String(this.state.error?.stack || this.state.error?.message || this.state.error)}
             </pre>
           </details>
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            style={{ padding: "0.7rem 1.6rem", borderRadius: 999, border: "none", background: "#6d7cff", color: "#fff", cursor: "pointer", fontWeight: 600 }}
-          >
+          <button type="button" className="eb__reload" onClick={() => window.location.reload()}>
             Reload
           </button>
         </div>

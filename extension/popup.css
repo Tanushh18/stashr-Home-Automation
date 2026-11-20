@@ -101,3 +101,11 @@ h3 { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: 
 #qrContainer img { max-width: 100%; border-radius: 6px; }
 
 .footer { border-top: 1px solid var(--line); padding-top: 4px; margin-top: 12px; }
+
+/* ── Stashr Universe design language (2026-11): the same accent strip, mono technical
+      text and glow as the web app. Compact by design: no 3D in the popup. ── */
+:root { --mono: "JetBrains Mono", "SF Mono", Menlo, "Ubuntu Mono", monospace; --env: #22c58f; }
+.header::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: linear-gradient(90deg, transparent, var(--env), transparent); opacity: 0.8; pointer-events: none; }
+.header__mark { box-shadow: 0 0 0 1px rgba(34, 197, 143, 0.4), 0 0 14px rgba(34, 197, 143, 0.35); }
+code, kbd, .mono { font-family: var(--mono); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

@@ -1,0 +1,189 @@
+/* ════════════════════════════════════════════════════════════
+   Stashr Universe — design-system layer (2026-11)
+   Loaded after theme.css and system.css. Adds material tokens, the
+   environment accents, and the spatial treatment of the shell and shared
+   primitives. Presentation only: no selectors here change layout that a
+   page's logic depends on, and every rule works in Standard 2D mode.
+   Documented in docs/DESIGN_LANGUAGE.md.
+   ════════════════════════════════════════════════════════════ */
+
+:root,
+:root[data-theme="dark"] {
+  /* Materials */
+  --glass-1: rgba(10, 22, 30, 0.62);        /* frosted glass panel */
+  --glass-2: rgba(8, 18, 26, 0.82);         /* smoked glass, denser */
+  --glass-edge: rgba(143, 224, 220, 0.16);  /* hairline edge on glass */
+  --metal-edge: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.02) 40%, rgba(0, 0, 0, 0.25));
+  --grid-line: rgba(111, 205, 195, 0.07);
+  --strip-glow: 0 0 12px;
+  --depth-1: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 8px 24px -16px rgba(0, 0, 0, 0.7);
+  --depth-2: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 18px 50px -28px rgba(0, 0, 0, 0.85);
+  --depth-3: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 30px 80px -36px rgba(0, 0, 0, 0.9);
+  --holo: linear-gradient(120deg, rgba(143, 224, 220, 0.0) 30%, rgba(143, 224, 220, 0.12) 50%, rgba(143, 224, 220, 0.0) 70%);
+}
+:root[data-theme="light"] {
+  /* Daylight glass: warm white panes, sky-tinted edges (not an inverted dark theme). */
+  --glass-1: rgba(255, 255, 255, 0.66);
+  --glass-2: rgba(250, 252, 249, 0.86);
+  --glass-edge: rgba(15, 127, 125, 0.16);
+  --metal-edge: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.2) 40%, rgba(11, 36, 26, 0.06));
+  --grid-line: rgba(15, 127, 125, 0.08);
+  --depth-1: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 8px 22px -16px rgba(20, 60, 50, 0.35);
+  --depth-2: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 18px 46px -28px rgba(20, 60, 50, 0.4);
+  --depth-3: 0 1px 0 rgba(255, 255, 255, 0.9) inset, 0 30px 70px -36px rgba(20, 60, 50, 0.45);
+  --holo: linear-gradient(120deg, transparent 30%, rgba(255, 255, 255, 0.55) 50%, transparent 70%);
+}
+
+/* Environment accents (data-env is set by PageEnvironment on <html>). */
+:root { --env: #22c58f; --env-rgb: 34, 197, 143; --env-name: "Stashr"; }
+:root[data-env="vault"]    { --env: #22c58f; --env-rgb: 34, 197, 143; }
+:root[data-env="lab"]      { --env: #8b7cf6; --env-rgb: 139, 124, 246; }
+:root[data-env="facility"] { --env: #22c58f; --env-rgb: 34, 197, 143; }
+:root[data-env="dev"]      { --env: #38bdf8; --env-rgb: 56, 189, 248; }
+:root[data-env="ledger"]   { --env: #d9b45a; --env-rgb: 217, 180, 90; }
+:root[data-env="security"] { --env: #2dd4bf; --env-rgb: 45, 212, 191; }
+:root[data-env="comms"]    { --env: #f472b6; --env-rgb: 244, 114, 182; }
+:root[data-env="infra"]    { --env: #60a5fa; --env-rgb: 96, 165, 250; }
+:root[data-env="media"]    { --env: #f472b6; --env-rgb: 244, 114, 182; }
+:root[data-env="home"]     { --env: #6fcf6a; --env-rgb: 111, 207, 106; }
+:root[data-env="admin"]    { --env: #60a5fa; --env-rgb: 96, 165, 250; }
+:root[data-env="command"], :root[data-env="ecosystem"] { --env: #2bb3b1; --env-rgb: 43, 179, 177; }
+:root[data-theme="light"][data-env="dev"]    { --env: #0284c7; --env-rgb: 2, 132, 199; }
+:root[data-theme="light"][data-env="ledger"] { --env: #a07818; --env-rgb: 160, 120, 24; }
+:root[data-theme="light"][data-env="infra"], :root[data-theme="light"][data-env="admin"] { --env: #2f5fd0; --env-rgb: 47, 95, 208; }
+
+/* ── Utility materials ── */
+.surface-glass { background: var(--glass-1); border: 1px solid var(--glass-edge); backdrop-filter: blur(16px) saturate(1.2); -webkit-backdrop-filter: blur(16px) saturate(1.2); box-shadow: var(--depth-2); }
+.surface-metal { position: relative; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--depth-1); }
+.surface-metal::before { content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; background: var(--metal-edge); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; pointer-events: none; }
+.grid-floor { background-image: linear-gradient(var(--grid-line) 1px, transparent 1px), linear-gradient(90deg, var(--grid-line) 1px, transparent 1px); background-size: 28px 28px; }
+.light-strip { position: relative; }
+.light-strip::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: linear-gradient(90deg, transparent, var(--env), transparent); box-shadow: var(--strip-glow) rgba(var(--env-rgb), 0.5); }
+.mono { font-family: var(--font-mono); letter-spacing: 0.02em; }
+
+/* ── Focus: always visible, environment-tinted ── */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--focus, #4cc6c4);
+  outline-offset: 2px;
+}
+
+/* ── Technical data in mono ── */
+code, kbd, samp, .ui-badge, .ui-stat__label, .pill--mono { font-family: var(--font-mono); }
+
+/* ── Page heads: environment eyebrow + architectural light strip ── */
+.ui-pagehead { position: relative; padding-bottom: 1rem; }
+.ui-pagehead::after {
+  content: ""; position: absolute; left: 0; bottom: 0; width: min(320px, 60%); height: 2px; border-radius: 2px;
+  background: linear-gradient(90deg, var(--env), transparent);
+  box-shadow: 0 0 14px rgba(var(--env-rgb), 0.45);
+}
+.ui-pagehead__eyebrow { color: var(--env); font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.16em; font-size: 0.68rem; }
+
+/* ── Immersive workspace: surfaces turn to glass so the environment shows ── */
+:root[data-workspace="immersive"][data-env] body { background-color: var(--bg); }
+:root[data-workspace="immersive"][data-env] .card,
+:root[data-workspace="immersive"][data-env] .ui-panel,
+:root[data-workspace="immersive"][data-env] .ui-stat {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 40%), var(--glass-1) !important;
+  border-color: var(--glass-edge) !important;
+  backdrop-filter: blur(18px) saturate(1.25) !important;
+  -webkit-backdrop-filter: blur(18px) saturate(1.25) !important;
+  box-shadow: var(--depth-2) !important;
+}
+:root[data-workspace="immersive"][data-env][data-theme="light"] .card,
+:root[data-workspace="immersive"][data-env][data-theme="light"] .ui-panel,
+:root[data-workspace="immersive"][data-env][data-theme="light"] .ui-stat {
+  background: var(--glass-1) !important;
+}
+:root[data-workspace="immersive"][data-env] .card--hover:hover { border-color: rgba(var(--env-rgb), 0.5) !important; box-shadow: var(--depth-3), 0 0 0 1px rgba(var(--env-rgb), 0.18) !important; }
+
+/* ── Sidebar: an OS dock rail ── */
+.sb {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent 30%), var(--sidebar-bg);
+  border-right: 1px solid var(--glass-edge);
+  box-shadow: 1px 0 0 rgba(255, 255, 255, 0.02), 12px 0 40px -30px rgba(0, 0, 0, 0.6);
+}
+:root[data-workspace="immersive"] .sb { background: var(--glass-2); backdrop-filter: blur(20px) saturate(1.3); -webkit-backdrop-filter: blur(20px) saturate(1.3); }
+.sb__link { position: relative; }
+.sb__link.is-active::before {
+  content: ""; position: absolute; left: -0.65rem; top: 22%; bottom: 22%; width: 3px; border-radius: 0 3px 3px 0;
+  background: var(--env); box-shadow: 0 0 12px rgba(var(--env-rgb), 0.7);
+}
+.sb__link.is-active { background: linear-gradient(90deg, rgba(var(--env-rgb), 0.14), rgba(var(--env-rgb), 0.03)); }
+.sb__mark { box-shadow: 0 0 0 1px rgba(var(--env-rgb), 0.35), 0 0 18px rgba(var(--env-rgb), 0.25); }
+.sb__grouplabel { font-family: var(--font-mono); letter-spacing: 0.14em; font-size: 0.62rem; }
+.sb__kbd { font-family: var(--font-mono); }
+.mode-toggle--compact { justify-content: center; min-height: 0; padding: 0; border-radius: var(--r-md, 10px); font-size: 0.66rem; letter-spacing: 0.04em; }
+.sb .mode-toggle--compact { background: transparent; border: 1px solid transparent; backdrop-filter: none; }
+.sb .mode-toggle--compact.is-on { color: var(--env); border-color: rgba(var(--env-rgb), 0.35); background: rgba(var(--env-rgb), 0.08); }
+
+/* ── Mobile: floating command dock ── */
+.bottomnav { border-color: var(--glass-edge); background: var(--glass-2); box-shadow: var(--depth-3); }
+.bottomnav::before { content: ""; position: absolute; left: 18%; right: 18%; top: -1px; height: 1px; background: linear-gradient(90deg, transparent, var(--env), transparent); opacity: 0.7; pointer-events: none; }
+.bottomnav__item.is-active { background: rgba(var(--env-rgb), 0.14); }
+.bottomnav__item.is-active .bottomnav__icon { color: var(--env); }
+
+/* ── Command palette: holographic console ── */
+.cmdk {
+  background: var(--glass-2);
+  border-color: var(--glass-edge);
+  backdrop-filter: blur(24px) saturate(1.3);
+  -webkit-backdrop-filter: blur(24px) saturate(1.3);
+  box-shadow: var(--depth-3), 0 0 0 1px rgba(var(--env-rgb), 0.12);
+  position: relative;
+}
+.cmdk::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: linear-gradient(90deg, transparent, var(--env), transparent); opacity: 0.8; }
+.cmdk__kind { font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.6rem; }
+.cmdk__list li.is-active { box-shadow: inset 2px 0 0 var(--env); background: rgba(var(--env-rgb), 0.08); }
+
+/* ── Dialogs, sheets and confirmations ── */
+.ui-scrim { backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.ui-dialog { border: 1px solid var(--glass-edge) !important; box-shadow: var(--depth-3) !important; position: relative; }
+.ui-dialog::before { content: ""; position: absolute; left: 1rem; right: 1rem; top: 0; height: 2px; border-radius: 2px; background: linear-gradient(90deg, transparent, var(--env), transparent); opacity: 0.75; pointer-events: none; }
+
+/* ── Empty states: hologram plinth ── */
+.ui-empty { position: relative; background-image: radial-gradient(60% 50% at 50% 0%, rgba(var(--env-rgb), 0.08), transparent 70%); }
+.ui-empty::after { content: ""; display: block; width: 120px; height: 14px; margin: 0.8rem auto 0; border-radius: 50%; border: 1px solid rgba(var(--env-rgb), 0.35); box-shadow: 0 0 18px rgba(var(--env-rgb), 0.2); }
+.ui-empty--compact::after { display: none; }
+
+/* ── Skeleton loading shimmer uses the holo sweep ── */
+.ui-skeleton { background-image: var(--holo) !important; background-size: 200% 100% !important; }
+
+/* ── Splash / loading: vault-core loader ── */
+.splash__seal { box-shadow: 0 0 0 1px rgba(var(--env-rgb), 0.4), 0 0 40px rgba(var(--env-rgb), 0.3); }
+.splash__seal::before {
+  content: ""; position: absolute; inset: -12px; border-radius: 50%;
+  border: 1px dashed rgba(var(--env-rgb), 0.55);
+  animation: u-spin 9s linear infinite;
+}
+.splash__title { letter-spacing: -0.01em; }
+@keyframes u-spin { to { transform: rotate(360deg); } }
+
+/* ── Toasts: glass panels with an accent strip ── */
+.Toastify__toast { border-radius: 14px !important; border: 1px solid var(--glass-edge); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); box-shadow: var(--depth-3) !important; font-family: var(--font-sans, inherit); }
+
+/* ── Badges as instrument chips ── */
+.ui-badge { letter-spacing: 0.04em; }
+
+@media (prefers-reduced-motion: reduce) {
+  .splash__seal::before { animation: none; }
+}
+
+/* ── What's New panel (fixes a pre-existing layout bug: the modal lost its padding, so the
+      title touched the top edge and the button hung outside the frame) ── */
+.react-responsive-modal-modal.whatsnew {
+  position: relative; box-sizing: border-box; overflow: hidden;
+  padding: 1.5rem !important; margin: 1.2rem auto;
+  background: var(--glass-2) !important; border: 1px solid var(--glass-edge) !important;
+  backdrop-filter: blur(22px) saturate(1.3); -webkit-backdrop-filter: blur(22px) saturate(1.3);
+  box-shadow: var(--depth-3) !important;
+}
+.react-responsive-modal-modal.whatsnew::before { content: ""; position: absolute; left: 1.5rem; right: 1.5rem; top: 0; height: 2px; background: linear-gradient(90deg, transparent, var(--env), transparent); }
+.react-responsive-modal-modal.whatsnew .whatsnew__list li { border-left-color: rgba(var(--env-rgb), 0.6); }
+@media (max-width: 640px) { .react-responsive-modal-modal.whatsnew { padding: 1.15rem !important; } }
+
+/* Control-center pages (Services, Service map, Cron, Render, WhatsApp, SMS) paint their own
+   page background; in the immersive workspace it becomes translucent so the environment shows. */
+:root[data-workspace="immersive"][data-env] .rd-page {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg) 30%, transparent), color-mix(in srgb, var(--bg) 70%, transparent)) !important;
+}

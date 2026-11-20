@@ -324,3 +324,14 @@
 @media (prefers-reduced-motion: reduce) {
   .auth__progress-fill { animation: none; width: 60%; }
 }
+
+/* ── 3D vault facility (immersive mode) + glass form card ── */
+.auth__scene-3d { z-index: 0; }
+.auth__scene-3d .scene { position: absolute; inset: 0; }
+.auth__scene-shade, .auth__scene-copy, .auth__board { z-index: 1; }
+.auth__card { border-color: var(--glass-edge, var(--line)); box-shadow: var(--depth-3, 0 24px 60px -32px rgba(0, 0, 0, 0.45)); }
+.auth__card::after {
+  content: ""; position: absolute; left: 1.4rem; right: 1.4rem; bottom: 0; height: 2px; border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--env, #22c58f), transparent); opacity: 0.6; pointer-events: none;
+}
+.auth__panel { background: radial-gradient(80% 60% at 50% 40%, rgba(var(--env-rgb, 34, 197, 143), 0.06), transparent 70%), var(--bg); }

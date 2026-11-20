@@ -1,6 +1,9 @@
 import React from "react";
 import ServiceStatus from "../ServiceStatus/ServiceStatus";
 import AuthScene from "./AuthScene";
+import { Immersive } from "../../three/Immersive";
+import { LOADERS } from "../../three/loaders";
+import useThemeName from "../../three/useThemeName";
 import "../../styles/auth.css";
 
 const COPY = {
@@ -16,10 +19,12 @@ const COPY = {
 export default function AuthShell({ stage, children, loading, aside, variant = "signin" }) {
   const copy = COPY[variant] || COPY.signin;
   const status = loading ? "Boarding" : "Ready";
+  const theme = useThemeName();
   return (
     <div className={`auth auth--${variant}`}>
       <section className="auth__scene" aria-hidden="true">
-        <AuthScene />
+        {/* Vault facility in 3D (immersive mode); the door unlocks while a sign-in request runs. */}
+        <Immersive className="auth__scene-3d" load={LOADERS.vault} opts={{ theme, variant: "facility", unlock: !!loading }} fallback={<AuthScene />} />
         <span className="auth__scene-shade" />
         <div className="auth__scene-copy">
           <p className="auth__kicker">{copy.kicker}</p>
