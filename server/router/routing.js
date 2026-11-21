@@ -373,6 +373,7 @@ router.use(require("./wa"));
 router.use(require("./sms"));
 router.use(require("./ggnadmin"));
 router.use(require("./expenses"));
+router.use(require("./bills"));
 router.use(require("./assistant"));
 router.use(require("./mpin"));
 router.use(require("./link"));

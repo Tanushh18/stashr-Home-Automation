@@ -604,3 +604,6 @@ router.delete("/expenses/statement/saved/:id", authenticate, writeLimiter, async
 
 router.idle = stores.idle;
 module.exports = router;
+
+// Shared with the Bills routes: paying a bill writes its expense through the same store.
+router.storeFor = storeFor; router.settingsOf = settingsOf; router.cutoffDate = cutoffDate;

@@ -6,6 +6,7 @@ import { Boundary, Dim } from "../components/home/h";
 import { SheetSetup, StartDate, SmsAccess } from "../components/money/Setup";
 import { MonthView, Flagged, QuickSort } from "../components/money/Month";
 import { BalanceCard, AddPayment } from "../components/money/Balance";
+import BillsDue from "../components/money/BillsDue";
 import Statement from "../components/money/Statement";
 import { money } from "../lib/moneyApi";
 import { hasPermission } from "../lib/sms";
@@ -69,6 +70,7 @@ export default function Money() {
           {settings.configured && settings.needsStartDate ? <Boundary name="Start date"><StartDate onDone={afterStart} /></Boundary> : null}
           {settings.configured && !settings.needsStartDate ? (
             <>
+              <Boundary name="Bills"><BillsDue onPaid={() => loadList(month || undefined)} /></Boundary>
               <Boundary name="SMS access"><SmsAccess settings={settings} allowed={allowed} setAllowed={setAllowed} last={last} onSynced={afterSync} /></Boundary>
               <Boundary name="Add payment"><AddPayment categories={settings.categories || []} onAdded={() => loadList(month || undefined)} /></Boundary>
               {data ? <Boundary name="Balance"><BalanceCard month={month || data.month} refreshKey={data} onChange={() => loadList(month || undefined)} /></Boundary> : null}

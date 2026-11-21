@@ -16,6 +16,7 @@ import { domainOf } from "../../lib/items";
 import { api } from "../../lib/api";
 import { fx } from "../../lib/fx";
 import { openIncidents } from "../../lib/alerts";
+import { bills as billsApi, billWhen } from "../../lib/billsApi";
 
 const SORTS = [
   { key: "recent", label: "Recent" },
@@ -41,11 +42,13 @@ export default function Vault() {
   const [moving, setMoving] = useState(false); // showing the folder picker for "Move"
   const [renaming, setRenaming] = useState(null); // null | string (new name being typed)
   const [busy, setBusy] = useState(false);
+  const [dueBills, setDueBills] = useState([]); // unpaid bills overdue or due within 3 days
   const [incidents, setIncidents] = useState([]); // open server incidents (empty when there is no Render setup)
 
   useEffect(() => {
     if (offline) return undefined;
     let live = true;
+    billsApi.due().then((r) => { if (live) setDueBills(r.due || []); }).catch(() => {});
     api.opsIncidents().then((r) => { if (live) setIncidents(openIncidents(r && r.incidents)); }).catch(() => {});
     return () => { live = false; };
   }, [offline, syncing]);
@@ -142,6 +145,16 @@ export default function Vault() {
             Offline — showing your last synced vault. Editing is paused.
           </Text>
         </View>
+      ) : null}
+      {dueBills.length ? (
+        <Bounce onPress={() => router.push("/money")} scaleTo={0.98}>
+          <View style={[styles.banner, { backgroundColor: alpha(theme.warn, 0.1), borderColor: alpha(theme.warn, 0.4) }]}>
+            <Icon name="alert" size={16} color={theme.warn} />
+            <Text style={{ flex: 1, color: theme.warn, fontFamily: theme.font.bodyMedium, fontSize: 13 }}>
+              {dueBills.length} bill{dueBills.length === 1 ? "" : "s"} to pay: {dueBills[0].name} ({billWhen(dueBills[0])}){dueBills.length > 1 ? " and more" : ""}. Tap to open.
+            </Text>
+          </View>
+        </Bounce>
       ) : null}
       {incidents.length ? (
         <Bounce onPress={() => router.push("/monitoring")} scaleTo={0.98}>

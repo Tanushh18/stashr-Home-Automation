@@ -1,12 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import {
-  getExpenseSettings, saveExpenseSheet, setExpenseStorage, unlinkExpenseSheet, exportExpenseSheet, setExpenseStart, changeExpenseStart, removeUnmatchedExpenses, uploadStatementAsync, getStatementJob, recheckStatements, getSavedStatements, searchStatements, deleteSavedStatement, postExpenseSms, requestExpenseSync, getExpenses, getUncategorized, setExpenseDescription, setExpenseCategory, reviewExpense, uploadStatement
+  getBills, getExpenseSettings, saveExpenseSheet, setExpenseStorage, unlinkExpenseSheet, exportExpenseSheet, setExpenseStart, changeExpenseStart, removeUnmatchedExpenses, uploadStatementAsync, getStatementJob, recheckStatements, getSavedStatements, searchStatements, deleteSavedStatement, postExpenseSms, requestExpenseSync, getExpenses, getUncategorized, setExpenseDescription, setExpenseCategory, reviewExpense, uploadStatement
 } from "../../api/client";
 import { Section, Skeleton, useConfirm } from "../Render/RenderUi";
 import { errorMessage } from "../Render/renderUtils";
 import { inr, monthLabel, shiftMonth, dayLabel, groupByDay, withShares, startDateChip, STATUS_LABEL, statusTone, storageNote } from "../../lib/money";
+import { BillRow } from "../Bills/Bills";
 import "../Render/RenderDashboard.css";
+import "../Bills/Bills.css";
 import "./Money.css";
 
 /** A card that fails to draw shows a short note instead of blanking the page. */
@@ -22,6 +24,20 @@ class CardBoundary extends React.Component {
 
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
 const monthNow = () => today().slice(0, 7);
+
+
+/** Bills to pay, inside Money: "Mark paid" here adds the expense to this list and marks the bill on the Bills page (the same action). */
+function BillsCard({ onPaid }) {
+  const [bills, setBills] = useState(null);
+  const load = useCallback(() => getBills().then((d) => setBills((d.bills || []).filter((b) => b.status === "unpaid"))).catch(() => setBills([])), []);
+  useEffect(() => { load(); }, [load]);
+  if (!bills || !bills.length) return null;
+  return (
+    <Section title={`Bills to pay (${bills.length})`} subtitle="Marking a bill paid adds it here as an expense and marks it paid on the Bills page." actions={<a className="rd-btn" href="/bills">Open bills</a>}>
+      <ul className="bl-list">{bills.slice(0, 6).map((b) => <BillRow key={b.id} bill={b} compact onEdit={() => {}} onChanged={() => { load(); onPaid(); }} />)}</ul>
+    </Section>
+  );
+}
 
 /* ───────── 1. where the entries are kept ───────── */
 
@@ -762,6 +778,7 @@ export default function Money() {
           {settings.configured && !settings.needsStartDate ? (
             <>
               <StartDateLine settings={settings} onChanged={async () => { await loadSettings(); refreshWithPhone(); }} />
+              <CardBoundary><BillsCard onPaid={reload} /></CardBoundary>
               <MonthBar month={month} months={data && data.months} onChange={(m) => { setMonth(m); setFilter(""); }} onRefresh={refreshWithPhone} busy={busy || asking} />
               <PhoneStatus phone={phone} settings={settings} />
               {!data ? <Skeleton lines={5} /> : (

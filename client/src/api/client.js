@@ -638,3 +638,18 @@ export const getWaPictures = () => instance.get("/wa/pictures").then((r) => r.da
 export const getWaPicture = (sheet, index) => instance.get(`/wa/pictures/${sheet}/${index}`).then((r) => r.data);
 export const resetWaSheet = (id) => instance.post(`/wa/sheets/${id}/reset`).then((r) => r.data);
 export const sendWaReportNow = () => instance.post("/wa/report/now").then((r) => r.data);
+
+/* My bills: due dates, the banner, paying (which adds the expense to Money) and reading a pasted bill or PDF. */
+export const getBills = (days) => instance.get("/bills", { params: days != null ? { days } : {} }).then((r) => r.data);
+export const getBillsDue = (days) => instance.get("/bills/due", { params: days != null ? { days } : {} }).then((r) => r.data);
+export const addBill = (body) => instance.post("/bills", body).then((r) => r.data);
+export const saveBill = (id, body) => instance.patch(`/bills/${id}`, body).then((r) => r.data);
+export const deleteBill = (id) => instance.delete(`/bills/${id}`).then((r) => r.data);
+export const payBill = (id, body = {}) => instance.post(`/bills/${id}/pay`, body).then((r) => r.data);
+export const unpayBill = (id) => instance.post(`/bills/${id}/unpay`).then((r) => r.data);
+export const readBillText = (text) => instance.post("/bills/read", { text }).then((r) => r.data);
+export const readBillPdf = (file, password) => instance.post("/bills/read", file, {
+  headers: { "Content-Type": "application/octet-stream", ...(password ? { "x-bill-password": encodeURIComponent(password) } : {}) },
+  transformRequest: [(data) => data],
+  timeout: 60000
+}).then((r) => r.data);

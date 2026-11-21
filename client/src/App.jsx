@@ -28,6 +28,7 @@ const SmartHome = lazy(() => import("./Pages/SmartHome/SmartHome"));
 const WhatsAppSender = lazy(() => import("./Pages/WhatsApp/WhatsAppSender"));
 const SmsSender = lazy(() => import("./Pages/Sms/SmsSender"));
 const GgnAdmin = lazy(() => import("./Pages/GgnAdmin/GgnAdmin"));
+const Bills = lazy(() => import("./Pages/Bills/Bills"));
 const Money = lazy(() => import("./Pages/Money/Money"));
 const Forgot = lazy(() => import("./Pages/Forgot/Forgot"));
 const RenderDashboard = lazy(() => import("./Pages/Render/RenderDashboard"));
@@ -44,6 +45,7 @@ import CommandPalette from "./Components/CommandPalette/CommandPalette";
 import SkyFx from "./Components/SkyFx/SkyFx";
 import JungleScene from "./Components/Jungle/JungleScene";
 import InfraTabs from "./Components/InfraTabs/InfraTabs";
+import BillBanner from "./Components/BillBanner/BillBanner";
 import NetBar from "./Components/NetBar/NetBar";
 import Splash from "./Components/Splash/Splash";
 import BottomNav from "./Components/BottomNav/BottomNav";
@@ -117,6 +119,7 @@ export default function App() {
       <BrowserRouter>
         <a className="skip-link" href="#main">Skip to content</a>
         <ScrollToTop />
+        <BillBanner />
         <NetBar />
         <CommandPalette />
         <PageEnvironment />
@@ -146,6 +149,7 @@ export default function App() {
           <Route path="/settings" element={<RequireVault><Settings /></RequireVault>} />
           <Route path="/generator" element={<RequireVault><Suspense fallback={<Splash />}><Generator /></Suspense></RequireVault>} />
           <Route path="/money" element={<RequireVault><Suspense fallback={<Splash />}><Money /></Suspense></RequireVault>} />
+          <Route path="/bills" element={<RequireVault><Suspense fallback={<Splash />}><Bills /></Suspense></RequireVault>} />
           <Route path="/smart-home" element={<RequireVault><Suspense fallback={<Splash />}><SmartHome /></Suspense></RequireVault>} />
           <Route path="/whatsapp" element={<RequireVault><Suspense fallback={<Splash />}><WhatsAppSender /></Suspense></RequireVault>} />
           <Route path="/ggnhome-admin" element={<RequireVault><Suspense fallback={<Splash />}><GgnAdmin /></Suspense></RequireVault>} />

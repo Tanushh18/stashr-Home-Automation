@@ -29,6 +29,7 @@ function startHomeSweep() {
         sweepOnce().catch((e) => console.log("[home] sweep failed:", e.message));
         automation.tickAll().catch((e) => console.log("[home] automations failed:", e.message));
         require("./waSender").tickAll().catch((e) => console.log("[wa] sender failed:", e.message));
+        require("./bills").dailyNote({ send: automation.sendTelegram }).catch((e) => console.log("[bills] note failed:", e.message));
         phonePush.nudgeStale().catch((e) => console.log("[home] phone push failed:", e.message));
     }, 60 * 1000);
     if (typeof timer.unref === "function") timer.unref();

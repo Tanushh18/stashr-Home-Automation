@@ -1,0 +1,25 @@
+.bl-page { max-width: 60rem; margin: 0 auto; padding: 1rem 16px 5rem; display: grid; gap: 1rem; }
+.bl-head { display: flex; gap: 1rem; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; }
+.bl-head h1 { margin: 0; }
+.bl-dim { color: var(--text-faint); font-size: .85rem; margin: .25rem 0 0; }
+.bl-bad { color: var(--danger); font-size: .85rem; }
+.bl-list { list-style: none; margin: 0; padding: 0; display: grid; gap: .5rem; }
+.bl-item { display: grid; grid-template-columns: 1fr auto; gap: .5rem .75rem; align-items: center; padding: .7rem .8rem; border: 1px solid var(--line-strong); border-radius: var(--r-md); background: var(--surface); border-left-width: 4px; }
+.bl-item.is-bad { border-left-color: var(--danger); background: color-mix(in srgb, var(--danger) 8%, var(--surface)); }
+.bl-item.is-warn { border-left-color: #d9a21b; }
+.bl-item.is-ok { border-left-color: #2e9d6b; opacity: .85; }
+.bl-main { display: grid; gap: .1rem; min-width: 0; overflow-wrap: anywhere; }
+.bl-main small { color: var(--text-faint); }
+.bl-when { font-size: .8rem; font-weight: 600; }
+.bl-when.is-bad { color: var(--danger); } .bl-when.is-warn { color: #b98100; } .bl-when.is-ok { color: #2e9d6b; }
+.bl-amt { font-weight: 700; text-align: right; }
+.bl-actions { grid-column: 1 / -1; display: flex; gap: .4rem; flex-wrap: wrap; }
+.bl-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: .75rem; margin-top: .75rem; }
+.bl-form label, .bl-read label.rd-btn { display: grid; gap: .25rem; font-size: .75rem; color: var(--text-faint); }
+.bl-form input:not([type="checkbox"]), .bl-read textarea, .bl-read input, .bl-days select { min-width: 0; padding: .5rem .65rem; border: 1px solid var(--line-strong); border-radius: var(--r-md); background: var(--surface); color: inherit; font: inherit; }
+.bl-wide { grid-column: 1 / -1; }
+.bl-check { display: flex !important; align-items: center; gap: .5rem; grid-column: 1 / -1; }
+.bl-row { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; margin: .5rem 0; }
+.bl-read { margin-top: .5rem; } .bl-read summary { cursor: pointer; font-weight: 600; font-size: .85rem; } .bl-read textarea { width: 100%; margin-top: .5rem; box-sizing: border-box; }
+.bl-days { font-size: .8rem; display: flex; gap: .35rem; align-items: center; }
+@media (min-width: 40rem) { .bl-item { grid-template-columns: 1fr auto auto; } .bl-actions { grid-column: auto; } }

@@ -1,0 +1,7 @@
+.billbar { position: relative; z-index: 60; display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; padding: .55rem 1rem; padding-top: calc(.55rem + env(safe-area-inset-top)); background: #8a5a00; color: #fff; font-size: .85rem; }
+.billbar.is-late { background: #a12a2a; }
+.billbar__text { flex: 1 1 14rem; display: grid; gap: .1rem; min-width: 0; }
+.billbar__text span { opacity: .92; overflow-wrap: anywhere; }
+.billbar__btn { border: 1px solid rgba(255, 255, 255, .6); border-radius: 999px; padding: .3rem .8rem; background: rgba(255, 255, 255, .16); color: #fff; font: inherit; font-weight: 600; font-size: .78rem; cursor: pointer; text-decoration: none; white-space: nowrap; }
+.billbar__btn:hover { background: rgba(255, 255, 255, .3); }
+.billbar__btn--quiet { background: transparent; }
